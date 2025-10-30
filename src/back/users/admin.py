@@ -1,0 +1,742 @@
+from datetime import datetime, timezone
+import enum
+import json
+from fastapi import APIRouter, Body,Depends,HTTPException,status
+from sqlalchemy import select, update, delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from back.db.database import get_db
+from back.db.models import AssignmentType, ClientCompany, ContactPerson, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
+from back.auth.auth import get_current_user,create_user as auth_create_user
+from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
+from back.users.users_schemas import SimpleMsg, TaskPatch, TaskUpdate, require_roles
+from fastapi import BackgroundTasks
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+from typing import Any, Dict, Optional
+from sqlalchemy.orm import selectinload
+
+import logging
+from typing import Any, Dict, List
+
+from back.utils.notify import notify_user
+from back.files.handlers import delete_object_from_s3, validate_and_process_attachment
+from back.users.logist import _attach_storage_keys_to_task, _normalize_assigned_user_id
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+
+async def require_admin(current_user:User=Depends(get_current_user)) -> User:
+    if current_user.role != RoleEnum.admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Недастаточно прав пользователя")
+    return current_user
+
+@router.get("/users", response_model=List[UserResponse], summary="Список всех пользователей (только админ)")
+async def admin_list_users(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+    q = await db.execute(select(User))
+    users = q.scalars().all()
+    return [UserResponse.model_validate(u) for u in users]
+
+
+
+@router.post("/users",response_model=UserResponse,status_code=status.HTTP_201_CREATED,summary="Создать пользователя (только админ)")
+async def admin_create_user(
+    user_in: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin)
+):
+    # Проверка уникальности login
+    q = await db.execute(select(User).where(User.login == user_in.login))
+    if q.scalars().first():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Login уже занят")
+    
+    # Проверка уникальности telegram_id, если он указан
+    if user_in.telegram_id is not None:
+        q = await db.execute(select(User).where(User.telegram_id == user_in.telegram_id))
+        if q.scalars().first():
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Telegram ID уже используется")
+    
+    new_user = await auth_create_user(db=db,user_in=user_in)
+
+    await db.refresh(new_user)
+    return UserResponse.model_validate(new_user)
+
+
+@router.delete(
+    "/users/{user_id}",
+    response_model=UserResponse,
+    summary="Удалить пользователя (только админ)"
+)
+async def admin_delete_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin)
+):
+    q = await db.execute(select(User).where(User.id == user_id))
+    user = q.scalars().first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+    
+    await db.delete(user)
+    db.commit()
+    return UserResponse.model_validate(user)
+
+
+@router.patch(
+    "/users/{user_id}/role",
+    response_model=UserResponse,
+    summary="Изменить роль пользователя (только админ)"
+)
+async def admin_change_role(
+    user_id: int,
+    role_in: RoleChange,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    q = await db.execute(select(User).where(User.id == user_id))
+    user = q.scalars().first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+    # Присваиваем роль, сохраняя тип RoleEnum
+    try:
+        user.role = RoleEnum(role_in.role.value) if hasattr(role_in.role, "value") else RoleEnum(role_in.role)
+    except Exception:
+        # fallback: если role_in.role уже является строкой
+        user.role = RoleEnum(role_in.role)
+
+    await db.commit()
+    await db.refresh(user)
+    return UserResponse.model_validate(user)
+
+
+@router.patch("/tasks/{task_id}", summary="Админ может изменить поля заявки (включая оборудование, виды работ, вложения)")
+async def admin_update_task(
+    background_tasks: BackgroundTasks,
+    task_id: int,
+    patch: TaskPatch = Body(...),
+    db: AsyncSession = Depends(get_db),
+    admin_user=Depends(require_admin),
+):
+    logger.info(f"admin_update_task вызван для задачи ID: {task_id}")
+
+    # Загружаем задачу с контактным лицом и компанией
+    result = await db.execute(
+        select(Task)
+        .where(Task.id == task_id)
+        .options(
+            selectinload(Task.works).selectinload(TaskWork.work_type),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.contact_person).selectinload(ContactPerson.company) # ✅ Загружаем контактное лицо и компанию
+        )
+    )
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    if task.is_draft:
+        raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
+
+    # Сохраняем *старые* значения связей для истории
+    old_works = [tw.work_type.name for tw in task.works]
+    old_equipment = [(te.equipment.name, te.quantity) for te in task.equipment_links]
+    old_contact_person_name = task.contact_person.name if task.contact_person else None
+    old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment}, work_types={old_works}, contact_person={old_contact_person_name}, company={old_company_name}")
+
+    incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
+    logger.info(f"Полный incoming dict: {incoming}")
+    changed = []
+
+    # --- normalize assigned_user_id ---
+    if "assigned_user_id" in incoming:
+        incoming["assigned_user_id"] = _normalize_assigned_user_id(incoming["assigned_user_id"])
+
+    # --- извлекаем поля вложений ---
+    attachments_to_add = incoming.pop("attachments_add", None)
+    attachments_to_remove = incoming.pop("attachments_remove", None)
+
+    # --- извлекаем equipment/work_types (если пришли) ---
+    equipment_data = incoming.pop("equipment", None)
+    work_types_data = incoming.pop("work_types", None)
+    logger.info(f"equipment_data: {equipment_data}, work_types_data: {work_types_data}")
+
+    # --- Обновление основных полей задачи ---
+    for field, value in incoming.items():
+        if field in {"id", "created_at", "created_by", "is_draft"}:
+            continue
+        old = getattr(task, field)
+        old_cmp = old.value if hasattr(old, "value") else old
+        new_cmp = value.value if hasattr(value, "value") else value
+        logger.debug(f"Сравнение поля '{field}': DB={old_cmp}, Payload={new_cmp}")
+        if str(old_cmp) != str(new_cmp):
+            # конвертация assignment_type из строки
+            if field == "assignment_type" and isinstance(value, str):
+                try:
+                    value = AssignmentType(value)
+                except Exception:
+                    raise HTTPException(status_code=400, detail="Invalid assignment_type")
+            setattr(task, field, value)
+            changed.append((field, old, value))
+            logger.info(f"Поле '{field}' помечено как изменённое: {old_cmp} -> {new_cmp}")
+
+    # --- Обновление contact_person_id и company_id ---
+    contact_person_id = incoming.get("contact_person_id")
+    if contact_person_id is not None:
+        if contact_person_id:
+            cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
+            contact_person = cp_res.scalars().first()
+            if not contact_person:
+                raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
+            old_cp_id = task.contact_person_id
+            old_co_id = task.company_id
+            setattr(task, "contact_person_id", contact_person_id)
+            setattr(task, "company_id", contact_person.company_id)
+            changed.append(("contact_person_id", old_cp_id, contact_person_id))
+            changed.append(("company_id", old_co_id, contact_person.company_id))
+            logger.info(f"Поле 'contact_person_id' и 'company_id' помечены как изменённые: {old_cp_id}->{contact_person_id}, {old_co_id}->{contact_person.company_id}")
+        else:
+            old_cp_id = task.contact_person_id
+            old_co_id = task.company_id
+            setattr(task, "contact_person_id", None)
+            setattr(task, "company_id", None)
+            changed.append(("contact_person_id", old_cp_id, None))
+            changed.append(("company_id", old_co_id, None))
+            logger.info(f"Поле 'contact_person_id' и 'company_id' сброшены: {old_cp_id}->{None}, {old_co_id}->{None}")
+
+    # --- Обновление оборудования ---
+    if equipment_data is not None:
+        await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
+        for eq in equipment_data:
+            if "equipment_id" not in eq or "quantity" not in eq:
+                raise HTTPException(status_code=400, detail="equipment items must have equipment_id and quantity")
+            res = await db.execute(select(Equipment).where(Equipment.id == eq["equipment_id"]))
+            equip = res.scalars().first()
+            if not equip:
+                raise HTTPException(status_code=400, detail=f"Оборудование id={eq['equipment_id']} не найдено")
+            db.add(TaskEquipment(task_id=task.id, equipment_id=eq["equipment_id"], quantity=eq["quantity"]))
+        changed.append(("equipment", "old_equipment_set", equipment_data))
+        logger.info("Оборудование помечено как изменённое")
+
+    # --- Обновление типов работ ---
+    if work_types_data is not None:
+        await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
+        for wt_id in work_types_data:
+            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            wt = res.scalars().first()
+            if not wt:
+                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+            db.add(TaskWork(task_id=task.id, work_type_id=wt_id))
+        changed.append(("work_types", "old_work_set", work_types_data))
+        logger.info("Типы работ помечены как изменённые")
+
+    logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
+    logger.info(f"'attachments_to_add': {attachments_to_add}")
+    logger.info(f"'attachments_to_remove': {attachments_to_remove}")
+
+    # --- Проверка: если вообще ничего не поменялось (включая equipment/work_types) ---
+    # Проверяем, были ли какие-либо изменения: основные поля, equipment/work_types, вложения
+    has_changes = bool(changed) or bool(attachments_to_add) or bool(attachments_to_remove)
+    logger.info(f"'has_changes' рассчитано как: {has_changes}")
+
+    if not has_changes:
+        logger.info("Нет изменений для сохранения, возвращаем 'Без изменений'")
+        return {"detail": "Без изменений"}
+    else:
+        logger.info("Обнаружены изменения, продолжаем выполнение")
+
+    try:
+        # --- Логируем изменения в историю ---
+        # Обновляем связи в объекте задачи в сессии, чтобы получить новые значения
+        await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person'])
+        # Получаем *новые* значения связей
+        new_works = [tw.work_type.name for tw in task.works]
+        new_equipment = [(te.equipment.name, te.quantity) for te in task.equipment_links]
+        new_contact_person_name = task.contact_person.name if task.contact_person else None
+        new_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+        logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment}, work_types={new_works}, contact_person={new_contact_person_name}, company={new_company_name}")
+
+        # Собираем *все* изменения, включая equipment и work_types
+        all_changes = []
+        for f, o, n in changed:
+            if f not in ["equipment", "work_types", "contact_person_id", "company_id"]: # Обрабатываем отдельно
+                all_changes.append({"field": f, "old": str(o), "new": str(n)})
+
+        # Проверяем и добавляем изменения equipment и work_types
+        # old_* и new_* уже содержат названия/кортежи для отображения
+        if old_equipment != new_equipment:
+            all_changes.append({"field": "equipment", "old": old_equipment, "new": new_equipment})
+        if old_works != new_works:
+            all_changes.append({"field": "work_types", "old": old_works, "new": new_works})
+        # Проверяем изменения contact_person и company
+        old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
+        new_cp_co = f"{new_contact_person_name} ({new_company_name})" if new_contact_person_name and new_company_name else "—"
+        if old_cp_co != new_cp_co:
+            all_changes.append({"field": "contact_person", "old": old_cp_co, "new": new_cp_co})
+
+        logger.info(f"Список 'all_changes' для истории: {all_changes}")
+        # Создаём комментарий с *всеми* изменениями
+        comment = json.dumps(all_changes, ensure_ascii=False)
+        logger.info(f"Комментарий для истории (JSON): {comment}")
+        hist = TaskHistory(
+            task_id=task.id,
+            user_id=getattr(admin_user, "id", None),
+            action=task.status,
+            event_type=TaskHistoryEventType.updated, # ✅ Новый тип
+            comment=comment,
+            # --- Сохраняем все основные поля задачи ---
+            company_id=task.company_id,  # ✅ Заменено
+            contact_person_id=task.contact_person_id,  # ✅ Заменено
+            vehicle_info=task.vehicle_info,
+            scheduled_at=task.scheduled_at,
+            location=task.location,
+            comment_field=task.comment,
+            status=task.status.value if task.status else None,
+            assigned_user_id=task.assigned_user_id,
+            client_price=str(task.client_price) if task.client_price is not None else None,
+            montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+            photo_required=task.photo_required,
+            assignment_type=task.assignment_type.value if task.assignment_type else None,
+        )
+        db.add(hist)
+        await db.flush()
+        logger.info("Запись в TaskHistory добавлена и зафлашена")
+
+        # --- Добавление вложений ---
+        if attachments_to_add:
+            # await _attach_storage_keys_to_task(...) # Убедитесь, что эта функция не использует db в background_tasks
+            # Правильный способ - передавать только данные, а не объект db
+            # ВНИМАНИЕ: Если _attach_storage_keys_to_task использует 'db' внутри background_tasks.add_task,
+            # это может привести к ошибке MissingGreenlet. Лучше создать отдельную асинхронную задачу,
+            # которая создаёт свою сессию, как в edit_task.
+            # background_tasks.add_task(
+            #     "back.files.handlers.attach_storage_keys_to_task_in_background", # Новая функция
+            #     attachments_to_add,
+            #     task.id,
+            #     getattr(admin_user, "id", None),
+            #     getattr(admin_user, "role", None).value if getattr(admin_user, "role", None) else None,
+            # )
+            # Пока оставим старый способ, если он работает безопасно, иначе см. комментарий выше.
+            await _attach_storage_keys_to_task(
+                db,
+                attachments_to_add,
+                task.id,
+                getattr(admin_user, "id", None),
+                getattr(admin_user, "role", None).value if getattr(admin_user, "role", None) else None,
+                background_tasks
+            )
+            db.add(TaskHistory(
+                task_id=task.id,
+                user_id=admin_user.id,
+                action=task.status,
+                comment=f"Attachments added: {attachments_to_add}",
+                event_type=TaskHistoryEventType.attachment_added, # ✅ Новый тип
+                # --- Сохраняем все основные поля задачи ---
+                company_id=task.company_id,  # ✅ Заменено
+                contact_person_id=task.contact_person_id,  # ✅ Заменено
+                vehicle_info=task.vehicle_info,
+                scheduled_at=task.scheduled_at,
+                location=task.location,
+                comment_field=task.comment,
+                status=task.status.value if task.status else None,
+                assigned_user_id=task.assigned_user_id,
+                client_price=str(task.client_price) if task.client_price is not None else None,
+                montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+                photo_required=task.photo_required,
+                assignment_type=task.assignment_type.value if task.assignment_type else None,
+            ))
+            await db.flush()
+            logger.info("История добавления вложений добавлена и зафлашена")
+
+        # --- Удаление вложений (soft delete) ---
+        if attachments_to_remove:
+            for aid in attachments_to_remove:
+                a_res = await db.execute(select(TaskAttachment).where(
+                    TaskAttachment.id == aid,
+                    TaskAttachment.task_id == task.id
+                ))
+                at = a_res.scalars().first()
+                if at:
+                    at.deleted_at = datetime.now(timezone.utc)
+                    # background_tasks.add_task("back.files.handlers.delete_object_from_s3", at.storage_key) # Опасно, если delete_object_from_s3 использует db
+                    background_tasks.add_task("back.files.handlers.schedule_deletion_from_s3", at.storage_key) # Новая функция
+                    # Логируем удаление вложения
+                    db.add(TaskHistory(
+                        task_id=task.id,
+                        user_id=admin_user.id,
+                        action=task.status,
+                        comment=f"Attachments removed: {attachments_to_remove}",
+                        event_type=TaskHistoryEventType.attachment_removed, # ✅ Новый тип
+                        # --- Сохраняем все основные поля задачи ---
+                        company_id=task.company_id,  # ✅ Заменено
+                        contact_person_id=task.contact_person_id,  # ✅ Заменено
+                        vehicle_info=task.vehicle_info,
+                        scheduled_at=task.scheduled_at,
+                        location=task.location,
+                        comment_field=task.comment,
+                        status=task.status.value if task.status else None,
+                        assigned_user_id=task.assigned_user_id,
+                        client_price=str(task.client_price) if task.client_price is not None else None,
+                        montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+                        photo_required=task.photo_required,
+                        assignment_type=task.assignment_type.value if task.assignment_type else None,
+                    ))
+                    await db.flush()
+            logger.info("История удаления вложений добавлена и зафлашена")
+
+        await db.commit()
+        logger.info("Транзакция успешно зафиксирована")
+    except Exception as e:
+        logger.exception("Failed to update task: %s", e)
+        try:
+            await db.rollback()
+        except Exception:
+            logger.exception("rollback failed")
+        raise HTTPException(status_code=500, detail="Failed to update task")
+
+    # --- Уведомления ---
+    # Убедитесь, что notify_user создаёт свою сессию
+    notify_all = False
+    if "assignment_type" in incoming:
+        at = incoming.get("assignment_type")
+        if isinstance(at, str):
+            try:
+                at = AssignmentType(at)
+            except Exception:
+                at = None
+        if at == AssignmentType.broadcast:
+            notify_all = True
+    if notify_all or (getattr(task.assignment_type, "value", None) == AssignmentType.broadcast.value):
+        res = await db.execute(select(User).where(User.role == Role.montajnik, User.is_active == True))
+        for m in res.scalars().all():
+            background_tasks.add_task("back.utils.notify.notify_user", m.id, f"Задача #{task.id} обновлена", task.id)
+    else:
+        if task.assigned_user_id:
+            background_tasks.add_task("back.utils.notify.notify_user", task.assigned_user_id, f"Задача #{task.id} обновлена", task.id)
+
+    return {"detail": "Updated"}
+
+
+@router.get("/files/tasks/{task_id}/attachments", dependencies=[Depends(require_admin)])
+async def admin_get_task_attachments(task_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Вернуть все вложения, привязанные к задаче (включая те, что не связаны с report_id).
+    """
+    q = await db.execute(select(TaskAttachment).where(TaskAttachment.task_id == task_id, TaskAttachment.deleted_at == None))
+    items = q.scalars().all()
+    out = []
+    for it in items:
+        out.append({
+            "id": it.id,
+            "task_id": it.task_id,
+            "report_id": it.report_id,
+            "storage_key": it.storage_key,
+            "thumb_key": getattr(it, "thumb_key", None),
+            "uploaded_at": getattr(it, "uploaded_at", None),
+            "original_name": getattr(it, "original_name", None),
+            "uploader_id": it.uploader_id,
+            "uploader_role": it.uploader_role,
+        })
+    return out
+
+
+@router.get("/tasks/{task_id}/reports/{report_id}/attachments", dependencies=[Depends(require_admin)])
+async def admin_get_report_attachments(task_id: int, report_id: int, db: AsyncSession = Depends(get_db)):
+    """
+    Вернуть все вложения, привязанные к конкретному отчёту.
+    """
+    r_res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
+    report = r_res.scalars().first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    q = await db.execute(select(TaskAttachment).where(TaskAttachment.task_id == task_id, TaskAttachment.report_id == report_id, TaskAttachment.deleted_at == None))
+    items = q.scalars().all()
+    out = []
+    for it in items:
+        out.append({
+            "id": it.id,
+            "task_id": it.task_id,
+            "report_id": it.report_id,
+            "storage_key": it.storage_key,
+            "thumb_key": getattr(it, "thumb_key", None),
+            "uploaded_at": getattr(it, "uploaded_at", None),
+            "original_name": getattr(it, "original_name", None),
+            "uploader_id": it.uploader_id,
+            "uploader_role": it.uploader_role,
+        })
+    return out
+
+
+@router.post("/tasks/{task_id}/reports/{report_id}/attachments", dependencies=[Depends(require_admin)])
+async def admin_attach_to_report(
+    background_tasks: BackgroundTasks,
+    task_id: int,
+    report_id: int,
+    payload: Dict[str, Any] = Body(...),
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    """
+    Админ прикрепляет фото(ы) к отчёту. payload: {"photos": ["storage_key1", ...]}
+    """
+    photos = payload.get("photos", [])
+    if not isinstance(photos, list) or not all(isinstance(p, str) for p in photos):
+        raise HTTPException(status_code=400, detail="photos must be a list of storage_key strings")
+
+    r_res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
+    report = r_res.scalars().first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    for sk in photos:
+        att = TaskAttachment(
+            task_id=task_id,
+            report_id=report_id,
+            storage_key=sk,
+            file_type=FileType.photo,
+            uploader_id=admin_user.id,
+            uploader_role=admin_user.role.value,
+            processed=False,
+        )
+        db.add(att)
+        await db.flush()
+        background_tasks.add_task(validate_and_process_attachment, att.id)
+
+    await db.commit()
+    return {"detail": f"{len(photos)} photo(s) attached by admin"}
+
+
+@router.delete("/tasks/{task_id}/reports/{report_id}/attachments/{attachment_id}", dependencies=[Depends(require_admin)])
+async def admin_delete_report_attachment(
+    background_tasks: BackgroundTasks,
+    task_id: int,
+    report_id: int,
+    attachment_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    """
+    Админ удаляет вложение из отчёта. Админ может удалять любые вложения (в т.ч. загруженные логистом).
+    """
+    a_q = await db.execute(select(TaskAttachment).where(
+        TaskAttachment.id == attachment_id,
+        TaskAttachment.task_id == task_id,
+        TaskAttachment.report_id == report_id,
+        TaskAttachment.deleted_at == None
+    ))
+    att = a_q.scalars().first()
+    if not att:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    att.deleted_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.commit()
+    background_tasks.add_task(delete_object_from_s3, att.storage_key)
+    return {"detail": "Attachment deleted by admin"}
+
+
+
+@router.get("/tasks", summary="Получить все задачи (только админ), кроме черновиков")
+async def admin_list_tasks(
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    # Загружаем задачи с контактным лицом и компанией
+    q = await db.execute(
+        select(Task)
+        .where(Task.is_draft != True)
+        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем контактное лицо и компанию
+    )
+    tasks = q.scalars().all()
+    
+    out = []
+    for t in tasks:
+        # Получаем имя контактного лица и компании
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
+        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        
+        out.append({
+            "id": t.id,
+            "client": client_display,  
+            "status": t.status.value if t.status else None,
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "location": t.location,
+            "vehicle_info": t.vehicle_info,
+            "comment": t.comment,
+            "assignment_type": t.assignment_type.value if t.assignment_type else None,
+            "assigned_user_id": t.assigned_user_id,
+            "client_price": str(t.client_price) if t.client_price else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
+            "is_draft": t.is_draft,
+            "photo_required": t.photo_required,
+        })
+    return out
+
+
+@router.get("/tasks/{task_id}", summary="Получить задачу по ID (только админ), если не черновик")
+async def admin_get_task_by_id(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    # Загружаем задачу с контактным лицом, компанией и другими связями
+    q = await db.execute(
+        select(Task)
+        .options(
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type),
+            selectinload(Task.attachments),
+            selectinload(Task.history),
+            selectinload(Task.reports),
+            selectinload(Task.assigned_user),
+            selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+        )
+        .where(Task.id == task_id, Task.is_draft != True)
+    )
+    task = q.scalars().first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Задача не найдена или является черновиком")
+
+    # Получаем объект S3
+    from back.utils.selectel import get_s3_client
+    s3 = get_s3_client()
+    # S3_PUBLIC_URL = s3.endpoint_url # Не используем напрямую, используем presigned
+
+    # --- attachments к задаче ---
+    attachments = []
+    for a in (task.attachments or []):
+        if a.deleted_at or not a.processed:  # ✅ Фильтр по processed
+            continue
+        url = None
+        try:
+            url = await s3.presign_get(a.storage_key, expires=3600)  # ✅ presigned_url
+        except Exception:
+            url = None
+        attachments.append({
+            "id": a.id,
+            "file_type": a.file_type.value if a.file_type else None,
+            "presigned_url": url,  # ✅ Добавляем presigned_url
+            "storage_key": a.storage_key,
+            "processed": a.processed,
+            "uploaded_at": a.uploaded_at,
+            "original_name": a.original_name,
+            "size": a.size,
+        })
+    attachments = attachments or None
+
+    # --- equipment и work_types ---
+    equipment = [
+        {"equipment_id": te.equipment_id, "quantity": te.quantity}
+        for te in (task.equipment_links or [])
+    ] or None
+    work_types = [tw.work_type_id for tw in (task.works or [])] or None
+
+    # --- history ---
+    history = [
+        {
+            "action": h.action.value if h.action else None,
+            "user_id": h.user_id,
+            "comment": h.comment,
+            "ts": str(h.timestamp)
+        }
+        for h in (task.history or [])
+    ] or None
+
+    # --- reports с фото ---
+    reports = []
+    for r in (task.reports or []):
+        photos = []
+        if r.photos_json:
+            try:
+                keys = json.loads(r.photos_json)
+                # ✅ Также используем presigned_url для photos, если нужно
+                photo_urls = []
+                for k in keys:
+                    try:
+                        photo_url = await s3.presign_get(k, expires=3600)
+                        photo_urls.append(photo_url)
+                    except Exception:
+                        # fallback на прямую ссылку (если presign не удался)
+                        photo_urls.append(f"{s3.endpoint_url}/{k}")
+                photos = photo_urls
+            except Exception:
+                photos = []
+        reports.append({
+            "id": r.id,
+            "text": r.text,
+            "approval_logist": r.approval_logist.value if r.approval_logist else None,
+            "approval_tech": r.approval_tech.value if r.approval_tech else None,
+            "photos": photos or None
+        })
+
+    # --- company и contact_person ---
+    company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+    contact_person_name = task.contact_person.name if task.contact_person else None
+
+    return {
+        "id": task.id,
+        "company_name": company_name,  # ✅ Новое
+        "contact_person_name": contact_person_name,  # ✅ Новое
+        "vehicle_info": task.vehicle_info or None,
+        "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
+        "status": task.status.value if task.status else None,
+        "assigned_user_id": task.assigned_user_id or None,
+        "location": task.location or None,
+        "assigned_user": {
+            "id": task.assigned_user.id,
+            "name": task.assigned_user.name,
+            "lastname": task.assigned_user.lastname,
+        } if task.assigned_user else None,
+        "comment": task.comment or None,
+        "photo_required": task.photo_required,
+        "client_price": str(task.client_price) if task.client_price else None,
+        "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
+        "equipment": equipment,
+        "work_types": work_types,
+        "attachments": attachments,  # ✅ Обновлено
+        "history": history,
+        "reports": reports or None
+    }
+
+
+@router.delete(
+    "/tasks/{task_id}",
+    summary="Удалить задачу (только админ)",
+    response_model=SimpleMsg  # или TaskResponse, если хочешь вернуть удалённую задачу
+)
+async def admin_delete_task(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    # Проверяем, существует ли задача
+    res = await db.execute(select(Task).where(Task.id == task_id))
+    task = res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    # Удаляем задачу
+    await db.delete(task)
+    await db.commit()
+
+    return {"detail": "Задача успешно удалена"}
+
+
+
+@router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_get_companies(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(ClientCompany))
+    companies = res.scalars().all()
+    return [{"id": c.id, "name": c.name} for c in companies]
+
+
+@router.get("/companies/{company_id}/contacts", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_get_contact_persons(company_id: int, db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(ContactPerson).where(ContactPerson.company_id == company_id))
+    contacts = res.scalars().all()
+    return [{"id": c.id, "name": c.name} for c in contacts]
