@@ -344,69 +344,8 @@ export default function MontajnikTaskDetailPage() {
     }
   }
 
-  function setField(k, v) {
-    // setForm((f) => ({ ...f, [k]: v })); // Убираем, так как у монтажника нет редактирования задачи
-  }
 
-  // --- Улучшенная функция отображения вложений ---
-  function renderAttachments(attachments) {
-    if (!Array.isArray(attachments) || attachments.length === 0) {
-      return <span>Нет вложений</span>;
-    }
-
-    return (
-      <div className="attached-list" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-        {attachments.map((a, index) => {
-          let src = "";
-          let key = `attachment-${index}`;
-
-          // Проверяем, является ли `a` объектом или строкой
-          if (a && typeof a === "object") {
-            // Если есть `url` (полный путь) — используем его
-            if (a.url && typeof a.url === "string" && (a.url.startsWith("http://") || a.url.startsWith("https://"))) {
-              src = a.url;
-            }
-            // Если есть `storage_key` — формируем путь
-            else if (a.storage_key && typeof a.storage_key === "string") {
-              src = `${import.meta.env.VITE_API_URL}/attachments/${a.storage_key}`;
-            }
-            // Генерируем уникальный ключ
-            key = a.id ? `id-${a.id}` : a.storage_key ? `sk-${a.storage_key}` : `index-${index}`;
-          } else if (typeof a === "string") {
-            // Если `a` — строка, считаем её `storage_key`
-            src = `${import.meta.env.VITE_API_URL}/attachments/${a}`;
-            key = `str-${a}`;
-          }
-
-          // Если `src` определён — пробуем показать изображение
-          if (src) {
-            return (
-              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                <img
-                  src={src}
-                  alt={`Attachment ${index}`}
-                  style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
-                  onError={(e) => {
-                    // Если изображение не загрузилось — показываем текст
-                    e.target.onerror = null; // предотвращает зацикливание
-                    e.target.parentElement.innerHTML = `<span style="font-size: 12px; text-align: center;">Img Err (${index})</span>`;
-                  }}
-                />
-              </div>
-            );
-          }
-          // Если `src` не определён — показываем заглушку
-          else {
-            return (
-              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                <span style={{ fontSize: '12px', textAlign: 'center' }}>Вложение (${index})</span>
-              </div>
-            );
-          }
-        })}
-      </div>
-    );
-  }
+  
 
   if (loading)
     return (
@@ -445,8 +384,7 @@ export default function MontajnikTaskDetailPage() {
 
         <div className="task-detail">
           <div className="task-view">
-            {/* ❌ Удаляем строку с клиентом */}
-            {/* <p><b>Клиент:</b> {task.client || "—"}</p> */}
+
 
             {/* ✅ Добавляем строки с компанией и контактным лицом */}
             <p><b>Компания:</b> {task.company_name || "—"}</p>
@@ -483,11 +421,7 @@ export default function MontajnikTaskDetailPage() {
                 .join(", ") || "—"}</p>
             <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
 
-            {/* Вложения */}
-            <div className="section">
-              <h3>Вложения</h3>
-              {renderAttachments(task.attachments)}
-            </div>
+        
 
             {/* История */}
             <div className="section">

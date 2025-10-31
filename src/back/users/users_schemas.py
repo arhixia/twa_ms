@@ -24,6 +24,24 @@ class EquipmentItem(BaseModel):
     equipment_id: int
     quantity: int
 
+class TaskEquipmentItem(BaseModel):
+    id: Optional[int] = None 
+    equipment_id: int
+    equipment_name: Optional[str] = None
+    serial_number: Optional[str] = None
+    quantity: int = Field(default=1, ge=1) 
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskWorkItem(BaseModel):
+    id: Optional[int] = None
+    work_type_id: int
+    work_type_name: Optional[str] = None
+    quantity: int = Field(default=1, ge=1) 
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 class AssignmentType(str, Enum):
     individual = "individual"
@@ -48,8 +66,6 @@ class TaskUpdate(BaseModel):
     photo_required: Optional[bool] = None
     assignment_type: Optional[AssignmentType] = None
     assigned_user_id: Optional[int] = None
-    attachments_add: Optional[List[str]] = None
-    attachments_remove: Optional[List[int]] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -59,14 +75,13 @@ class DraftIn(BaseModel):
     vehicle_info: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     location: Optional[str] = None
-    equipment: Optional[List[EquipmentItem]] = None
     work_types: Optional[List[int]] = None
     assignment_type: Optional[AssignmentType] = None
     assigned_user_id: Optional[int] = None
     comment: Optional[str] = None
     photo_required: Optional[bool] = False
-    attachments_add: Optional[List[str]] = None
-    attachments_remove: Optional[List[int]] = None
+    gos_number: Optional[str] = None
+    equipment: Optional[List[TaskEquipmentItem]] = None
 
     @field_validator("*", mode="before")
     @classmethod
@@ -91,11 +106,12 @@ class PublishIn(BaseModel):
     contact_person_id: Optional[int] = None  
     vehicle_info: Optional[str] = None
     scheduled_at: Optional[datetime] = None
+    gos_number: Optional[str] = None
     location: Optional[str] = None
     assignment_type: Optional[AssignmentType] = None
     assigned_user_id: Optional[int] = None
     comment: Optional[str] = None
-    equipment: List[EquipmentItem] = Field(default_factory=list)
+    equipment: Optional[List[TaskEquipmentItem]] = None
     work_types: List[int] = Field(default_factory=list)
     photo_required: Optional[bool] = False
 
@@ -109,14 +125,12 @@ class TaskPatch(BaseModel):
     contact_person_id: Optional[int] = None 
     vehicle_info: Optional[str] = None
     comment: Optional[str] = None
-    # client_price и montajnik_reward — не принимаем
+    gos_number: Optional[str] = None    # client_price и montajnik_reward — не принимаем
     is_draft: Optional[bool] = None
     photo_required: Optional[bool] = None
     assignment_type: Optional[AssignmentType] = None
     assigned_user_id: Optional[int] = None
-    attachments_add: Optional[List[str]] = None
-    attachments_remove: Optional[List[int]] = None
-    equipment: Optional[List[EquipmentItem]] = None
+    equipment: Optional[List[TaskEquipmentItem]] = None
     work_types: Optional[List[int]] = None 
 
     model_config = ConfigDict(from_attributes=True)
@@ -135,6 +149,7 @@ class TaskHistoryItem(BaseModel):
     new_value: Optional[str] = None
     related_entity_id: Optional[int] = None
     related_entity_type: Optional[str] = None
+    gos_number: Optional[str] = None
 
     company_id: Optional[int] = None  
     contact_person_id: Optional[int] = None

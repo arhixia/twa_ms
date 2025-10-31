@@ -23,7 +23,7 @@ from back.db.models import (
     TaskReport,
     WorkType,
 )
-from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg,require_roles
+from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg,require_roles
 from back.utils.notify import notify_user
 from datetime import datetime, timezone
 from sqlalchemy import delete, select
@@ -141,7 +141,6 @@ async def _attach_storage_keys_to_task(db: AsyncSession, storage_keys: list, tas
     return created
 
 
-
 @router.post("/drafts", status_code=201, dependencies=[Depends(require_roles(Role.logist, Role.admin))])
 async def create_draft(
     background_tasks: BackgroundTasks,
@@ -151,13 +150,9 @@ async def create_draft(
 ):
     data = payload.model_dump()
 
-    # ✅ Обрабатываем attachments_add и attachments_remove
-    attachments_to_add = data.pop("attachments_add", None)
-    attachments_to_remove = data.pop("attachments_remove", None)
-
     contact_person_id = data.get("contact_person_id")
+    gos_number = data.get("gos_number")
 
-    # ✅ Проверяем contact_person_id и получаем company_id
     company_id = None
     if contact_person_id:
         cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
@@ -171,21 +166,32 @@ async def create_draft(
 
     data["assigned_user_id"] = _normalize_assigned_user_id(data.get("assigned_user_id"))
 
-    # === РАСЧЁТ ЦЕН НА ОСНОВЕ work_types (как в publish_task) ===
-    work_types_ids = data.get("work_types", [])
+    # === РАСЧЁТ ЦЕН НА ОСНОВЕ work_types ===
+    # ✅ Обновляем логику получения work_types_ids с учетом quantity
+    work_types_ids_raw = data.get("work_types", [])
+    from collections import Counter
+    work_type_counts = Counter(work_types_ids_raw)
+    work_types_ids_unique = list(work_type_counts.keys())
+    
     calculated_client_price = None
     calculated_montajnik_reward = None
 
-    if work_types_ids:
-        wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids), WorkType.is_active == True))
+    if work_types_ids_unique:
+        wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True))
         work_types_from_db = wt_res.scalars().all()
-        if len(work_types_from_db) != len(work_types_ids):
-            missing = set(work_types_ids) - {wt.id for wt in work_types_from_db}
+        if len(work_types_from_db) != len(work_types_ids_unique):
+            missing = set(work_types_ids_unique) - {wt.id for wt in work_types_from_db}
             raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
 
-        calculated_client_price = sum(wt.client_price for wt in work_types_from_db)
-        calculated_montajnik_reward = sum(wt.montajnik_price or wt.client_price for wt in work_types_from_db)
+        # Рассчитываем цены с учетом количества
+        calculated_client_price = Decimal('0')
+        calculated_montajnik_reward = Decimal('0')
+        for wt in work_types_from_db:
+            count = work_type_counts[wt.id]
+            calculated_client_price += (wt.client_price or Decimal('0')) * count
+            calculated_montajnik_reward += (wt.montajnik_price or wt.client_price or Decimal('0')) * count
 
+    # ✅ Передаем gos_number в конструктор Task
     task = Task(
         contact_person_id=contact_person_id,
         company_id=company_id,
@@ -205,43 +211,46 @@ async def create_draft(
         is_draft=True,
         photo_required=data.get("photo_required", False),
         created_by=int(current_user.id),
+        gos_number=gos_number,
     )
 
     db.add(task)
     await db.flush()
 
-    # --- SAVE EQUIPMENT ---
-    equipment_data = data.get("equipment") or []
-    for eq in equipment_data:
-        res = await db.execute(select(Equipment).where(Equipment.id == eq["equipment_id"]))
+    # --- SAVE EQUIPMENT (новая логика) ---
+    # ✅ Обработка equipment как списка TaskEquipmentItem
+    for eq_item in (data.get("equipment") or []):
+        # eq_item - это словарь TaskEquipmentItem
+        equipment_id = eq_item.get("equipment_id")
+        serial_number = eq_item.get("serial_number")
+        quantity = eq_item.get("quantity", 1) # Дефолтное значение 1
+        
+        res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
         equip = res.scalars().first()
         if not equip:
-            raise HTTPException(status_code=400, detail=f"Оборудование id={eq['equipment_id']} не найдено")
-        db.add(TaskEquipment(task_id=task.id, equipment_id=eq["equipment_id"], quantity=eq["quantity"]))
+            raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+        # ✅ Создаем TaskEquipment с serial_number и quantity
+        db.add(TaskEquipment(
+            task_id=task.id, 
+            equipment_id=equipment_id, 
+            serial_number=serial_number,
+            quantity=quantity
+        ))
 
-    # --- SAVE WORK TYPES ---
-    work_types_data = data.get("work_types") or []
-    for wt_id in work_types_data:
+
+    for wt_id, count in work_type_counts.items():
         res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
         wt = res.scalars().first()
         if not wt:
             raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-        db.add(TaskWork(task_id=task.id, work_type_id=wt_id))
-
-    if attachments_to_add:
-        await _attach_storage_keys_to_task(
-            db,
-            attachments_to_add,
-            task.id,
-            getattr(current_user, "id", None),
-            getattr(current_user, "role", None).value if getattr(current_user, "role", None) else None,
-            background_tasks
-        )
+        # ✅ Создаем TaskWork с quantity=count
+        db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
 
     await db.commit()
     await db.refresh(task)
 
     return {"draft_id": task.id, "saved_at": task.created_at, "data": data}
+
 
 
 
@@ -252,8 +261,7 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
         .options(
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
             selectinload(Task.works).selectinload(TaskWork.work_type),
-            selectinload(Task.attachments),  # ✅ Загружаем вложения
-            selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
         )
         .where(
             Task.id == draft_id,
@@ -265,25 +273,31 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
     if not task:
         raise HTTPException(status_code=404, detail="Черновик не найден")
 
-    # Получаем объект S3
-    s3 = get_s3_client()
-    S3_PUBLIC_URL = s3.endpoint_url
-
-    # --- attachments к задаче ---
-    attachments = [
-        {
-            "id": a.id,
-            "file_type": a.file_type.value if a.file_type else None,
-            "url": f"{S3_PUBLIC_URL}/{a.storage_key}",
-            "processed": a.processed,
-        }
-        for a in (task.attachments or [])
-        if not a.deleted_at
-    ] or None
-
-    # --- company и contact_person ---
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
+
+    # ✅ Формируем список equipment как TaskEquipmentItem
+    equipment_items = [
+        {
+            "id": te.id, # ID записи TaskEquipment
+            "equipment_id": te.equipment_id,
+            "equipment_name": te.equipment.name, # Для удобства отображения
+            "serial_number": te.serial_number, # ✅ Новое поле
+            "quantity": te.quantity, # ✅ Новое поле
+        }
+        for te in task.equipment_links
+    ]
+
+    # ✅ Формируем список work_types как TaskWorkItem
+    work_type_items = [
+        {
+            "id": tw.id, # ID записи TaskWork
+            "work_type_id": tw.work_type_id,
+            "work_type_name": tw.work_type.name, # Для удобства отображения
+            "quantity": tw.quantity, # ✅ Новое поле
+        }
+        for tw in task.works
+    ]
 
     payload = {
         "company_id": task.company_id,
@@ -296,16 +310,12 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
         "comment": task.comment,
         "assignment_type": task.assignment_type.value if task.assignment_type else None,
         "assigned_user_id": task.assigned_user_id,
-        # ✅ Добавляем цены в payload
         "client_price": str(task.client_price) if task.client_price is not None else None,
         "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward is not None else None,
         "photo_required": task.photo_required,
-        "equipment": [
-            {"equipment_id": e.equipment_id, "name": e.equipment.name, "quantity": e.quantity}
-            for e in task.equipment_links
-        ],
-        "work_types": [w.work_type.id for w in task.works],
-        "attachments": attachments,
+        "gos_number": task.gos_number, 
+        "equipment": equipment_items, 
+        "work_types": work_type_items, 
     }
 
     return {"draft_id": int(task.id), "saved_at": task.created_at, "data": payload}
@@ -327,11 +337,9 @@ async def patch_draft(
 
     data = payload.model_dump()
 
-    # ✅ Обрабатываем attachments_add и attachments_remove
-    attachments_to_add = data.pop("attachments_add", None)
-    attachments_to_remove = data.pop("attachments_remove", None)
-
     contact_person_id = data.get("contact_person_id")
+    # ✅ Получаем новое поле gos_number
+    gos_number = data.get("gos_number")
 
     # ✅ Проверяем contact_person_id и получаем company_id
     company_id = None
@@ -348,25 +356,39 @@ async def patch_draft(
         setattr(task, "contact_person_id", None)
         setattr(task, "company_id", None)
 
-    # Обновляем все простые поля (кроме связей)
+    # Обновляем все простые поля (кроме связей и gos_number)
     for key, value in data.items():
-        if key in {"equipment", "work_types", "contact_person_id"}: # ✅ Добавлено contact_person_id
+        # ✅ Пропускаем equipment, work_types, contact_person_id, gos_number - они обрабатываются отдельно
+        if key in {"equipment", "work_types", "contact_person_id", "gos_number"}:
             continue
         if value is not None:
             setattr(task, key, value)
+            
+    # ✅ Устанавливаем gos_number
+    if gos_number is not None: # Позволяем установить null
+        setattr(task, "gos_number", gos_number)
 
     # === РАСЧЁТ ЦЕН НА ОСНОВЕ work_types (как в publish_task) ===
-    work_types_ids = data.get("work_types", None) # Проверяем, переданы ли work_types
-    if work_types_ids is not None: # Если переданы work_types
-        if work_types_ids: # И если список не пуст
-            wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids), WorkType.is_active == True))
+    work_types_ids_raw = data.get("work_types", None) # Проверяем, переданы ли work_types
+    if work_types_ids_raw is not None: # Если переданы work_types
+        from collections import Counter
+        work_type_counts = Counter(work_types_ids_raw)
+        work_types_ids_unique = list(work_type_counts.keys())
+        
+        if work_types_ids_unique: # И если список не пуст
+            wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True))
             work_types_from_db = wt_res.scalars().all()
-            if len(work_types_from_db) != len(work_types_ids):
-                missing = set(work_types_ids) - {wt.id for wt in work_types_from_db}
+            if len(work_types_from_db) != len(work_types_ids_unique):
+                missing = set(work_types_ids_unique) - {wt.id for wt in work_types_from_db}
                 raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
 
-            calculated_client_price = sum(wt.client_price for wt in work_types_from_db)
-            calculated_montajnik_reward = sum(wt.montajnik_price or wt.client_price for wt in work_types_from_db)
+            # Рассчитываем цены с учетом количества
+            calculated_client_price = Decimal('0')
+            calculated_montajnik_reward = Decimal('0')
+            for wt in work_types_from_db:
+                count = work_type_counts[wt.id]
+                calculated_client_price += (wt.client_price or Decimal('0')) * count
+                calculated_montajnik_reward += (wt.montajnik_price or wt.client_price or Decimal('0')) * count
         else: # Если список work_types пуст
             calculated_client_price = None
             calculated_montajnik_reward = None
@@ -376,57 +398,83 @@ async def patch_draft(
         task.montajnik_reward = calculated_montajnik_reward
 
 
-    # Очистим старые привязки и добавим новые
-    if "equipment" in data: # Проверяем, передано ли оборудование
-        await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
-        for eq in data.get("equipment", []):
-            res = await db.execute(select(Equipment).where(Equipment.id == eq["equipment_id"]))
-            if not res.scalars().first():
-                raise HTTPException(status_code=400, detail=f"Оборудование id={eq['equipment_id']} не найдено")
-            db.add(TaskEquipment(task_id=task.id, equipment_id=eq["equipment_id"], quantity=eq["quantity"]))
-    if "work_types" in data: # Проверяем, переданы ли типы работ
-        await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-        for wt_id in data.get("work_types", []):
-            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-            if not res.scalars().first():
-                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id))
-
-    # ✅ Обработка вложений
-    if attachments_to_add:
-        await _attach_storage_keys_to_task(
-            db,
-            attachments_to_add,
-            task.id,
-            getattr(current_user, "id", None),
-            getattr(current_user, "role", None).value if getattr(current_user, "role", None) else None,
-            background_tasks
+    # --- Обновление оборудования (новая логика) ---
+    # ✅ Обновляем equipment, если оно передано
+    equipment_data = data.get("equipment", None) # Проверяем, передано ли оборудование
+    if equipment_data is not None: # Если передано оборудование
+        # 1. Получаем существующие записи TaskEquipment для этой задачи
+        existing_te_res = await db.execute(
+            select(TaskEquipment).where(TaskEquipment.task_id == task.id)
         )
-        db.add(TaskHistory(
-            task_id=task.id,
-            user_id=current_user.id,
-            action=task.status,
-            comment=f"Attachments added: {attachments_to_add}"
-        ))
-        await db.flush()
+        existing_te_list = existing_te_res.scalars().all()
+        existing_te_map = {te.id: te for te in existing_te_list} # Map для быстрого поиска
 
-    if attachments_to_remove:
-        for aid in attachments_to_remove:
-            a_res = await db.execute(select(TaskAttachment).where(
-                TaskAttachment.id == aid,
-                TaskAttachment.task_id == task.id
-            ))
-            at = a_res.scalars().first()
-            if at:
-                at.deleted_at = datetime.now(timezone.utc)
-                background_tasks.add_task("back.files.handlers.delete_object_from_s3", at.storage_key)
-        db.add(TaskHistory(
-            task_id=task.id,
-            user_id=current_user.id,
-            action=task.status,
-            comment=f"Attachments removed: {attachments_to_remove}"
-        ))
-        await db.flush()
+        incoming_te_ids = set() # Будем собирать ID пришедших записей для сравнения
+
+        # 2. Обрабатываем каждый пришедший элемент
+        for item_data_dict in equipment_data:
+            # Pydantic автоматически преобразует dict в TaskEquipmentItem
+            item_data: TaskEquipmentItem = item_data_dict if isinstance(item_data_dict, TaskEquipmentItem) else TaskEquipmentItem(**item_data_dict)
+            
+            item_id = item_data.id
+            equipment_id = item_data.equipment_id
+            serial_number = item_data.serial_number
+            quantity = item_data.quantity
+
+            # Проверяем, существует ли оборудование
+            eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+            equipment_obj = eq_res.scalars().first()
+            if not equipment_obj:
+                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+
+            if item_id:
+                # 2a. Обновление существующей записи
+                if item_id in existing_te_map:
+                    te_record = existing_te_map[item_id]
+                    # Проверка, что запись принадлежит этой задаче
+                    if te_record.task_id != task.id:
+                        raise HTTPException(status_code=400, detail=f"Запись оборудования id={item_id} не принадлежит задаче {task.id}")
+                    
+                    te_record.equipment_id = equipment_id
+                    te_record.serial_number = serial_number
+                    te_record.quantity = quantity
+                    # db.add(te_record) # Не обязательно, если объект уже отслеживается
+                    incoming_te_ids.add(item_id)
+                    logger.info(f"Обновлена запись TaskEquipment id={item_id}")
+                else:
+                    raise HTTPException(status_code=400, detail=f"Запись TaskEquipment id={item_id} не найдена для задачи {task.id}")
+            else:
+                # 2b. Создание новой записи
+                new_te = TaskEquipment(
+                    task_id=task.id,
+                    equipment_id=equipment_id,
+                    serial_number=serial_number,
+                    quantity=quantity
+                )
+                db.add(new_te)
+                await db.flush() # Нужно для получения new_te.id
+                incoming_te_ids.add(new_te.id) # Добавляем ID новой записи
+                logger.info(f"Создана новая запись TaskEquipment id={new_te.id}")
+
+        # 3. Удаление записей, которых нет во входящих данных
+        ids_to_delete = set(existing_te_map.keys()) - incoming_te_ids
+        if ids_to_delete:
+            delete_stmt = delete(TaskEquipment).where(TaskEquipment.id.in_(ids_to_delete))
+            await db.execute(delete_stmt)
+            logger.info(f"Удалены записи TaskEquipment ids={ids_to_delete}")
+
+
+    if work_types_ids_raw is not None: # Если переданы work_types
+        await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
+        
+        # 2. Создаем новые записи с учетом количества
+        for wt_id, count in work_type_counts.items():
+            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            wt = res.scalars().first()
+            if not wt:
+                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+            db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+
 
     db.add(TaskHistory(task_id=task.id, user_id=int(current_user.id), action=TaskStatus.new, comment="Draft updated"))
     await db.commit()
@@ -467,6 +515,7 @@ async def publish_task(
     data = payload.model_dump()
     draft_id = data.get("draft_id")
     contact_person_id = data.get("contact_person_id")
+    gos_number = data.get("gos_number")
 
     contact_person = None
     company_id = None
@@ -477,17 +526,25 @@ async def publish_task(
             raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
         company_id = contact_person.company_id
 
-    # === РАСЧЁТ ЦЕН ===
-    work_types_ids = data.get("work_types", [])
-    if work_types_ids:
-        wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids), WorkType.is_active == True))
+    work_types_ids_raw = data.get("work_types", [])
+    from collections import Counter
+    work_type_counts = Counter(work_types_ids_raw)
+    work_types_ids_unique = list(work_type_counts.keys())
+    
+    if work_types_ids_unique:
+        wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True))
         work_types = wt_res.scalars().all()
-        if len(work_types) != len(work_types_ids):
-            missing = set(work_types_ids) - {wt.id for wt in work_types}
+        if len(work_types) != len(work_types_ids_unique):
+            missing = set(work_types_ids_unique) - {wt.id for wt in work_types}
             raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
-
-        client_price = sum(wt.client_price for wt in work_types)
-        montajnik_reward = sum(wt.montajnik_price or wt.client_price for wt in work_types)
+        
+        # Рассчитываем цены с учетом количества
+        client_price = Decimal('0')
+        montajnik_reward = Decimal('0')
+        for wt in work_types:
+            count = work_type_counts[wt.id]
+            client_price += (wt.client_price or Decimal('0')) * count
+            montajnik_reward += (wt.montajnik_price or wt.client_price or Decimal('0')) * count
     else:
         client_price = None
         montajnik_reward = None
@@ -501,6 +558,7 @@ async def publish_task(
 
         # Обновляем поля перед публикацией
         for key, val in data.items():
+            # ✅ Обрабатываем contact_person_id отдельно
             if key == "contact_person_id":
                 if val:
                     cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == val))
@@ -512,7 +570,11 @@ async def publish_task(
                 else:
                     setattr(task, "contact_person_id", None)
                     setattr(task, "company_id", None)
-            elif key != "draft_id":
+            # ✅ Устанавливаем gos_number
+            elif key == "gos_number":
+                setattr(task, key, val)
+            # ✅ Пропускаем draft_id и equipment, work_types, они обрабатываются отдельно
+            elif key not in ("draft_id", "equipment", "work_types"):
                 if val is not None:
                     setattr(task, key, val)
         task.is_draft = False
@@ -522,13 +584,34 @@ async def publish_task(
         # --- Очистка и вставка equipment/work_types ---
         await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
         await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-        for eq in data.get("equipment", []):
-            res = await db.execute(select(Equipment).where(Equipment.id == eq["equipment_id"]))
+        
+        # ✅ Обработка equipment (новая логика)
+        for eq_item in (data.get("equipment") or []):
+            # eq_item - это словарь TaskEquipmentItem
+            equipment_id = eq_item.get("equipment_id")
+            serial_number = eq_item.get("serial_number")
+            quantity = eq_item.get("quantity", 1) # Дефолтное значение 1
+            
+            res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
             if not res.scalars().first():
-                raise HTTPException(status_code=400, detail=f"Оборудование id={eq['equipment_id']} не найдено")
-            db.add(TaskEquipment(task_id=task.id, equipment_id=eq["equipment_id"], quantity=eq["quantity"]))
-        for wt_id in work_types_ids:
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id))
+                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+            # ✅ Создаем TaskEquipment с serial_number и quantity
+            db.add(TaskEquipment(
+                task_id=task.id, 
+                equipment_id=equipment_id, 
+                serial_number=serial_number,
+                quantity=quantity
+            ))
+
+        # ✅ Обработка work_types с учетом quantity (новая логика)
+        # work_type_counts уже подсчитан выше
+        for wt_id, count in work_type_counts.items():
+            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            if not res.scalars().first():
+                 # Это уже проверено выше, но на всякий случай
+                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+            # ✅ Создаем TaskWork с quantity=count
+            db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
 
         
         db.add(TaskHistory(
@@ -549,11 +632,13 @@ async def publish_task(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
+            gos_number = task.gos_number
         ))
         await db.flush()
 
     else:
         # --- Прямая публикация (без draft) ---
+        # ✅ Передаем gos_number в конструктор Task
         task = Task(
             contact_person_id=contact_person_id,
             company_id=company_id, 
@@ -567,14 +652,37 @@ async def publish_task(
             montajnik_reward=montajnik_reward,
             is_draft=False,
             created_by=current_user.id,
+            gos_number=gos_number,
         )
         db.add(task)
         await db.flush()
 
-        for eq in data.get("equipment", []):
-            db.add(TaskEquipment(task_id=task.id, equipment_id=eq["equipment_id"], quantity=eq["quantity"]))
-        for wt_id in work_types_ids:
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id))
+        # ✅ Обработка equipment (новая логика)
+        for eq_item in (data.get("equipment") or []):
+            # eq_item - это словарь TaskEquipmentItem
+            equipment_id = eq_item.get("equipment_id")
+            serial_number = eq_item.get("serial_number")
+            quantity = eq_item.get("quantity", 1) # Дефолтное значение 1
+            
+            res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+            if not res.scalars().first():
+                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+            # ✅ Создаем TaskEquipment с serial_number и quantity
+            db.add(TaskEquipment(
+                task_id=task.id, 
+                equipment_id=equipment_id, 
+                serial_number=serial_number,
+                quantity=quantity
+            ))
+
+        
+        for wt_id, count in work_type_counts.items():
+            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            if not res.scalars().first():
+                 # Это уже проверено выше, но на всякий случай
+                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+            # ✅ Создаем TaskWork с quantity=count
+            db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
 
         db.add(TaskHistory(
             task_id=task.id,
@@ -594,12 +702,14 @@ async def publish_task(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
+            gos_number = task.gos_number
         ))
         await db.flush()
 
     await db.commit()
     await db.refresh(task)
     return {"id": task.id}
+
 
 @router.patch("/tasks/{task_id}", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
 async def edit_task(
@@ -631,11 +741,15 @@ async def edit_task(
         raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
 
     # Сохраняем *старые* значения связей для истории
-    old_works = [tw.work_type.name for tw in task.works]
-    old_equipment = [(te.equipment.name, te.quantity) for te in task.equipment_links]
+    # ✅ Обновляем получение старых данных с учетом quantity
+    old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
+    # ✅ Обновляем получение старых данных оборудования с serial_number и quantity
+    old_equipment_with_sn_qty = [
+        (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
+    ]
     old_contact_person_name = task.contact_person.name if task.contact_person else None
     old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment}, work_types={old_works}, contact_person={old_contact_person_name}, company={old_company_name}")
+    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, company={old_company_name}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
     logger.info(f"Полный incoming dict: {incoming}")
@@ -645,18 +759,16 @@ async def edit_task(
     if "assigned_user_id" in incoming:
         incoming["assigned_user_id"] = _normalize_assigned_user_id(incoming["assigned_user_id"])
 
-    # --- извлекаем поля вложений ---
-    attachments_to_add = incoming.pop("attachments_add", None)
-    attachments_to_remove = incoming.pop("attachments_remove", None)
 
-    # --- извлекаем equipment/work_types (если пришли) ---
-    equipment_data = incoming.pop("equipment", None)
+    equipment_data: List[TaskEquipmentItem] = incoming.pop("equipment", None)
+    # ✅ work_types_data - список ID
     work_types_data = incoming.pop("work_types", None)
     logger.info(f"equipment_data: {equipment_data}, work_types_data: {work_types_data}")
 
     # --- Обновление основных полей задачи ---
     for field, value in incoming.items():
-        if field in {"id", "created_at", "created_by", "is_draft"}:
+        # ✅ Пропускаем equipment и work_types, они обрабатываются отдельно
+        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
             continue
         old = getattr(task, field)
         old_cmp = old.value if hasattr(old, "value") else old
@@ -698,38 +810,96 @@ async def edit_task(
             logger.info(f"Поле 'contact_person_id' и 'company_id' сброшены: {old_cp_id}->{None}, {old_co_id}->{None}")
 
     # --- Обновление оборудования ---
+    # ✅ НОВАЯ ЛОГИКА обновления оборудования
     if equipment_data is not None:
-        await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
-        for eq in equipment_data:
-            if "equipment_id" not in eq or "quantity" not in eq:
-                raise HTTPException(status_code=400, detail="equipment items must have equipment_id and quantity")
-            res = await db.execute(select(Equipment).where(Equipment.id == eq["equipment_id"]))
-            equip = res.scalars().first()
-            if not equip:
-                raise HTTPException(status_code=400, detail=f"Оборудование id={eq['equipment_id']} не найдено")
-            db.add(TaskEquipment(task_id=task.id, equipment_id=eq["equipment_id"], quantity=eq["quantity"]))
+        # 1. Получаем существующие записи TaskEquipment для этой задачи
+        existing_te_res = await db.execute(
+            select(TaskEquipment).where(TaskEquipment.task_id == task.id)
+        )
+        existing_te_list = existing_te_res.scalars().all()
+        existing_te_map = {te.id: te for te in existing_te_list} # Map для быстрого поиска
+
+        incoming_te_ids = set() # Будем собирать ID пришедших записей для сравнения
+
+        # 2. Обрабатываем каждый пришедший элемент
+        for item_data_dict in equipment_data:
+            # Pydantic автоматически преобразует dict в TaskEquipmentItem
+            item_data: TaskEquipmentItem = item_data_dict if isinstance(item_data_dict, TaskEquipmentItem) else TaskEquipmentItem(**item_data_dict)
+            
+            item_id = item_data.id
+            equipment_id = item_data.equipment_id
+            serial_number = item_data.serial_number
+            quantity = item_data.quantity
+
+            # Проверяем, существует ли оборудование
+            eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+            equipment_obj = eq_res.scalars().first()
+            if not equipment_obj:
+                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+
+            if item_id:
+                # 2a. Обновление существующей записи
+                if item_id in existing_te_map:
+                    te_record = existing_te_map[item_id]
+                    # Проверка, что запись принадлежит этой задаче
+                    if te_record.task_id != task.id:
+                        raise HTTPException(status_code=400, detail=f"Запись оборудования id={item_id} не принадлежит задаче {task.id}")
+                    
+                    te_record.equipment_id = equipment_id
+                    te_record.serial_number = serial_number
+                    te_record.quantity = quantity
+                    # db.add(te_record) # Не обязательно, если объект уже отслеживается
+                    incoming_te_ids.add(item_id)
+                    logger.info(f"Обновлена запись TaskEquipment id={item_id}")
+                else:
+                    raise HTTPException(status_code=400, detail=f"Запись TaskEquipment id={item_id} не найдена для задачи {task.id}")
+            else:
+                # 2b. Создание новой записи
+                new_te = TaskEquipment(
+                    task_id=task.id,
+                    equipment_id=equipment_id,
+                    serial_number=serial_number,
+                    quantity=quantity
+                )
+                db.add(new_te)
+                await db.flush() # Нужно для получения new_te.id
+                incoming_te_ids.add(new_te.id) # Добавляем ID новой записи
+                logger.info(f"Создана новая запись TaskEquipment id={new_te.id}")
+
+        # 3. Удаление записей, которых нет во входящих данных
+        ids_to_delete = set(existing_te_map.keys()) - incoming_te_ids
+        if ids_to_delete:
+            delete_stmt = delete(TaskEquipment).where(TaskEquipment.id.in_(ids_to_delete))
+            await db.execute(delete_stmt)
+            logger.info(f"Удалены записи TaskEquipment ids={ids_to_delete}")
+
         changed.append(("equipment", "old_equipment_set", equipment_data))
         logger.info("Оборудование помечено как изменённое")
 
-    # --- Обновление типов работ ---
+
+   
     if work_types_data is not None:
-        await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-        for wt_id in work_types_data:
-            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-            wt = res.scalars().first()
-            if not wt:
-                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id))
-        changed.append(("work_types", "old_work_set", work_types_data))
-        logger.info("Типы работ помечены как изменённые")
+         # Подсчитываем количество для каждого типа работ
+         from collections import Counter
+         work_type_counts = Counter(work_types_data)
+         
+         # 1. Удаляем все старые записи TaskWork
+         await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
+         
+         # 2. Создаем новые записи с учетом количества
+         for wt_id, count in work_type_counts.items():
+             res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+             wt = res.scalars().first()
+             if not wt:
+                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+             db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+         
+         changed.append(("work_types", "old_work_set", work_types_data))
+         logger.info("Типы работ помечены как изменённые")
+
 
     logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
-    logger.info(f"'attachments_to_add': {attachments_to_add}")
-    logger.info(f"'attachments_to_remove': {attachments_to_remove}")
-
-    # --- Проверка: если вообще ничего не поменялось (включая equipment/work_types) ---
-    # Проверяем, были ли какие-либо изменения: основные поля, equipment/work_types, вложения
-    has_changes = bool(changed) or bool(attachments_to_add) or bool(attachments_to_remove)
+    has_changes = bool(changed)
     logger.info(f"'has_changes' рассчитано как: {has_changes}")
 
     if not has_changes:
@@ -743,24 +913,41 @@ async def edit_task(
         # Обновляем связи в объекте задачи в сессии, чтобы получить новые значения
         await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person'])
         # Получаем *новые* значения связей
-        new_works = [tw.work_type.name for tw in task.works]
-        new_equipment = [(te.equipment.name, te.quantity) for te in task.equipment_links]
+        # ✅ Обновляем получение новых данных с учетом quantity
+        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
+        # ✅ Обновляем получение новых данных оборудования с serial_number и quantity
+        new_equipment_with_sn_qty = [
+            (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
+        ]
         new_contact_person_name = task.contact_person.name if task.contact_person else None
         new_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-        logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment}, work_types={new_works}, contact_person={new_contact_person_name}, company={new_company_name}")
+        logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment_with_sn_qty}, work_types={new_works_with_qty}, contact_person={new_contact_person_name}, company={new_company_name}")
 
         # Собираем *все* изменения, включая equipment и work_types
         all_changes = []
         for f, o, n in changed:
-            if f not in ["equipment", "work_types", "contact_person_id", "company_id"]: # Обрабатываем отдельно
+            # ✅ Обрабатываем equipment и work_types отдельно
+            if f not in ["equipment", "work_types", "contact_person_id", "company_id"]:
                 all_changes.append({"field": f, "old": str(o), "new": str(n)})
 
-        # Проверяем и добавляем изменения equipment и work_types
-        # old_* и new_* уже содержат названия/кортежи для отображения
-        if old_equipment != new_equipment:
-            all_changes.append({"field": "equipment", "old": old_equipment, "new": new_equipment})
-        if old_works != new_works:
-            all_changes.append({"field": "work_types", "old": old_works, "new": new_works})
+        # ✅ Проверяем и добавляем изменения equipment
+        if old_equipment_with_sn_qty != new_equipment_with_sn_qty:
+            # Можно сделать более детализированное сравнение, но для простоты просто запишем весь список
+            all_changes.append({
+                "field": "equipment", 
+                "old": old_equipment_with_sn_qty, 
+                "new": new_equipment_with_sn_qty
+            })
+            
+        # ✅ Проверяем и добавляем изменения work_types
+        if old_works_with_qty != new_works_with_qty:
+            # Можно сделать более детализированное сравнение, но для простоты просто запишем весь список
+            all_changes.append({
+                "field": "work_types", 
+                "old": old_works_with_qty, 
+                "new": new_works_with_qty
+            })
+            
         # Проверяем изменения contact_person и company
         old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
         new_cp_co = f"{new_contact_person_name} ({new_company_name})" if new_contact_person_name and new_company_name else "—"
@@ -790,80 +977,11 @@ async def edit_task(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
+            gos_number = task.gos_number
         )
         db.add(hist)
         await db.flush()
         logger.info("Запись в TaskHistory добавлена и зафлашена")
-
-        # --- Добавление вложений ---
-        if attachments_to_add:
-            # await _attach_storage_keys_to_task(...) # Убедитесь, что эта функция не использует db в background_tasks
-            # Правильный способ - передавать только данные, а не объект db
-            background_tasks.add_task(
-                "back.files.handlers.attach_storage_keys_to_task_in_background", # Новая функция
-                attachments_to_add,
-                task.id,
-                getattr(current_user, "id", None),
-                getattr(current_user, "role", None).value if getattr(current_user, "role", None) else None,
-            )
-            db.add(TaskHistory(
-                task_id=task.id,
-                user_id=current_user.id,
-                action=task.status,
-                comment=f"Attachments added: {attachments_to_add}",
-                event_type=TaskHistoryEventType.attachment_added, # ✅ Новый тип
-                # --- Сохраняем все основные поля задачи ---
-                company_id=task.company_id,  # ✅ Заменено
-                contact_person_id=task.contact_person_id,  # ✅ Заменено
-                vehicle_info=task.vehicle_info,
-                scheduled_at=task.scheduled_at,
-                location=task.location,
-                comment_field=task.comment,
-                status=task.status.value if task.status else None,
-                assigned_user_id=task.assigned_user_id,
-                client_price=str(task.client_price) if task.client_price is not None else None,
-                montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
-                photo_required=task.photo_required,
-                assignment_type=task.assignment_type.value if task.assignment_type else None,
-            ))
-            await db.flush()
-            logger.info("История добавления вложений добавлена и зафлашена")
-
-        # --- Удаление вложений (soft delete) ---
-        if attachments_to_remove:
-            for aid in attachments_to_remove:
-                a_res = await db.execute(select(TaskAttachment).where(
-                    TaskAttachment.id == aid,
-                    TaskAttachment.task_id == task.id
-                ))
-                at = a_res.scalars().first()
-                if at:
-                    at.deleted_at = datetime.now(timezone.utc)
-                    # background_tasks.add_task("back.files.handlers.delete_object_from_s3", at.storage_key) # Опасно, если delete_object_from_s3 использует db
-                    background_tasks.add_task("back.files.handlers.schedule_deletion_from_s3", at.storage_key) # Новая функция
-                    # Логируем удаление вложения
-                    db.add(TaskHistory(
-                        task_id=task.id,
-                        user_id=current_user.id,
-                        action=task.status,
-                        comment=f"Attachments removed: {attachments_to_remove}",
-                        event_type=TaskHistoryEventType.attachment_removed, # ✅ Новый тип
-                        
-                        company_id=task.company_id,  # ✅ Заменено
-                        contact_person_id=task.contact_person_id,  # ✅ Заменено
-                        vehicle_info=task.vehicle_info,
-                        scheduled_at=task.scheduled_at,
-                        location=task.location,
-                        comment_field=task.comment,
-                        status=task.status.value if task.status else None,
-                        assigned_user_id=task.assigned_user_id,
-                        client_price=str(task.client_price) if task.client_price is not None else None,
-                        montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
-                        photo_required=task.photo_required,
-                        assignment_type=task.assignment_type.value if task.assignment_type else None,
-                    ))
-                    await db.flush()
-            logger.info("История удаления вложений добавлена и зафлашена")
 
         await db.commit()
         logger.info("Транзакция успешно зафиксирована")
@@ -923,7 +1041,7 @@ async def review_report(
 
     approval = payload.approval
     comment = payload.comment
-    photos = payload.photos or []
+
 
     if approval not in ("approved", "rejected"):
         raise HTTPException(status_code=400, detail="approval must be 'approved' or 'rejected'")
@@ -972,6 +1090,7 @@ async def review_report(
                 company_id=task.company_id,  # ✅ Заменено
                 contact_person_id=task.contact_person_id,  # ✅ Заменено
                 vehicle_info=task.vehicle_info,
+                gos_number = task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
@@ -987,6 +1106,7 @@ async def review_report(
                 new_value=TaskStatus.completed.value, # Новое значение
                 related_entity_id=report.id,
                 related_entity_type="report",
+
             )
             db.add(h)
         else:
@@ -994,8 +1114,7 @@ async def review_report(
             hist_comment = f"Report #{report.id} reviewed by {current_user.role.value}: {approval}"
             if comment:
                 hist_comment += f". Comment: {comment}"
-            if photos:
-                hist_comment += f". Photos attached: {len(photos)}"
+            
             h = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
@@ -1015,9 +1134,7 @@ async def review_report(
                 montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
                 photo_required=task.photo_required,
                 assignment_type=task.assignment_type.value if task.assignment_type else None,
-                # --- Поля для структурированной истории ---
-                # old_value и new_value могут быть статусами отчёта, но action - статус задачи.
-                # Для отображения изменений статуса отчёта, можно использовать field_name и related_entity_type
+            
                 field_name="report_approval", # Поле, связанное с отчётом
                 old_value=f"logist:{old_approval_logist.value if old_approval_logist else 'None'}, tech:{old_approval_tech.value if old_approval_tech else 'None'}", # Старые статусы отчёта
                 new_value=f"logist:{report.approval_logist.value}, tech:{report.approval_tech.value}", # Новые статусы отчёта
@@ -1028,47 +1145,6 @@ async def review_report(
 
         await db.flush()
 
-        # --- Добавление вложений к отчёту (если отклонено и переданы photos) ---
-        if approval == "rejected" and photos:
-            for sk in photos:
-                att = TaskAttachment(
-                    task_id=task_id,
-                    report_id=report_id,
-                    storage_key=sk,
-                    file_type=FileType.photo,
-                    uploader_id=getattr(current_user, "id", None),
-                    uploader_role=getattr(current_user, "role", None).value if getattr(current_user, "role", None) else None,
-                    processed=False,
-                )
-                db.add(att)
-                await db.flush()
-                background_tasks.add_task(validate_and_process_attachment, att.id)
-
-            # Логируем добавление вложений
-            db.add(TaskHistory(
-                task_id=task_id,
-                user_id=current_user.id,
-                action=TaskStatus.inspection, # action - текущий статус задачи
-                event_type=TaskHistoryEventType.attachment_added, # ✅ Новый тип
-                comment=f"Attachments added to report #{report_id} during rejection: {len(photos)} photo(s)",
-                # --- Сохраняем все основные поля задачи ---
-                company_id=task.company_id,  # ✅ Заменено
-                contact_person_id=task.contact_person_id,  # ✅ Заменено
-                vehicle_info=task.vehicle_info,
-                scheduled_at=task.scheduled_at,
-                location=task.location,
-                comment_field=task.comment,
-                status=task.status.value if task.status else None,
-                assigned_user_id=task.assigned_user_id,
-                client_price=str(task.client_price) if task.client_price is not None else None,
-                montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
-                photo_required=task.photo_required,
-                assignment_type=task.assignment_type.value if task.assignment_type else None,
-                # --- Поля для структурированной истории ---
-                related_entity_id=report.id,
-                related_entity_type="report",
-            ))
-            await db.flush()
 
         await db.commit()
     except Exception as e:
@@ -1215,7 +1291,6 @@ async def task_detail(
         .options(
             selectinload(Task.equipment_links),
             selectinload(Task.works),
-            selectinload(Task.attachments),
             selectinload(Task.history),
             selectinload(Task.reports),
             selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
@@ -1226,38 +1301,17 @@ async def task_detail(
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
-    # Получаем объект S3
-    s3 = get_s3_client()
-
-    # --- attachments к задаче ---
-    attachments = []
-    for a in (task.attachments or []):
-        if a.deleted_at or not a.processed:  # ✅ Фильтр по processed
-            continue
-        url = None
-        try:
-            url = await s3.presign_get(a.storage_key, expires=3600)  # ✅ presigned_url
-        except Exception:
-            url = None
-        attachments.append({
-            "id": a.id,
-            "file_type": a.file_type.value if a.file_type else None,
-            "presigned_url": url,  # ✅ Добавляем presigned_url
-            "storage_key": a.storage_key,
-            "processed": a.processed,
-            "uploaded_at": a.uploaded_at,
-            "original_name": a.original_name,
-            "size": a.size,
-        })
-
-    attachments = attachments or None
 
     # --- equipment и work_types ---
     equipment = [
-        {"equipment_id": te.equipment_id, "quantity": te.quantity}
+        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number} # <--- Добавлен serial_number
         for te in (task.equipment_links or [])
     ] or None
-    work_types = [tw.work_type_id for tw in (task.works or [])] or None
+
+    work_types = [
+        {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
+        for tw in (task.works or []) 
+    ] or None
 
     # --- history ---
     history = [
@@ -1277,15 +1331,7 @@ async def task_detail(
         if r.photos_json:
             try:
                 keys = json.loads(r.photos_json)
-                # ✅ Также используем presigned_url для photos, если нужно
-                photo_urls = []
-                for k in keys:
-                    try:
-                        photo_url = await s3.presign_get(k, expires=3600)
-                        photo_urls.append(photo_url)
-                    except Exception:
-                        photo_urls.append(f"{s3.endpoint_url}/{k}")  # fallback
-                photos = photo_urls
+                photos = keys # Возвращаем список storage_key
             except Exception:
                 photos = []
         reports.append({
@@ -1305,6 +1351,7 @@ async def task_detail(
         "company_name": company_name,  
         "contact_person_name": contact_person_name,  
         "vehicle_info": task.vehicle_info or None,
+        "gos_number":task.gos_number or None,
         "location": task.location or None,
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
         "status": task.status.value if task.status else None,
@@ -1315,69 +1362,10 @@ async def task_detail(
         "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
         "equipment": equipment,
         "work_types": work_types,
-        "attachments": attachments,
         "history": history,
         "reports": reports or None
     }
 
-
-@router.post("/tasks/{task_id}/reports/{report_id}/attachments", dependencies=[Depends(require_roles(Role.logist, Role.tech_supp, Role.admin))])
-async def attach_photos_to_report(
-    background_tasks: BackgroundTasks,
-    task_id: int,
-    report_id: int,
-    payload: ReportAttachmentIn = Body(...),
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
-    report = res.scalars().first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    for sk in payload.photos:
-        att = TaskAttachment(
-            task_id=task_id,
-            report_id=report_id,
-            storage_key=sk,
-            file_type=FileType.photo,
-            uploader_id=current_user.id,
-            uploader_role=current_user.role.value,
-            processed=False,
-        )
-        db.add(att)
-        await db.flush()
-        background_tasks.add_task(validate_and_process_attachment, att.id)
-
-    await db.commit()
-    return {"detail": f"{len(payload.photos)} photo(s) attached to report"}
-
-
-@router.delete("/tasks/{task_id}/reports/{report_id}/attachments/{attachment_id}", dependencies=[Depends(require_roles(Role.logist, Role.tech_supp, Role.admin))])
-async def delete_report_attachment(
-    background_tasks: BackgroundTasks,
-    task_id: int,
-    report_id: int,
-    attachment_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
-    res = await db.execute(select(TaskAttachment).where(
-        TaskAttachment.id == attachment_id,
-        TaskAttachment.task_id == task_id,
-        TaskAttachment.report_id == report_id,
-        TaskAttachment.uploader_id == current_user.id,
-        TaskAttachment.deleted_at == None
-    ))
-    att = res.scalars().first()
-    if not att:
-        raise HTTPException(status_code=404, detail="Attachment not found or not yours")
-
-    att.deleted_at = datetime.now(timezone.utc)
-    await db.flush()
-    await db.commit()
-    background_tasks.add_task("back.files.handlers.delete_object_from_s3", att.storage_key)
-    return {"detail": "Attachment deleted"}
 
 
 @router.get("/equipment")

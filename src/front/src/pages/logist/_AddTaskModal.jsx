@@ -1,19 +1,18 @@
 // front/src/pages/logist/_AddTaskModal.jsx
 import React, { useState, useEffect } from "react";
 import Modal from "../../components/Modal";
-import FileUploader from "../../components/FileUploader";
 import {
   createDraft,
   publishTask,
   getEquipmentList,
   getWorkTypes,
-  uploadFallback,
   getCompaniesList,
   getContactPersonsByCompany,
 } from "../../api";
 
 export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraft = false }) {
 
+  // ✅ Изменяем структуру form для хранения equipment как массив объектов
   const [form, setForm] = useState({
     company_id: null,
     contact_person_id: null,
@@ -24,37 +23,37 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     assignment_type: "broadcast",
     assigned_user_id: null,
     photo_required: false,
-    equipment_ids: [],
-    work_types_ids: [],
+    // ❌ Убираем equipment_ids
+    // equipment_ids: [],
+    // ✅ Добавляем новое поле gos_number
+    gos_number: "",
+    // ✅ Добавляем equipment как массив объектов
+    equipment: [],
+    work_types_ids: [], // Оставляем как список ID для простоты подсчета quantity
   });
 
-  const [equipment, setEquipment] = useState([]);
+  const [equipment, setEquipment] = useState([]); // Список всех доступных Equipment
   const [workTypes, setWorkTypes] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
   const [saving, setSaving] = useState(false);
   const [taskId, setTaskId] = useState(null);
-  const [selectedFiles, setSelectedFiles] = useState([]);
 
   useEffect(() => {
     loadRefs();
     if (!open) {
-      setSelectedFiles([]);
       setTaskId(null);
     }
   }, [open]);
 
   async function loadRefs() {
     try {
-      const [eqRes, wtRes, compRes] = await Promise.allSettled([
-        getEquipmentList(),
-        getWorkTypes(),
-        getCompaniesList(),
-      ]);
-
-      setEquipment(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
-      setWorkTypes(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
-      setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
+      const eqRes = await getEquipmentList();
+      const wtRes = await getWorkTypes();
+      const compRes = await getCompaniesList();
+      setEquipment(eqRes || []);
+      setWorkTypes(wtRes || []);
+      setCompanies(compRes || []);
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
@@ -82,23 +81,25 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     }
   }
 
-  function handleFilesSelected(files) {
-    setSelectedFiles(files);
-  }
-
   async function saveDraft(asPublish = false) {
     if (saving) return;
     setSaving(true);
     try {
+      // ✅ Формируем payload в новом формате
       const payload = {
         ...form,
-        equipment: (form.equipment_ids || []).map((id) => ({ equipment_id: id, quantity: 1 })),
-        work_types: form.work_types_ids || [],
+        // ❌ Убираем старое поле equipment_ids
+        // equipment: (form.equipment_ids || []).map((id) => ({ equipment_id: id, quantity: 1 })),
+        // ✅ Добавляем новое поле equipment как массив объектов
+        equipment: form.equipment || [],
+        work_types: form.work_types_ids || [], // Передаем список ID, сервер подсчитает quantity
         // ✅ scheduled_at передаём как есть (строку из datetime-local)
         scheduled_at: form.scheduled_at || null,
         assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
         photo_required: Boolean(form.photo_required),
         assignment_type: form.assignment_type || "broadcast",
+        // ✅ gos_number передаётся как есть
+        gos_number: form.gos_number || null,
       };
 
       let result;
@@ -124,24 +125,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
 
       setTaskId(newId);
 
-      if (selectedFiles.length > 0 && newId) {
-        const uploadPromises = selectedFiles.map(file =>
-          uploadFallback(file, newId).catch(err => {
-            console.error(`Ошибка загрузки файла ${file.name}:`, err);
-            return null;
-          })
-        );
-
-        const uploadResults = await Promise.all(uploadPromises);
-        const successfulUploads = uploadResults.filter(res => res !== null);
-
-        if (successfulUploads.length !== selectedFiles.length) {
-          console.warn("Не все файлы были успешно загружены");
-        }
-
-        setSelectedFiles([]);
-      }
-
       onSaved && onSaved(newId);
       onClose();
     } catch (e) {
@@ -151,6 +134,77 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       setSaving(false);
     }
   }
+
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ ---
+
+  // ✅ Функция для добавления нового экземпляра оборудования в список
+  function addEquipmentItem(equipmentId) {
+    if (!equipmentId) return;
+    const eq = equipment.find(e => e.id === equipmentId);
+    if (!eq) return;
+
+    const newItem = {
+      // id: null, // ID будет присвоен бэкендом при сохранении
+      equipment_id: equipmentId,
+      equipment_name: eq.name, // Для удобства отображения
+      serial_number: "", // Начальное пустое значение
+      // quantity: 1, // ❌ Убираем quantity, так как каждый элемент - это одна единица
+    };
+    setForm((prevForm) => ({
+      ...prevForm,
+      equipment: [...prevForm.equipment, newItem],
+    }));
+  }
+
+  // ✅ Функция для обновления поля конкретного экземпляра оборудования
+  function updateEquipmentItem(index, field, value) {
+    setForm((prevForm) => {
+      const updatedEquipment = [...prevForm.equipment];
+      // Проверяем, существует ли элемент по индексу
+      if (updatedEquipment[index]) {
+        updatedEquipment[index] = { ...updatedEquipment[index], [field]: value };
+        return { ...prevForm, equipment: updatedEquipment };
+      }
+      // Если индекс не существует, возвращаем предыдущее состояние
+      return prevForm;
+    });
+  }
+
+  // ✅ Функция для удаления экземпляра оборудования из списка (полностью)
+ function removeEquipmentItem(index) {
+    setForm((prevForm) => ({
+      ...prevForm,
+      equipment: prevForm.equipment.filter((_, i) => i !== index),
+    }));
+  }
+
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ ---
+
+  // ✅ Функция для добавления типа работы в список (увеличивает счётчик)
+  function addWorkType(workTypeId) {
+    if (!workTypeId) return;
+    setForm((prevForm) => ({
+      ...prevForm,
+      work_types_ids: [...prevForm.work_types_ids, workTypeId],
+    }));
+  }
+
+  // ✅ Функция для удаления типа работы из списка (уменьшает счётчик)
+  function removeWorkType(workTypeId) {
+    setForm((prevForm) => {
+      const indexToRemove = prevForm.work_types_ids.indexOf(workTypeId);
+      if (indexToRemove !== -1) {
+        const updatedWorkTypes = [...prevForm.work_types_ids];
+        updatedWorkTypes.splice(indexToRemove, 1); // Удаляем только одно вхождение
+        return { ...prevForm, work_types_ids: updatedWorkTypes };
+      }
+      return prevForm;
+    });
+  }
+
+  // --- ЛОГИКА ДЛЯ ВЫБОРА ТИПОВ РАБОТ ОСТАЁТСЯ ПРОСТОЙ ---
+  // work_types_ids - это список ID. Если ID встречается дважды, сервер подсчитает quantity=2.
+
 
   return (
     <Modal open={open} onClose={onClose} title="Добавить задачу">
@@ -195,7 +249,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               const val = e.target.value ? parseInt(e.target.value, 10) : null;
               setField("contact_person_id", val);
             }}
-            disabled={!form.company_id}
+            disabled={!form.company_id} // доступно только если выбрана компания
             style={{
               width: "100%",
               padding: "8px",
@@ -217,6 +271,12 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           <input value={form.vehicle_info} onChange={(e) => setField("vehicle_info", e.target.value)} />
         </label>
 
+        {/* ===== НОВОЕ ПОЛЕ: ГОС. НОМЕР ===== */}
+        <label>
+          Гос. номер
+          <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)} />
+        </label>
+
         {/* ===== ДАТА И ВРЕМЯ ===== */}
         <label>
           Дата и время
@@ -236,111 +296,142 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           <textarea value={form.comment} onChange={(e) => setField("comment", e.target.value)} />
         </label>
 
-        {/* ===== Оборудование ===== */}
-        <label>Оборудование</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-          {form.equipment_ids.map((id) => {
-            const eq = equipment.find((e) => e.id === id);
-            if (!eq) return null;
+        {/* ===== Оборудование (новая логика) ===== */}
+         <label>Оборудование</label>
+
+        {/* --- Список выбранных элементов (название - поле серийного номера) --- */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+          {/* ✅ Итерируемся по массиву form.equipment и используем index */}
+          {form.equipment.map((item, index) => { 
+            const eq = equipment.find((e) => e.id === item.equipment_id);
             return (
-              <div
-                key={id}
-                style={{
-                  padding: "4px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 12,
-                  backgroundColor: "#4caf50",
-                  color: "#fff",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                {eq.name}
-                <span
-                  style={{ cursor: "pointer" }}
-                  onClick={() =>
-                    setField("equipment_ids", form.equipment_ids.filter((i) => i !== id))
-                  }
+              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}> {/* ✅ Ключ - index */}
+                {/* Название оборудования */}
+                <div style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#e0e0e0' }}>
+                  {eq?.name || `ID ${item.equipment_id}`}
+                </div>
+                {/* Поле ввода серийного номера */}
+                <div style={{ flex: 1 }}>
+                  <input
+                    type="text"
+                    placeholder="Серийный номер"
+                    value={item.serial_number || ""}
+            
+                    onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)} 
+                    style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                  />
+                </div>
+                {/* Кнопка удаления (удаляет конкретную строку/единицу) */}
+                <button
+                  type="button"
+               
+                  onClick={() => removeEquipmentItem(index)} 
+                  style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                 >
                   ×
-                </span>
+                </button>
               </div>
             );
           })}
         </div>
+
+        {/* --- Выбор нового оборудования из списка --- */}
         <select
           size={5}
           value=""
           onChange={(e) => {
             const val = Number(e.target.value);
-            if (!isNaN(val) && !form.equipment_ids.includes(val)) {
-              setField("equipment_ids", [...form.equipment_ids, val]);
+            if (!isNaN(val) && val > 0) {
+              {/* ✅ Добавляем по equipment_id, без проверки на дубликаты */}
+              addEquipmentItem(val); 
             }
             e.target.value = ""; // Сброс для возможности повторного выбора
           }}
           style={{ width: "100%" }}
         >
-          {equipment
-            .filter(eq => !form.equipment_ids.includes(eq.id))
-            .map((eq) => (
-              <option key={eq.id} value={eq.id}>
-                {eq.name}
-              </option>
-            ))}
+          {/* ❌ УБИРАЕМ фильтрацию по уже выбранным equipment_id */}
+          {/* {equipment
+            .filter(eq => !form.equipment.some(item => item.equipment_id === eq.id))
+            .map((eq) => ( */}
+          {/* ✅ ОТОБРАЖАЕМ ВЕСЬ СПИСОК ОБОРУДОВАНИЯ */}
+          {equipment.map((eq) => (
+            <option key={eq.id} value={eq.id}>
+              {eq.name}
+            </option>
+          ))}
         </select>
 
-        {/* ===== Виды работ ===== */}
-        <label>Виды работ</label>
+        {/* ===== Виды работ (остаётся прежним) ===== */}
+        {/* ===== Виды работ (обновлённая логика) ===== */}
+         <label>Виды работ</label>
+        {/* --- Отображение выбранных типов работ с количеством --- */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-          {form.work_types_ids.map((id) => {
-            const wt = workTypes.find((w) => w.id === id);
-            if (!wt) return null;
-            return (
-              <div
-                key={id}
-                style={{
-                  padding: "4px 8px",
-                  border: "1px solid #ccc",
-                  borderRadius: 12,
-                  backgroundColor: "#2196f3",
-                  color: "#fff",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 4,
-                }}
-              >
-                {wt.name}
-                <span
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setField("work_types_ids", form.work_types_ids.filter((w) => w !== id))}
+          {/* ✅ Используем useMemo или вычисляем counts прямо здесь для отображения */}
+          {(() => {
+            const counts = {};
+            form.work_types_ids.forEach(id => {
+              counts[id] = (counts[id] || 0) + 1;
+            });
+            // Преобразуем в массив уникальных ID с количествами
+            const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+              id: parseInt(id, 10),
+              count,
+            }));
+
+            return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+              const wt = workTypes.find((w) => w.id === id);
+              if (!wt) return null;
+              return (
+                <div
+                  key={id} 
+                  style={{
+                    padding: "4px 8px",
+                    border: "1px solid #ccc",
+                    borderRadius: 12,
+                    backgroundColor: "#2196f3",
+                    color: "#fff",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
                 >
-                  ×
-                </span>
-              </div>
-            );
-          })}
+                  {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
+                  <span
+                    style={{ cursor: "pointer" }}
+                    onClick={() => removeWorkType(id)} 
+                  >
+                    ×
+                  </span>
+                </div>
+              );
+            });
+          })()}
         </div>
+        {/* --- Выбор нового типа работы из списка --- */}
         <select
           size={5}
           value=""
           onChange={(e) => {
             const val = Number(e.target.value);
-            if (!isNaN(val) && !form.work_types_ids.includes(val)) {
-              setField("work_types_ids", [...form.work_types_ids, val]);
+            if (!isNaN(val) && val > 0) {
+              addWorkType(val); {/* ✅ Добавляем по work_type_id */}
             }
             e.target.value = ""; // Сброс
           }}
           style={{ width: "100%" }}
         >
-          {workTypes
+          {/* ❌ УБИРАЕМ фильтрацию по уже выбранным work_type_id */}
+          {/* {workTypes
             .filter(wt => !form.work_types_ids.includes(wt.id))
-            .map((wt) => (
-              <option key={wt.id} value={wt.id}>
-                {wt.name}
-              </option>
-            ))}
+            .map((wt) => ( */}
+          {/* ✅ ОТОБРАЖАЕМ ВЕСЬ СПИСОК ТИПОВ РАБОТ */}
+          {workTypes.map((wt) => (
+            <option key={wt.id} value={wt.id}>
+              {wt.name}
+            </option>
+          ))}
         </select>
+
 
         <label>
           Тип назначения
@@ -374,32 +465,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           />{" "}
           Фото обязательно
         </label>
-
-        <div className="full-row">
-          <label>
-            Вложения (фото):
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={(e) => {
-                const files = Array.from(e.target.files || []);
-                handleFilesSelected(files);
-              }}
-              disabled={saving}
-            />
-          </label>
-          {selectedFiles.length > 0 && (
-            <div className="attached-list full-row">
-              <p>Выбрано файлов: {selectedFiles.length}</p>
-              <ul>
-                {selectedFiles.map((file, index) => (
-                  <li key={index}>{file.name} ({(file.size / 1024).toFixed(2)} KB)</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
       </div>
 
       <div className="modal-actions">

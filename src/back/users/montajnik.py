@@ -105,10 +105,6 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
     Общие (broadcast) задачи, доступные всем активным монтажникам.
     Возвращает список рассылок (tasks with assignment_type == broadcast и is_draft == False).
     """
-    # Проверка роли (для montajnik) выполняется в _ensure_montajnik_or_403
-    # Для других ролей доступ открыт по зависимостям.
-    # Если нужна строгая проверка только для montajnik, оставьте:
-    # _ensure_montajnik_or_403(current_user)
 
     # Загружаем задачи с контактным лицом и компанией
     res = await db.execute(
@@ -159,7 +155,6 @@ async def available_task_detail(
         .options(
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
             selectinload(Task.works).selectinload(TaskWork.work_type),
-            selectinload(Task.attachments),
             selectinload(Task.history),
             selectinload(Task.reports),
             selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
@@ -170,31 +165,6 @@ async def available_task_detail(
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
-    # Получаем объект S3
-    s3 = get_s3_client()
-    S3_PUBLIC_URL = s3.endpoint_url
-
-    # --- attachments к задаче ---
-    attachments = []
-    for a in (task.attachments or []):
-        if a.deleted_at or not a.processed:  # ✅ Фильтр по processed
-            continue
-        url = None
-        try:
-            url = await s3.presign_get(a.storage_key, expires=3600)  # ✅ presigned_url
-        except Exception:
-            url = None
-        attachments.append({
-            "id": a.id,
-            "file_type": a.file_type.value if a.file_type else None,
-            "presigned_url": url,  # ✅ Добавляем presigned_url
-            "storage_key": a.storage_key,
-            "processed": a.processed,
-            "uploaded_at": a.uploaded_at,
-            "original_name": a.original_name,
-            "size": a.size,
-        })
-    attachments = attachments or None
 
     # --- equipment и work_types ---
     equipment = [
@@ -221,15 +191,7 @@ async def available_task_detail(
         if r.photos_json:
             try:
                 keys = json.loads(r.photos_json)
-                # ✅ Также используем presigned_url для photos
-                photo_urls = []
-                for k in keys:
-                    try:
-                        photo_url = await s3.presign_get(k, expires=3600)
-                        photo_urls.append(photo_url)
-                    except Exception:
-                        photo_urls.append(f"{S3_PUBLIC_URL}/{k}")  # fallback
-                photos = photo_urls
+                photos = keys # Возвращаем список storage_key
             except Exception:
                 photos = []
         reports.append({
@@ -259,11 +221,9 @@ async def available_task_detail(
         "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
         "equipment": equipment,
         "work_types": work_types,
-        "attachments": attachments,  # ✅ Обновлено
         "history": history,
         "reports": reports or None
     }
-
 
 @router.get("/tasks/{task_id}")
 async def mont_task_detail(
@@ -277,7 +237,6 @@ async def mont_task_detail(
         .options(
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
             selectinload(Task.works).selectinload(TaskWork.work_type),
-            selectinload(Task.attachments),
             selectinload(Task.history),
             selectinload(Task.reports),
             selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
@@ -287,33 +246,6 @@ async def mont_task_detail(
     task = res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
-
-    # Получаем объект S3
-    s3 = get_s3_client()
-    # S3_PUBLIC_URL = s3.endpoint_url # Не используем напрямую, используем presigned
-
-    # --- attachments к задаче ---
-    attachments = []
-    for a in (task.attachments or []):
-        if a.deleted_at or not a.processed:  # ✅ Фильтр по processed
-            continue
-        url = None
-        try:
-            url = await s3.presign_get(a.storage_key, expires=3600)  # ✅ presigned_url
-        except Exception:
-            url = None
-        attachments.append({
-            "id": a.id,
-            "file_type": a.file_type.value if a.file_type else None,
-            "presigned_url": url,  # ✅ Добавляем presigned_url
-            "storage_key": a.storage_key,
-            "processed": a.processed,
-            "uploaded_at": a.uploaded_at,
-            "original_name": a.original_name,
-            "size": a.size,
-        })
-    attachments = attachments or None
-
     # --- equipment и work_types ---
     equipment = [
         {"equipment_id": te.equipment_id, "quantity": te.quantity}
@@ -339,16 +271,7 @@ async def mont_task_detail(
         if r.photos_json:
             try:
                 keys = json.loads(r.photos_json)
-                # ✅ Также используем presigned_url для photos
-                photo_urls = []
-                for k in keys:
-                    try:
-                        photo_url = await s3.presign_get(k, expires=3600)
-                        photo_urls.append(photo_url)
-                    except Exception:
-                        # fallback на прямую ссылку (если presign не удался)
-                        photo_urls.append(f"{s3.endpoint_url}/{k}")
-                photos = photo_urls
+                photos = keys # Возвращаем список storage_key
             except Exception:
                 photos = []
         reports.append({
@@ -378,11 +301,9 @@ async def mont_task_detail(
         "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
         "equipment": equipment,
         "work_types": work_types,
-        "attachments": attachments,  # ✅ Обновлено
         "history": history,
         "reports": reports or None
     }
-
 
 @router.get("/tasks/history")
 async def logist_history(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):

@@ -60,8 +60,7 @@ export default function MyTasksPage() {
               <TaskCard
                 key={task.id}
                 task={task}
-                // showAcceptButton={false} // Не показываем кнопку принятия, так как задача уже назначена
-                // onAccept не передаём
+  
               />
             ))
           )}

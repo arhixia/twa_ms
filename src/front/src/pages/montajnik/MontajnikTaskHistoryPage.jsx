@@ -16,7 +16,6 @@ export default function MontajnikTaskHistoryPage() {
   const [loading, setLoading] = useState(false);
   // ✅ Состояние для компаний
   const [companies, setCompanies] = useState([]);
-  // ✅ Состояние для кэша контактных лиц: { [companyId]: [{id, name}, ...] }
   const [contactPersonsCache, setContactPersonsCache] = useState({});
 
   useEffect(() => {

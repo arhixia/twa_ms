@@ -14,7 +14,7 @@ from back.files.attachments import router as attachments_router
 from back.db.config import TOKEN as BOT_TOKEN,WEB_APP_URL
 from back.db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
-from back.db.models import TelegramMapping, User
+from back.db.models import  User
 import asyncio
 from aiogram import Bot, Dispatcher, types
 

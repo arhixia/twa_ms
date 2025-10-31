@@ -7,25 +7,13 @@ import {
   reviewReport,
   getEquipmentList,
   getWorkTypes,
-  getCompaniesList,      
-  getContactPersonsByCompany, 
+  getCompaniesList,
+  getContactPersonsByCompany,
 } from "../../api";
-import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
 
-// --- Модальное окно отклонения отчёта (без изменений) ---
 function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
   const [comment, setComment] = useState("");
-  const [photos, setPhotos] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
-
-  const handlePhotoUpload = (file) => {
-    setPhotos(prev => [...prev, file]);
-  };
-
-  const handleRemovePhoto = (indexToRemove) => {
-    setPhotos(prev => prev.filter((_, index) => index !== indexToRemove));
-  };
 
   const handleSubmit = async () => {
     if (!comment.trim()) {
@@ -33,9 +21,7 @@ function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
       return;
     }
     try {
-      setSubmitting(true);
-      const photoKeys = photos.map(p => typeof p === 'object' ? p.storage_key : p);
-      await reviewReport(taskId, reportId, { approval: "rejected", comment, photos: photoKeys });
+      await reviewReport(taskId, reportId, { approval: "rejected", comment, photos: [] });
       alert("❌ Отчёт отклонён");
       onSubmitSuccess && onSubmitSuccess();
       onClose();
@@ -44,7 +30,7 @@ function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
       const errorMsg = err.response?.data?.detail || "Не удалось отклонить отчёт.";
       alert(`Ошибка: ${errorMsg}`);
     } finally {
-      setSubmitting(false);
+      // setSubmitting(false);
     }
   };
 
@@ -66,47 +52,12 @@ function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
                 placeholder="Причина отклонения..."
               />
             </label>
-            <label>
-              Фото:
-              <FileUploader onUploaded={handlePhotoUpload} />
-              <div className="attached-list" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
-                {photos.map((p, index) => (
-                  <div key={index} style={{ position: 'relative', display: 'inline-block' }}>
-                    <img
-                      src={typeof p === 'object' ? p.url : `${import.meta.env.VITE_API_URL}/attachments/${p.storage_key || p}`}
-                      alt={`Preview ${index}`}
-                      style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px' }}
-                    />
-                    <button
-                      onClick={() => handleRemovePhoto(index)}
-                      style={{
-                        position: 'absolute',
-                        top: '-5px',
-                        right: '-5px',
-                        background: 'red',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '50%',
-                        width: '20px',
-                        height: '20px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      &times;
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </label>
           </div>
         </div>
         <div className="modal-actions">
-          <button className="primary" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Отправка...' : 'Отправить'}
+          {/* ❌ Убираем состояние submitting из кнопки */}
+          <button className="primary" onClick={handleSubmit} /*disabled={submitting}*/>
+            Отправить
           </button>
           <button onClick={onClose}>Отмена</button>
         </div>
@@ -150,18 +101,53 @@ export default function TaskDetailPage() {
     setLoading(true);
     try {
       const data = await fetchTaskDetail(id);
+
+      // --- НОВАЯ ЛОГИКА ОБРАБОТКИ work_types (После изменений бэкенда) ---
+      // Теперь data.work_types - это массив объектов { work_type_id, quantity }
+      // Напрямую используем его для task.work_types
+      const processedWorkTypes = (data.work_types || []).map(wt => ({
+        work_type_id: wt.work_type_id,
+        quantity: wt.quantity,
+      }));
+
       const t = {
         ...data,
-        equipment: data.equipment || [],
-        work_types: data.work_types || [],
+        // Оборудование: массив объектов {equipment_id, serial_number, quantity}
+        equipment: (data.equipment || []).map(e => ({
+          equipment_id: e.equipment_id,
+          serial_number: e.serial_number || "",
+          quantity: e.quantity || 1,
+        })),
+        // Заменяем оригинальный work_types на обработанный (уже правильный)
+        work_types: processedWorkTypes,
         history: data.history || [],
         reports: data.reports || [],
-        attachments: data.attachments || [],
       };
-      t.equipment_ids = t.equipment.map(e => e.equipment_id);
-      t.work_types_ids = t.work_types;
+
       setTask(t);
-      setForm(t);
+
+      // --- ИНИЦИАЛИЗАЦИЯ form ДЛЯ РЕДАКТИРОВАНИЯ ---
+      // equipment: массив объектов { equipment_id, serial_number }
+      const formEquipment = t.equipment.map(e => ({
+        equipment_id: e.equipment_id,
+        serial_number: e.serial_number,
+      }));
+
+      // work_types_ids: плоский массив ID, как в AddTaskModal (для логики добавления/удаления)
+      const formWorkTypesIds = [];
+      processedWorkTypes.forEach(item => {
+        for (let i = 0; i < item.quantity; i++) {
+          formWorkTypesIds.push(item.work_type_id);
+        }
+      });
+
+      const initialForm = {
+        ...t,
+        equipment: formEquipment,
+        work_types_ids: formWorkTypesIds, // используем плоский массив
+      };
+
+      setForm(initialForm);
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       alert("Ошибка загрузки задачи");
@@ -174,33 +160,67 @@ export default function TaskDetailPage() {
     setForm(prev => ({ ...prev, [k]: v }));
   }
 
-  // ✅ Загрузка контактных лиц при выборе компании
-  async function handleCompanyChange(companyId) {
-    if (!companyId) {
-      setContactPersons([]);
-      setField("contact_person_id", null);
-      return;
-    }
-    try {
-      const contacts = await getContactPersonsByCompany(companyId);
-      setContactPersons(contacts || []);
-      // Сбрасываем выбор контактного лица при смене компании
-      setField("contact_person_id", null);
-    } catch (e) {
-      console.error("Ошибка загрузки контактных лиц:", e);
-      setContactPersons([]);
-      setField("contact_person_id", null);
-    }
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ (аналогично AddTaskModal) ---
+  function addEquipmentItemToForm(equipmentId) {
+    if (!equipmentId) return;
+    const eq = equipment.find(e => e.id === equipmentId);
+    if (!eq) return;
+
+    const newItem = {
+      equipment_id: equipmentId,
+      serial_number: "", // ✅ Начальное пустое значение
+    };
+    setField("equipment", [...(form.equipment || []), newItem]);
+  }
+
+  function updateEquipmentItemInForm(index, field, value) {
+    setForm((prevForm) => {
+      const updatedEquipment = [...(prevForm.equipment || [])];
+      if (updatedEquipment[index]) {
+        updatedEquipment[index] = { ...updatedEquipment[index], [field]: value };
+        return { ...prevForm, equipment: updatedEquipment };
+      }
+      return prevForm;
+    });
+  }
+
+  function removeEquipmentItemFromForm(index) {
+    setForm((prevForm) => ({
+      ...prevForm,
+      equipment: prevForm.equipment.filter((_, i) => i !== index),
+    }));
+  }
+
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ (аналогично AddTaskModal) ---
+  function addWorkTypeItemToForm(workTypeId) {
+    if (!workTypeId) return;
+    setForm((prevForm) => ({
+      ...prevForm,
+      work_types_ids: [...(prevForm.work_types_ids || []), workTypeId],
+    }));
+  }
+
+  function removeWorkTypeItemFromForm(workTypeId) {
+    setForm((prevForm) => {
+      const indexToRemove = (prevForm.work_types_ids || []).indexOf(workTypeId);
+      if (indexToRemove !== -1) {
+        const updatedWorkTypes = [...(prevForm.work_types_ids || [])];
+        updatedWorkTypes.splice(indexToRemove, 1);
+        return { ...prevForm, work_types_ids: updatedWorkTypes };
+      }
+      return prevForm;
+    });
   }
 
   async function saveEdit() {
     try {
       const payload = {
         ...form,
-        equipment: (form.equipment_ids || []).map(id => ({ equipment_id: id, quantity: 1 })),
-        work_types: form.work_types_ids || [],
+        equipment: form.equipment || [],
+        work_types: form.work_types_ids || [], // Отправляем плоский массив ID
         client_price: undefined,
         montajnik_reward: undefined,
+        gos_number: form.gos_number || null,
       };
       await editTask(id, payload);
       alert("✅ Изменения сохранены");
@@ -216,6 +236,7 @@ export default function TaskDetailPage() {
   async function handleApproveReport(taskId, reportId) {
     if (!window.confirm("Принять отчёт?")) return;
     try {
+      // ❌ При принятии тоже отправляем пустой массив photos
       await reviewReport(taskId, reportId, { approval: "approved", comment: "", photos: [] });
       alert("✅ Отчёт принят");
       loadTask();
@@ -238,60 +259,59 @@ export default function TaskDetailPage() {
     loadTask();
   }
 
-  function handleUploaded(file) {
-    setForm(prev => ({ ...prev, attachments: [...(prev.attachments || []), file] }));
-  }
-
+  // ✅ Обновляем renderAttachments, чтобы он работал с photos из отчётов
   function renderAttachments(attachments) {
-  if (!Array.isArray(attachments) || attachments.length === 0) {
-    return <span>Нет вложений</span>;
-  }
+    if (!Array.isArray(attachments) || attachments.length === 0) {
+      return <span>Нет вложений</span>;
+    }
 
-  return (
-    <div className="attached-list" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-      {attachments.map((a, index) => {
-        let src = "";
-        let key = `attachment-${index}`;
+    return (
+      <div className="attached-list" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+        {attachments.map((a, index) => {
+          let src = "";
+          let key = `attachment-${index}`;
 
-        if (a && typeof a === "object") {
-          if (a.presigned_url) {
-            src = a.presigned_url;
-          } else if (a.storage_key) {
-            src = `https://s3.storage.selcloud.ru/mobile-service-testing/${a.storage_key}`;
+          if (a && typeof a === "object") {
+            if (a.presigned_url) {
+              src = a.presigned_url;
+            } else if (a.storage_key) {
+              src = `https://s3.storage.selcloud.ru/mobile-service-testing/ 
+  ${a.storage_key}`;
+            }
+            key = a.id ? `id-${a.id}` : a.storage_key ? `sk-${a.storage_key}` : `index-${index}`;
+          } else if (typeof a === "string") {
+            src = `https://s3.storage.selcloud.ru/mobile-service-testing/ 
+  ${a}`;
+            key = `str-${a}`;
           }
-          key = a.id ? `id-${a.id}` : a.storage_key ? `sk-${a.storage_key}` : `index-${index}`;
-        } else if (typeof a === "string") {
-          src = `https://s3.storage.selcloud.ru/mobile-service-testing/${a}`;
-          key = `str-${a}`;
-        }
 
-        if (src) {
-          return (
-            <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-              <img
-                src={src}
-                alt={`Attachment ${index}`}
-                style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
-                onLoad={() => console.log(`✅ IMG Loaded: ${src}`)}
-                onError={(e) => {
-                  console.error(`❌ IMG Error: ${src}`, e);
-                  e.target.onerror = null;
-                  e.target.parentElement.innerHTML = `<span style="font-size: 12px; text-align: center;">Img Err (${index})</span>`;
-                }}
-              />
-            </div>
-          );
-        } else {
-          return (
-            <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-              <span style={{ fontSize: '12px', textAlign: 'center' }}>Вложение ({index})</span>
-            </div>
-          );
-        }
-      })}
-    </div>
-  );
-}
+          if (src) {
+            return (
+              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
+                <img
+                  src={src}
+                  alt={`Attachment ${index}`}
+                  style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
+                  onLoad={() => console.log(`✅ IMG Loaded: ${src}`)}
+                  onError={(e) => {
+                    console.error(`❌ IMG Error: ${src}`, e);
+                    e.target.onerror = null;
+                    e.target.parentElement.innerHTML = `<span style="font-size: 12px; text-align: center;">Img Err (${index})</span>`;
+                  }}
+                />
+              </div>
+            );
+          } else {
+            return (
+              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
+                <span style={{ fontSize: '12px', textAlign: 'center' }}>Вложение (${index})</span>
+              </div>
+            );
+          }
+        })}
+      </div>
+    );
+  }
 
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (!task) return <div className="logist-main"><div className="empty">Задача не найдена</div></div>;
@@ -375,6 +395,16 @@ export default function TaskDetailPage() {
                   onChange={(e) => setField("vehicle_info", e.target.value)}
                 />
               </label>
+
+               <label>
+                Гос. номер:
+                <input
+                  type="text"
+                  value={form.gos_number || ""}
+                  onChange={(e) => setField("gos_number", e.target.value)}
+                />
+              </label>
+
               <label>
                 Дата:
                 <input
@@ -429,123 +459,127 @@ export default function TaskDetailPage() {
 
               {/* ===== Оборудование (редактирование) ===== */}
               <label>Оборудование</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-                {form.equipment_ids?.map((id) => {
-                  const eq = equipment.find((e) => e.id === id);
-                  if (!eq) return null;
+              {/* --- Список выбранных элементов (название - поле серийного номера) --- */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+                {(form.equipment || []).map((item, index) => {
+                  const eq = equipment.find((e) => e.id === item.equipment_id);
                   return (
-                    <div
-                      key={id}
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid #ccc",
-                        borderRadius: 12,
-                        backgroundColor: "#4caf50",
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {eq.name}
-                      <span
-                        style={{ cursor: "pointer" }}
-                        onClick={() =>
-                          setField("equipment_ids", form.equipment_ids.filter((i) => i !== id))
-                        }
+                    <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      {/* Название оборудования */}
+                      <div style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#e0e0e0' }}>
+                        {eq?.name || `ID ${item.equipment_id}`}
+                      </div>
+                      {/* Поле ввода серийного номера */}
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="text"
+                          placeholder="Серийный номер"
+                          value={item.serial_number || ""}
+                          onChange={(e) => updateEquipmentItemInForm(index, "serial_number", e.target.value)}
+                          style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                        />
+                      </div>
+                      {/* Кнопка удаления (удаляет конкретную строку/единицу) */}
+                      <button
+                        type="button"
+                        onClick={() => removeEquipmentItemFromForm(index)}
+                        style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       >
                         ×
-                      </span>
+                      </button>
                     </div>
                   );
                 })}
               </div>
+              {/* --- Выбор нового оборудования из списка --- */}
               <select
                 size={5}
                 value=""
                 onChange={(e) => {
                   const val = Number(e.target.value);
-                  if (!isNaN(val) && val > 0 && !form.equipment_ids?.includes(val)) {
-                    setField("equipment_ids", [...(form.equipment_ids || []), val]);
+                  if (!isNaN(val) && val > 0) {
+                    addEquipmentItemToForm(val);
                   }
-                  e.target.value = "";
+                  e.target.value = ""; // Сброс для возможности повторного выбора
                 }}
                 style={{ width: "100%" }}
               >
-                {equipment
-                  .filter(eq => !form.equipment_ids?.includes(eq.id))
-                  .map((eq) => (
-                    <option key={eq.id} value={eq.id}>
-                      {eq.name}
-                    </option>
-                  ))}
+                {equipment.map((eq) => (
+                  <option key={eq.id} value={eq.id}>
+                    {eq.name}
+                  </option>
+                ))}
               </select>
 
               {/* ===== Виды работ (редактирование) ===== */}
               <label>Виды работ</label>
+              {/* --- Отображение выбранных типов работ с количеством --- */}
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-                {form.work_types_ids?.map((id) => {
-                  const wt = workTypes.find((w) => w.id === id);
-                  if (!wt) return null;
-                  return (
-                    <div
-                      key={id}
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid #ccc",
-                        borderRadius: 12,
-                        backgroundColor: "#2196f3",
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {wt.name}
-                      <span
-                        style={{ cursor: "pointer" }}
-                        onClick={() =>
-                          setField("work_types_ids", form.work_types_ids.filter((w) => w !== id))
-                        }
+                {(() => {
+                  const counts = {};
+                  (form.work_types_ids || []).forEach(id => {
+                    counts[id] = (counts[id] || 0) + 1;
+                  });
+                  const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+                    id: parseInt(id, 10),
+                    count,
+                  }));
+
+                  return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+                    const wt = workTypes.find((w) => w.id === id);
+                    if (!wt) return null;
+                    return (
+                      <div
+                        key={id}
+                        style={{
+                          padding: "4px 8px",
+                          border: "1px solid #ccc",
+                          borderRadius: 12,
+                          backgroundColor: "#2196f3",
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
                       >
-                        ×
-                      </span>
-                    </div>
-                  );
-                })}
+                        {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
+                        <span
+                          style={{ cursor: "pointer" }}
+                          onClick={() => removeWorkTypeItemFromForm(id)}
+                        >
+                          ×
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
+              {/* --- Выбор нового вида работ из списка --- */}
               <select
                 size={5}
                 value=""
                 onChange={(e) => {
                   const val = Number(e.target.value);
-                  if (!isNaN(val) && val > 0 && !form.work_types_ids?.includes(val)) {
-                    setField("work_types_ids", [...(form.work_types_ids || []), val]);
+                  if (!isNaN(val) && val > 0) {
+                    addWorkTypeItemToForm(val);
                   }
-                  e.target.value = "";
+                  e.target.value = ""; // Сброс
                 }}
                 style={{ width: "100%" }}
               >
-                {workTypes
-                  .filter(wt => !form.work_types_ids?.includes(wt.id))
-                  .map((wt) => (
-                    <option key={wt.id} value={wt.id}>
-                      {wt.name}
-                    </option>
-                  ))}
+                {workTypes.map((wt) => (
+                  <option key={wt.id} value={wt.id}>
+                    {wt.name}
+                  </option>
+                ))}
               </select>
-
-              <label className="full-row">
-                Вложения:
-                <FileUploader onUploaded={handleUploaded} />
-                {renderAttachments(form.attachments || [])}
-              </label>
             </div>
           ) : (
             <div className="task-view">
               <p><b>Компания:</b> {task.company_name || "—"}</p>
               <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
               <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
+              <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
               <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
               <p><b>Статус:</b> {task.status || "—"}</p>
               <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
@@ -556,19 +590,27 @@ export default function TaskDetailPage() {
               <p>
                 <b>Оборудование:</b>{" "}
                 {(task.equipment || [])
-                  .map(e => equipment.find(eq => eq.id === e.equipment_id)?.name || e.equipment_id)
+                  .map((e) => {
+                    const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
+                    // ✅ Отображаем serial_number и quantity
+                    return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+                  })
                   .join(", ") || "—"}
               </p>
+
+              {/* ===== ИЗМЕНЁННОЕ ОТОБРАЖЕНИЕ ВИДОВ РАБОТ (После изменений бэкенда) ===== */}
               <p>
                 <b>Виды работ:</b>{" "}
-                {(task.work_types || [])
-                  .map(wtId => workTypes.find(wt => wt.id === wtId)?.name || wtId)
-                  .join(", ") || "—"}
+                {task.work_types && task.work_types.length > 0 ? (
+                  task.work_types.map(wt => {
+                    const wtObj = workTypes.find(w => w.id === wt.work_type_id);
+                    const name = wtObj?.name || wt.work_type_id;
+                    const count = wt.quantity || 1; // Берём quantity из объекта
+                    return `${name} (x${count})`;
+                  }).join(", ")
+                ) : "—"}
               </p>
-              <div>
-                <b>Вложения:</b>
-                {renderAttachments(task.attachments)}
-              </div>
+
             </div>
           )}
 
@@ -602,11 +644,9 @@ export default function TaskDetailPage() {
                       </>
                     ) : null}
                   </div>
-                  {r.photos?.length > 0 && (
+                  {r.photos && r.photos.length > 0 && (
                     <div className="attached-list">
-                      {r.photos.map((url, idx) => (
-                        <img key={idx} src={url} alt={`Report ${idx}`} style={{ maxHeight: 100 }} />
-                      ))}
+                      {renderAttachments(r.photos)}
                     </div>
                   )}
                 </div>

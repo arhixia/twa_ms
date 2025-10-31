@@ -3,7 +3,6 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 // ✅ Добавим импорт для получения списка компаний и контактных лиц
 import { getDraft, patchDraft, deleteDraft, publishTask, getEquipmentList, getWorkTypes, getCompaniesList, getContactPersonsByCompany } from "../../api";
-import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
 
 export default function DraftDetailPage() {
@@ -45,29 +44,49 @@ export default function DraftDetailPage() {
       const res = await getDraft(id);
       const d = { id: res.draft_id, ...res.data };
 
-      // преобразуем equipment/work_types для селектов
-      d.equipment_ids = (d.equipment || []).map((e) => e.equipment_id);
-      d.work_types_ids = d.work_types || [];
+      // --- НОВАЯ ЛОГИКА ОБРАБОТКИ equipment и work_types (аналогично TaskDetailPage) ---
+      // equipment: массив объектов {equipment_id, serial_number}
+      const processedEquipment = (d.equipment || []).map(e => ({
+        equipment_id: e.equipment_id,
+        serial_number: e.serial_number || "",
+        // quantity игнорируется, так как каждая строка - отдельное оборудование
+      }));
 
-      // ✅ Копируем attachments и преобразуем в массив строк storage_key
-      // Это важно для унификации данных между объектами из API и строками новых uploads
-      d.attachments = (d.attachments || [])
-        .map(a => {
-          if (a && typeof a === 'object' && a.storage_key) {
-            // Если a - объект с storage_key, берем его
-            return a.storage_key;
-          } else if (typeof a === 'string') {
-            // Если a - уже строка (storage_key), оставляем как есть
-            return a;
-          }
-          // Если формат не распознан, игнорируем этот элемент
-          console.warn("Нераспознанный формат вложения в черновике:", a);
-          return null;
-        })
-        .filter(sk => sk !== null); // Убираем null/undefined
+      // work_types: для отображения в task-view нужен массив объектов { work_type_id, quantity }
+      // d.work_types уже содержит объекты с work_type_id и quantity
+      const processedWorkTypesForView = (d.work_types || []).map(wt => ({
+        work_type_id: wt.work_type_id,
+        quantity: wt.quantity
+      }));
 
-      setDraft(d);
-      setForm({ ...d }); // копируем в form
+      // --- СОЗДАЕМ task-подобный объект для отображения в task-view ---
+      const processedDraftForView = {
+        ...d,
+        equipment: processedEquipment.map(e => ({
+          equipment_id: e.equipment_id,
+          serial_number: e.serial_number,
+          quantity: 1, // Условное количество 1 для отображения, так как каждая строка - единица
+        })),
+        work_types: processedWorkTypesForView, // Теперь это [{ work_type_id: 3, quantity: 2 }, ...]
+      };
+
+      // --- ИНИЦИАЛИЗАЦИЯ form ДЛЯ РЕДАКТИРОВАНИЯ ---
+      // form.work_types_ids: плоский массив ID, как в _AddTaskModal
+      const formWorkTypesIds = [];
+      (d.work_types || []).forEach(wtItem => {
+        for (let i = 0; i < wtItem.quantity; i++) {
+          formWorkTypesIds.push(wtItem.work_type_id);
+        }
+      });
+
+      const initialForm = {
+        ...d,
+        equipment: processedEquipment, // массив объектов { equipment_id, serial_number }
+        work_types_ids: formWorkTypesIds, // плоский массив ID, например, [3, 3, 5]
+      };
+
+      setDraft(processedDraftForView); // Для отображения в task-view
+      setForm(initialForm); // Для редактирования
     } catch (e) {
       console.error(e);
       alert("Ошибка загрузки черновика");
@@ -103,15 +122,65 @@ export default function DraftDetailPage() {
     }
   }
 
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ (аналогично AddTaskModal) ---
+  function addEquipmentItemToForm(equipmentId) {
+    if (!equipmentId) return;
+    const eq = equipment.find(e => e.id === equipmentId);
+    if (!eq) return;
+
+    const newItem = {
+      equipment_id: equipmentId,
+      serial_number: "", // ✅ Начальное пустое значение
+    };
+    setField("equipment", [...(form.equipment || []), newItem]);
+  }
+
+  function updateEquipmentItemInForm(index, field, value) {
+    setForm((prevForm) => {
+      const updatedEquipment = [...(prevForm.equipment || [])];
+      if (updatedEquipment[index]) {
+        updatedEquipment[index] = { ...updatedEquipment[index], [field]: value };
+        return { ...prevForm, equipment: updatedEquipment };
+      }
+      return prevForm;
+    });
+  }
+
+  function removeEquipmentItemFromForm(index) {
+    setForm((prevForm) => ({
+      ...prevForm,
+      equipment: prevForm.equipment.filter((_, i) => i !== index),
+    }));
+  }
+
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ (аналогично AddTaskModal) ---
+  function addWorkTypeItemToForm(workTypeId) {
+    if (!workTypeId) return;
+    setField("work_types_ids", [...(form.work_types_ids || []), workTypeId]);
+  }
+
+  function removeWorkTypeItemFromForm(workTypeId) {
+    setForm((prevForm) => {
+      const indexToRemove = (prevForm.work_types_ids || []).indexOf(workTypeId);
+      if (indexToRemove !== -1) {
+        const updatedWorkTypes = [...(prevForm.work_types_ids || [])];
+        updatedWorkTypes.splice(indexToRemove, 1);
+        return { ...prevForm, work_types_ids: updatedWorkTypes };
+      }
+      return prevForm;
+    });
+  }
+
   async function saveEdit() {
     try {
-      // Формируем payload в формате бекенда
+      // Формируем payload в формате бекенда (аналогично _AddTaskModal)
       const payload = {
         ...form,
-        equipment: (form.equipment_ids || []).map((id) => ({ equipment_id: id, quantity: 1 })),
-        work_types: form.work_types_ids || [],
-        // ✅ Передаем вложения как массив строк storage_key
-        attachments_add: (form.attachments || []).filter(sk => typeof sk === 'string' && sk),
+        equipment: form.equipment || [],
+        work_types: form.work_types_ids || [], // Отправляем плоский массив ID
+        // ❌ Явно исключаем client_price и montajnik_reward, так как они рассчитываются автоматически
+        client_price: undefined,
+        montajnik_reward: undefined,
       };
       await patchDraft(id, payload);
       alert("💾 Изменения сохранены");
@@ -126,15 +195,15 @@ export default function DraftDetailPage() {
   async function handlePublish() {
     if (!window.confirm("Опубликовать задачу?")) return;
     try {
-      // Формируем payload для публикации
+      // Формируем payload для публикации (аналогично _AddTaskModal)
       const publishPayload = {
         draft_id: Number(id),
-        // Передаем поля компании и контакта из формы
-        company_id: form.company_id,
-        contact_person_id: form.contact_person_id,
-        // Передаем location из формы
-        location: form.location,
-        // ... другие поля, если нужно, но они должны быть в form
+        ...form, // берем все поля из form, включая company_id, contact_person_id, gos_number
+        equipment: form.equipment || [],
+        work_types: form.work_types_ids || [], // Отправляем плоский массив ID
+        // ❌ Явно исключаем client_price и montajnik_reward
+        client_price: undefined,
+        montajnik_reward: undefined,
       };
       await publishTask(publishPayload);
       await deleteDraft(id);
@@ -169,11 +238,6 @@ export default function DraftDetailPage() {
 
       {edit ? (
         <div className="form-grid">
-          {/* ❌ Удаляем поле "Клиент" */}
-          {/* <label>
-            Клиент
-            <input value={form.client || ""} onChange={(e) => setField("client", e.target.value)} />
-          </label> */}
 
           {/* ✅ Новое поле "Компания" */}
           <label>
@@ -220,6 +284,13 @@ export default function DraftDetailPage() {
             ТС
             <input value={form.vehicle_info || ""} onChange={(e) => setField("vehicle_info", e.target.value)} />
           </label>
+
+          {/* ===== НОВОЕ ПОЛЕ: ГОС. НОМЕР ===== */}
+          <label>
+            Гос. номер
+            <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)} />
+          </label>
+
           <label>
             Дата и время
             <input type="datetime-local" value={form.scheduled_at || ""} onChange={(e) => setField("scheduled_at", e.target.value)} />
@@ -229,47 +300,50 @@ export default function DraftDetailPage() {
             <textarea value={form.location || ""} onChange={(e) => setField("location", e.target.value)} />
           </label>
 
-          {/* ===== Оборудование ===== */}
+          {/* ===== Оборудование (редактирование) ===== */}
           <label>Оборудование</label>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-            {form.equipment_ids.map((id) => {
-              const eq = equipment.find((e) => e.id === id);
-              if (!eq) return null;
+          {/* --- Список выбранных элементов (название - поле серийного номера) --- */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+            {(form.equipment || []).map((item, index) => {
+              const eq = equipment.find((e) => e.id === item.equipment_id);
               return (
-                <div
-                  key={id}
-                  style={{
-                    padding: "4px 8px",
-                    border: "1px solid #ccc",
-                    borderRadius: 12,
-                    backgroundColor: "#4caf50",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  {eq.name}
-                  <span
-                    style={{ cursor: "pointer" }}
-                    onClick={() =>
-                      setField("equipment_ids", form.equipment_ids.filter((i) => i !== id))
-                    }
+                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Название оборудования */}
+                  <div style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#e0e0e0' }}>
+                    {eq?.name || `ID ${item.equipment_id}`}
+                  </div>
+                  {/* Поле ввода серийного номера */}
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="text"
+                      placeholder="Серийный номер"
+                      value={item.serial_number || ""}
+                      onChange={(e) => updateEquipmentItemInForm(index, "serial_number", e.target.value)}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    />
+                  </div>
+                  {/* Кнопка удаления (удаляет конкретную строку/единицу) */}
+                  <button
+                    type="button"
+                    onClick={() => removeEquipmentItemFromForm(index)}
+                    style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                   >
                     ×
-                  </span>
+                  </button>
                 </div>
               );
             })}
           </div>
+          {/* --- Выбор нового оборудования из списка --- */}
           <select
             size={5}
             value=""
             onChange={(e) => {
               const val = Number(e.target.value);
-              if (!form.equipment_ids.includes(val) && !isNaN(val)) {
-                setField("equipment_ids", [...form.equipment_ids, val]);
+              if (!isNaN(val) && val > 0) {
+                addEquipmentItemToForm(val);
               }
+              e.target.value = ""; // Сброс для возможности повторного выбора
             }}
             style={{ width: "100%" }}
           >
@@ -280,47 +354,59 @@ export default function DraftDetailPage() {
             ))}
           </select>
 
-          {/* ===== Виды работ ===== */}
+          {/* ===== Виды работ (редактирование) ===== */}
           <label>Виды работ</label>
+          {/* --- Отображение выбранных типов работ с количеством --- */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-            {form.work_types_ids.map((id) => {
-              const wt = workTypes.find((w) => w.id === id);
-              if (!wt) return null;
-              return (
-                <div
-                  key={id}
-                  style={{
-                    padding: "4px 8px",
-                    border: "1px solid #ccc",
-                    borderRadius: 12,
-                    backgroundColor: "#2196f3",
-                    color: "#fff",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  {wt.name}
-                  <span
-                    style={{ cursor: "pointer" }}
-                    onClick={() =>
-                      setField("work_types_ids", form.work_types_ids.filter((i) => i !== id))
-                    }
+            {(() => {
+              const counts = {};
+              (form.work_types_ids || []).forEach(id => {
+                counts[id] = (counts[id] || 0) + 1;
+              });
+              const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+                id: parseInt(id, 10),
+                count,
+              }));
+
+              return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+                const wt = workTypes.find((w) => w.id === id);
+                if (!wt) return null;
+                return (
+                  <div
+                    key={id}
+                    style={{
+                      padding: "4px 8px",
+                      border: "1px solid #ccc",
+                      borderRadius: 12,
+                      backgroundColor: "#2196f3",
+                      color: "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 4,
+                    }}
                   >
-                    ×
-                  </span>
-                </div>
-              );
-            })}
+                    {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
+                    <span
+                      style={{ cursor: "pointer" }}
+                      onClick={() => removeWorkTypeItemFromForm(id)}
+                    >
+                      ×
+                    </span>
+                  </div>
+                );
+              });
+            })()}
           </div>
+          {/* --- Выбор нового вида работ из списка --- */}
           <select
             size={5}
             value=""
             onChange={(e) => {
               const val = Number(e.target.value);
-              if (!form.work_types_ids.includes(val) && !isNaN(val)) {
-                setField("work_types_ids", [...form.work_types_ids, val]);
+              if (!isNaN(val) && val > 0) {
+                addWorkTypeItemToForm(val);
               }
+              e.target.value = ""; // Сброс
             }}
             style={{ width: "100%" }}
           >
@@ -341,7 +427,8 @@ export default function DraftDetailPage() {
             <input value={form.assigned_user_id || ""} onChange={(e) => setField("assigned_user_id", e.target.value)} />
           </label>
 
-          <label>
+          {/* ❌ Убираем поля редактирования цен */}
+          {/* <label>
             Цена клиента
             <input
               type="number"
@@ -358,43 +445,11 @@ export default function DraftDetailPage() {
               value={form.montajnik_reward || ""}
               onChange={(e) => setField("montajnik_reward", e.target.value)}
             />
-          </label>
+          </label> */}
 
-          <div className="full-row uploader-block">
-            {/* ✅ Передаем taskId напрямую */}
-            <FileUploader
-              key={`uploader-edit-${draft.id}`} // Уникальный ключ при открытии редактирования
-              taskId={draft.id || null}
-              // onUploaded должен получить объект файла с storage_key
-              // и мы добавляем ТОЛЬКО строку storage_key в массив
-              onUploaded={(uploadedFileObj) => {
-                if (uploadedFileObj?.storage_key) {
-                  setField("attachments", [...(form.attachments || []), uploadedFileObj.storage_key]);
-                } else {
-                  console.error("[ERROR] FileUploader onUploaded передал некорректные данные:", uploadedFileObj);
-                  alert("Ошибка: Не удалось получить ключ загруженного файла.");
-                }
-              }}
-            />
-
-            {/* Отображение уже добавленных и новых вложений как строк storage_key */}
-            {/* form.attachments гарантированно содержит только строки */}
-            <div className="attached-list">
-              {(form.attachments || []).map((storageKey, index) => (
-                <div className="attached" key={index} style={{ padding: '4px', fontSize: '12px', border: '1px solid #ccc', borderRadius: '4px', marginBottom: '2px' }}>
-                  {storageKey} {/* Отображаем storage_key как текст */}
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       ) : (
         <div className="task-view">
-          {/* ❌ Удаляем строку отображения "Клиент" */}
-          {/* <p>
-            <b>Клиент:</b> {draft.client || "—"}
-          </p> */}
-
           {/* ✅ Добавляем строки отображения "Компания" и "Контактное лицо" */}
           <p>
             <b>Компания:</b> {draft.company_name || "—"}
@@ -406,8 +461,10 @@ export default function DraftDetailPage() {
           <p>
             <b>ТС:</b> {draft.vehicle_info || "—"}
           </p>
+          {/* ===== Отображение гос. номера ===== */}
+          <p><b>Гос. номер:</b> {draft.gos_number || "—"}</p>
           <p>
-            <b>Дата:</b> {draft.scheduled_at || "—"}
+            <b>Дата:</b> {draft.scheduled_at ? new Date(draft.scheduled_at).toLocaleString() : "—"}
           </p>
           <p>
             <b>Место:</b> {draft.location || "—"} {/* ✅ Исправлено: было "Место", теперь соответствует полю 'location' */}
@@ -415,100 +472,36 @@ export default function DraftDetailPage() {
           <p>
             <b>Комментарий:</b> {draft.comment || "—"}
           </p>
+          {/* ✅ Оставляем отображение цен */}
           <p>
             <b>Цена клиента:</b> {draft.client_price || "—"}
           </p>
           <p>
             <b>Награда монтажнику:</b> {draft.montajnik_reward || "—"}
           </p>
+          {/* ===== Оборудование (отображение) ===== */}
           <p>
             <b>Оборудование:</b>{" "}
-            {(draft.equipment || []).map((e) => {
-              const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
-              return eqName || e.equipment_id;
-            }).join(", ") || "—"}
+            {(draft.equipment || [])
+              .map((e) => {
+                const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
+                // ✅ Отображаем serial_number и quantity
+                return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+              })
+              .join(", ") || "—"}
           </p>
+          {/* ===== Виды работ (отображение) ===== */}
           <p>
-            <b>Виды работ:</b>{" "}
-            {(draft.work_types || []).map((wtId) => {
-              const wtName = workTypes.find((wt) => wt.id === wtId)?.name;
-              return wtName || wtId;
-            }).join(", ") || "—"}
-          </p>
-
-          {/* ✅ Отображение вложений с заглушками */}
-          <div>
-            <b>Вложения:</b>
-            <div className="attached-list" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-              {Array.isArray(draft.attachments) && draft.attachments.length > 0 ? (
-                draft.attachments.map((attachment, index) => {
-                  // --- Безопасное извлечение src ---
-                  let src = '';
-                  let key = `attachment-${index}`;
-
-                  // Проверяем, является ли attachment объектом (на случай, если где-то осталось)
-                  // Хотя выше мы преобразовали в строки, страховка не помешает.
-                  if (attachment && typeof attachment === 'object') {
-                    // Проверяем url
-                    if (attachment.url && typeof attachment.url === 'string' && attachment.url.startsWith('http')) {
-                      src = attachment.url;
-                    }
-                    // Проверяем storage_key
-                    else if (attachment.storage_key && typeof attachment.storage_key === 'string') {
-                      src = `${import.meta.env.VITE_API_URL}/attachments/${attachment.storage_key}`;
-                    }
-
-                    // Генерируем уникальный ключ
-                    key = attachment.id ? `id-${attachment.id}` :
-                          attachment.storage_key ? `sk-${attachment.storage_key}` :
-                          `index-${index}`;
-                  }
-                  // Если attachment - строка (предположительно, storage_key)
-                  else if (typeof attachment === 'string') {
-                    src = `${import.meta.env.VITE_API_URL}/attachments/${attachment}`;
-                    key = `str-${attachment}`;
-                  }
-
-                  // --- Рендерим элемент ---
-                  // Если src есть и выглядит как URL - пробуем показать картинку
-                  if (src && (src.startsWith('http://') || src.startsWith('https://'))) {
-                    return (
-                      <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                        <img
-                          src={src}
-                          alt={`Attachment ${index}`}
-                          style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
-                          onError={(e) => {
-                            // Если картинка не загрузилась, меняем её на текст
-                            e.target.onerror = null; // предотвращает зацикливание
-                            e.target.parentElement.innerHTML = `<span style="font-size: 12px; text-align: center;">Img Err (${index})</span>`;
-                          }}
-                        />
-                      </div>
-                    );
-                  }
-                  // Если src есть, но это не URL (например, локальный путь или ошибка формирования) - показываем текст
-                  else if (src) {
-                    return (
-                      <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                        <span style={{ fontSize: '12px', textAlign: 'center' }}>Invalid Src ({index})</span>
-                      </div>
-                    );
-                  }
-                  // Если src не удалось определить - показываем общую заглушку
-                  else {
-                    return (
-                      <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                        <span style={{ fontSize: '12px', textAlign: 'center' }}>Вложение ({index})</span>
-                      </div>
-                    );
-                  }
-                })
-              ) : (
-                <span>Нет вложений</span>
-              )}
-            </div>
-          </div>
+  <b>Виды работ:</b>{" "}
+  {draft.work_types && draft.work_types.length > 0 ? (
+    draft.work_types.map(wt => { // wt = { work_type_id: 3, quantity: 2 }
+      const wtObj = workTypes.find(w => w.id === wt.work_type_id); // w.id === 3
+      const name = wtObj?.name || wt.work_type_id; // "Проверка оборудования" или 3
+      const count = wt.quantity || 1; // 2
+      return `${name} (x${count})`; // "Проверка оборудования (x2)"
+    }).join(", ")
+  ) : "—"}
+</p>
         </div>
       )}
 

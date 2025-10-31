@@ -4,13 +4,11 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   fetchTechTaskDetail,
   reviewTechReport,
-  attachByTechPhotosToReport,
   getEquipmentList,
   getWorkTypes,
   getTechCompaniesList,      // ✅ Новое
   getTechContactPersonsByCompany, // ✅ Новое
 } from "../../api";
-import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
 
 export default function TechTaskDetailPage() {
@@ -22,8 +20,6 @@ export default function TechTaskDetailPage() {
   // --- Состояния для модального окна отклонения отчёта тех.специалистом ---
   const [rejectModal, setRejectModal] = useState({ open: false, taskId: null, reportId: null });
   const [rejectComment, setRejectComment] = useState("");
-  const [rejectPhotos, setRejectPhotos] = useState([]);
-  // --- Состояния для справочников ---
   const [equipment, setEquipment] = useState([]); // Состояние для списка оборудования
   const [workTypes, setWorkTypes] = useState([]); // Состояние для списка видов работ
   const [companies, setCompanies] = useState([]); // ✅ Новое
@@ -87,7 +83,8 @@ export default function TechTaskDetailPage() {
     if (!window.confirm("Принять отчёт как тех.специалист?")) return;
     try {
       // Вызываем НОВУЮ функцию API для ревью с approval: "approved"
-      await reviewTechReport(taskId, reportId, { approval: "approved", comment: "", photos: [] });
+      // ❌ Убираем photos из payload
+      await reviewTechReport(taskId, reportId, { approval: "approved", comment: "" /*, photos: []*/ });
       alert("✅ Отчёт принят тех.специалистом");
       loadTask(); // Перезагружаем задачу для обновления отображения
     } catch (err) {
@@ -105,7 +102,6 @@ export default function TechTaskDetailPage() {
   function closeRejectModal() {
     setRejectModal({ open: false, taskId: null, reportId: null });
     setRejectComment("");
-    setRejectPhotos([]);
   }
 
   async function handleRejectTechReportSubmit() {
@@ -114,12 +110,9 @@ export default function TechTaskDetailPage() {
       return;
     }
     try {
-      const photoKeys = rejectPhotos.map((p) => (typeof p === "object" ? p.storage_key : p));
-      // Вызываем НОВУЮ функцию API для ревью с approval: "rejected"
       await reviewTechReport(rejectModal.taskId, rejectModal.reportId, {
         approval: "rejected",
         comment: rejectComment,
-        photos: photoKeys,
       });
       alert("❌ Отчёт отклонён тех.специалистом");
       closeRejectModal();
@@ -131,59 +124,7 @@ export default function TechTaskDetailPage() {
     }
   }
 
-  function handleUploaded(file) {
-    setRejectPhotos((prev) => [...prev, file]);
-  }
 
-  // ✅ Улучшенная функция отображения вложений
-  function renderAttachments(attachments) {
-    if (!Array.isArray(attachments) || attachments.length === 0) {
-      return <span>Нет вложений</span>;
-    }
-
-    return (
-      <div className="attached-list" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-        {attachments.map((a, index) => {
-          let src = "";
-          let key = `attachment-${index}`;
-
-          if (a && typeof a === "object") {
-            if (a.url && typeof a.url === "string" && (a.url.startsWith("http://") || a.url.startsWith("https://"))) {
-              src = a.url;
-            } else if (a.storage_key && typeof a.storage_key === "string") {
-              src = `${import.meta.env.VITE_API_URL}/attachments/${a.storage_key}`;
-            }
-            key = a.id ? `id-${a.id}` : a.storage_key ? `sk-${a.storage_key}` : `index-${index}`;
-          } else if (typeof a === "string") {
-            src = `${import.meta.env.VITE_API_URL}/attachments/${a}`;
-            key = `str-${a}`;
-          }
-
-          if (src) {
-            return (
-              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                <img
-                  src={src}
-                  alt={`Attachment ${index}`}
-                  style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.parentElement.innerHTML = `<span style="font-size: 12px; text-align: center;">Img Err (${index})</span>`;
-                  }}
-                />
-              </div>
-            );
-          } else {
-            return (
-              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                <span style={{ fontSize: '12px', textAlign: 'center' }}>Вложение ({index})</span>
-              </div>
-            );
-          }
-        })}
-      </div>
-    );
-  }
 
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
@@ -228,10 +169,7 @@ export default function TechTaskDetailPage() {
                 )
                 .join(", ") || "—"}
             </p>
-            <div>
-              <b>Вложения:</b>
-              {renderAttachments(task.attachments)}
-            </div>
+           
           </div>
 
           <div className="section">
@@ -311,42 +249,6 @@ export default function TechTaskDetailPage() {
                     rows="4"
                     placeholder="Причина отклонения..."
                   />
-                </label>
-                <label>
-                  Фото:
-                  <FileUploader onUploaded={handleUploaded} />
-                  <div className="attached-list" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
-                    {rejectPhotos.map((p, index) => (
-                      <div key={index} style={{ position: 'relative', display: 'inline-block' }}>
-                        <img
-                          src={typeof p === 'object' ? p.url : `${import.meta.env.VITE_API_URL}/attachments/${p.storage_key || p}`}
-                          alt={`Preview ${index}`}
-                          style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '4px' }}
-                        />
-                        <button
-                          onClick={() => handleRemovePhoto(index)}
-                          style={{
-                            position: 'absolute',
-                            top: '-5px',
-                            right: '-5px',
-                            background: 'red',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '20px',
-                            height: '20px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                        >
-                          &times;
-                        </button>
-                      </div>
-                    ))}
-                  </div>
                 </label>
               </div>
             </div>

@@ -142,17 +142,11 @@ export async function addContactPersonToCompany(companyId, payload) {
 // ---------- REPORTS ----------
 
 export async function reviewReport(taskId, reportId, payload) {
-  // payload: {"approval": "approved" | "rejected", "comment": "optional text", "photos": ["storage_key1", ...]}
+  // payload: {"approval": "approved" | "rejected", "comment": "optional text",]}
   return (await api.post(`/logist/tasks/${taskId}/reports/${reportId}/review`, payload)).data;
 }
 
-export async function attachPhotosToReport(taskId, reportId, photos) {
-  return (await api.post(`/logist/tasks/${taskId}/reports/${reportId}/attachments`, { photos })).data;
-}
 
-export async function deleteReportAttachment(taskId, reportId, attachmentId) {
-  return (await api.delete(`/logist/tasks/${taskId}/reports/${reportId}/attachments/${attachmentId}`)).data;
-}
 
 
 
@@ -253,17 +247,8 @@ export async function fetchTechHistory() {
 }
 
 export async function reviewTechReport(taskId, reportId, payload) {
-  // payload: {"approval": "approved" | "rejected", "comment": "optional text", "photos": ["storage_key1", ...]}
+  // payload: {"approval": "approved" | "rejected", "comment": "optional text", }
   return (await api.post(`/tech_supp/tasks/${taskId}/reports/${reportId}/review`, payload)).data;
-}
-
-
-export async function attachByTechPhotosToReport(taskId, reportId, photos) {
-  return (await api.post(`/tech_supp/tasks/${taskId}/reports/${reportId}/attachments`, { photos })).data;
-}
-
-export async function deleteByTechReportAttachment(taskId, reportId, attachmentId) {
-  return (await api.delete(`/tech_supp/tasks/${taskId}/reports/${reportId}/attachments/${attachmentId}`)).data;
 }
 
 

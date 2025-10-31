@@ -226,12 +226,13 @@ async def review_report(
         await db.flush()
 
         # ✅ Логируем ревью отчёта (структурированная запись с полным снимком)
+        hist_comment_for_history = f"Report #{report.id} reviewed by tech: {approval}. Comment: {comment or ''}"
         hist = TaskHistory(
             task_id=task.id,
             user_id=getattr(current_user, "id", None),
             action=task.status, # action - текущий статус задачи
             event_type=TaskHistoryEventType.report_status_changed, # Новый тип
-            comment=f"Report #{report.id} reviewed by tech: {approval}. Comment: {comment or ''}",
+            comment=hist_comment_for_history,
             related_entity_id=report.id,
             related_entity_type="report",
             # --- Сохраняем все основные поля задачи ---
@@ -265,83 +266,17 @@ async def review_report(
     return {"detail": "Reviewed", "approval": approval}
 
 
-@router.post("/tasks/{task_id}/reports/{report_id}/attachments", dependencies=[Depends(require_roles(Role.tech_supp))])
-async def attach_photos_by_tech(
-    background_tasks: BackgroundTasks,
-    task_id: int,
-    report_id: int,
-    payload: Dict[str, Any] = Body(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    photos = payload.get("photos", [])
-    if not isinstance(photos, list) or not all(isinstance(p, str) for p in photos):
-        raise HTTPException(status_code=400, detail="photos must be a list of storage_key strings")
-
-    res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
-    report = res.scalars().first()
-    if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
-
-    for sk in photos:
-        att = TaskAttachment(
-            task_id=task_id,
-            report_id=report_id,
-            storage_key=sk,
-            file_type=FileType.photo,
-            uploader_id=current_user.id,
-            uploader_role=current_user.role.value,
-            processed=False,
-        )
-        db.add(att)
-        await db.flush()
-        background_tasks.add_task(validate_and_process_attachment, att.id)
-
-    await db.commit()
-    return {"detail": f"{len(photos)} photo(s) attached by tech"}
-
-
-@router.delete("/tasks/{task_id}/reports/{report_id}/attachments/{attachment_id}", dependencies=[Depends(require_roles(Role.tech_supp))])
-async def delete_attachment_by_tech(
-    background_tasks: BackgroundTasks,
-    task_id: int,
-    report_id: int,
-    attachment_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    res = await db.execute(select(TaskAttachment).where(
-        TaskAttachment.id == attachment_id,
-        TaskAttachment.task_id == task_id,
-        TaskAttachment.report_id == report_id,
-        TaskAttachment.uploader_id == current_user.id,
-        TaskAttachment.deleted_at == None
-    ))
-    att = res.scalars().first()
-    if not att:
-        raise HTTPException(status_code=404, detail="Attachment not found or not yours")
-
-    att.deleted_at = datetime.now(timezone.utc)
-    await db.flush()
-    await db.commit()
-    background_tasks.add_task("back.files.handlers.delete_object_from_s3", att.storage_key)
-    return {"detail": "Attachment deleted"}
-
-
-
 @router.get("/tasks/{task_id}")
 async def tech_task_detail(
     task_id: int,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    # Загружаем задачу с контактным лицом и компанией
     res = await db.execute(
         select(Task)
         .options(
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
             selectinload(Task.works).selectinload(TaskWork.work_type),
-            selectinload(Task.attachments),
             selectinload(Task.history),
             selectinload(Task.reports),
             selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
@@ -351,32 +286,6 @@ async def tech_task_detail(
     task = res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
-
-    # Получаем объект S3
-    s3 = get_s3_client()
-    S3_PUBLIC_URL = s3.endpoint_url
-
-    # --- attachments к задаче ---
-    attachments = []
-    for a in (task.attachments or []):
-        if a.deleted_at or not a.processed:  # ✅ Фильтр по processed
-            continue
-        url = None
-        try:
-            url = await s3.presign_get(a.storage_key, expires=3600)  # ✅ presigned_url
-        except Exception:
-            url = None
-        attachments.append({
-            "id": a.id,
-            "file_type": a.file_type.value if a.file_type else None,
-            "presigned_url": url,  # ✅ Добавляем presigned_url
-            "storage_key": a.storage_key,
-            "processed": a.processed,
-            "uploaded_at": a.uploaded_at,
-            "original_name": a.original_name,
-            "size": a.size,
-        })
-    attachments = attachments or None
 
     # --- equipment и work_types ---
     equipment = [
@@ -403,15 +312,7 @@ async def tech_task_detail(
         if r.photos_json:
             try:
                 keys = json.loads(r.photos_json)
-                # ✅ Также используем presigned_url для photos, если нужно
-                photo_urls = []
-                for k in keys:
-                    try:
-                        photo_url = await s3.presign_get(k, expires=3600)
-                        photo_urls.append(photo_url)
-                    except Exception:
-                        photo_urls.append(f"{S3_PUBLIC_URL}/{k}")  # fallback
-                photos = photo_urls
+                photos = keys # Возвращаем список storage_key
             except Exception:
                 photos = []
         reports.append({
@@ -441,11 +342,9 @@ async def tech_task_detail(
         "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
         "equipment": equipment,
         "work_types": work_types,
-        "attachments": attachments,  # ✅ Обновлено
         "history": history,
         "reports": reports or None
     }
-
 
 @router.get("/tasks/{task_id}/history", response_model=List[TaskHistoryItem], dependencies=[Depends(require_roles(Role.tech_supp))])
 async def get_tech_task_full_history(

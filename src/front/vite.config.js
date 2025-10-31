@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['ata-happened-taylor-por.trycloudflare.com']
+    allowedHosts: ['nor-teams-prophet-ellen.trycloudflare.com']
   },
 })
 

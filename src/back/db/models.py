@@ -67,18 +67,7 @@ class User(AsyncAttrs, Base):
     reports = relationship("TaskReport", back_populates="author", cascade="all, delete-orphan")
     
 
-class TelegramMapping(Base):
-    __tablename__ = "telegram_mappings"
 
-    id = Column(Integer, primary_key=True)
-    telegram_id = Column(BigInteger, unique=True, index=True, nullable=False)
-    chat_id = Column(BigInteger, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=now_ekb(), nullable=False)
-    consumed = Column(Boolean, default=False, nullable=False)
-    linked_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-
-    # relation to user (optional)
-    linked_user = relationship("User", backref="telegram_mappings", foreign_keys=[linked_user_id])
 
 # TASKS
 
@@ -93,6 +82,7 @@ class Task(AsyncAttrs, Base):
     contact_person_id = Column(Integer, ForeignKey("contact_persons.id", ondelete="SET NULL"), index=True, nullable=True)
     company_id = Column(Integer, ForeignKey("client_companies.id", ondelete="SET NULL"), index=True, nullable=True)
     vehicle_info = Column(String, nullable=True)
+    gos_number = Column(String, nullable=True)
     comment = Column(Text, nullable=True)
     status = Column(Enum(TaskStatus), default=TaskStatus.new, index=True)
     assignment_type = Column(Enum(AssignmentType), nullable=True, index=True)
@@ -100,6 +90,7 @@ class Task(AsyncAttrs, Base):
     logist_contact_id = Column(BigInteger, nullable=True)
     client_price = Column(Numeric(10,2), nullable=True)
     montajnik_reward = Column(Numeric(10,2), nullable=True)
+    
 
     # owner of draft / creator of the task
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -150,6 +141,7 @@ class TaskWork(AsyncAttrs, Base):
     task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), index=True, nullable=False)           # Задача
     work_type_id = Column(Integer, ForeignKey("work_types.id", ondelete="CASCADE"), index=True, nullable=False) # Тип работы
     confirmed_by_montajnik = Column(Boolean, default=False)                 # Отметил ли монтажник выполнение
+    quantity = Column(Integer, nullable=False, default=1)
 
     task = relationship("Task", back_populates="works")
     work_type = relationship("WorkType", back_populates="task_works")
@@ -287,6 +279,7 @@ class TaskHistory(AsyncAttrs, Base):
     montajnik_reward = Column(Numeric(10,2), nullable=True)
     photo_required = Column(Boolean, default=False)
     assignment_type = Column(Enum(AssignmentType), nullable=True)
+    gos_number = Column(String,nullable=True)
     
 
     
@@ -333,7 +326,8 @@ class TaskEquipment(AsyncAttrs,Base):
     id = Column(Integer, primary_key=True)
     task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), index=True, nullable=False) #Задача
     equipment_id = Column(Integer, ForeignKey("equipment.id", ondelete="CASCADE"), index=True, nullable=False) #Оборудование
-    quantity = Column(Integer,nullable=False) #Количество
+    serial_number = Column(String, nullable=True)
+    quantity = Column(Integer, nullable=False, default=1) #Количество
 
     task =relationship("Task",back_populates="equipment_links")
     equipment = relationship("Equipment",back_populates="tasks")

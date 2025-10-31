@@ -6,8 +6,8 @@ import {
   adminDeleteTask,
   getEquipmentList,
   getWorkTypes,
-  getAdminCompaniesList,      // ✅ Новое
-  getAdminContactPersonsByCompany, // ✅ Новое
+  getAdminCompaniesList,
+  getAdminContactPersonsByCompany,
 } from '../api';
 import FileUploader from './FileUploader';
 import "../styles/LogistPage.css";
@@ -19,8 +19,8 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
   const [loading, setLoading] = useState(false);
   const [equipment, setEquipment] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
-  const [companies, setCompanies] = useState([]); // ✅ Новое
-  const [contactPersons, setContactPersons] = useState([]); // ✅ Новое
+  const [companies, setCompanies] = useState([]);
+  const [contactPersons, setContactPersons] = useState([]);
 
   useEffect(() => {
     loadRefs();
@@ -32,7 +32,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
       const [eqRes, wtRes, compRes] = await Promise.allSettled([
         getEquipmentList(),
         getWorkTypes(),
-        getAdminCompaniesList(), // ✅ Новое
+        getAdminCompaniesList(),
       ]);
 
       setEquipment(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
@@ -51,21 +51,46 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
       const t = {
         ...data,
         equipment: data.equipment || [],
-        work_types: data.work_types || [],
+        work_types: data.work_types || [], // Это теперь массив ID
         history: data.history || [],
         reports: data.reports || [],
         attachments: data.attachments || [],
       };
 
-      t.equipment_ids = t.equipment.map((e) => e.equipment_id);
-      t.work_types_ids = t.work_types;
+      // Инициализируем form с новыми полями
+      const initialForm = {
+        ...t,
+        // Оборудование: массив объектов {equipment_id, serial_number}
+        equipment: t.equipment.map(eq => ({
+          id: eq.id, // если ID есть, иначе null
+          equipment_id: eq.equipment_id,
+          equipment_name: eq.equipment_name, // для удобства отображения
+          serial_number: eq.serial_number || "",
+        })),
+        // Виды работ: массив ID (для подсчёта quantity на бэкенде)
+        work_types_ids: t.work_types,
+        gos_number: t.gos_number || "",
+      };
 
       setTask(t);
-      setForm(t);
+      setForm(initialForm);
+
+      // Загрузим контактные лица, если есть company_id
+      if (initialForm.company_id) {
+        try {
+          const contacts = await getAdminContactPersonsByCompany(initialForm.company_id);
+          setContactPersons(contacts || []);
+        } catch (e) {
+          console.error("Ошибка загрузки контактных лиц:", e);
+          setContactPersons([]);
+        }
+      } else {
+        setContactPersons([]);
+      }
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       alert("Ошибка загрузки задачи");
-      onClose(); // Закрываем модалку при ошибке
+      onClose();
     } finally {
       setLoading(false);
     }
@@ -75,7 +100,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  // ✅ Загрузка контактных лиц при выборе компании
+  // Загрузка контактных лиц при выборе компании
   async function handleCompanyChange(companyId) {
     if (!companyId) {
       setContactPersons([]);
@@ -94,15 +119,69 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
     }
   }
 
+  // --- ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ ---
+
+  function addEquipmentItem(equipmentId) {
+    if (!equipmentId) return;
+    const eq = equipment.find(e => e.id === equipmentId);
+    if (!eq) return;
+
+    const newItem = {
+      equipment_id: equipmentId,
+      equipment_name: eq.name,
+      serial_number: "",
+    };
+    setForm((prevForm) => ({
+      ...prevForm,
+      equipment: [...prevForm.equipment, newItem],
+    }));
+  }
+
+  function updateEquipmentItem(index, field, value) {
+    setForm((prevForm) => {
+      const updatedEquipment = [...prevForm.equipment];
+      if (updatedEquipment[index]) {
+        updatedEquipment[index] = { ...updatedEquipment[index], [field]: value };
+        return { ...prevForm, equipment: updatedEquipment };
+      }
+      return prevForm;
+    });
+  }
+
+  function removeEquipmentItem(index) {
+    setForm((prevForm) => ({
+      ...prevForm,
+      equipment: prevForm.equipment.filter((_, i) => i !== index),
+    }));
+  }
+
+  // --- ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ ---
+
+  function addWorkType(workTypeId) {
+    if (!workTypeId) return;
+    setForm((prevForm) => ({
+      ...prevForm,
+      work_types_ids: [...prevForm.work_types_ids, workTypeId],
+    }));
+  }
+
+  function removeWorkType(workTypeId) {
+    setForm((prevForm) => {
+      const indexToRemove = prevForm.work_types_ids.indexOf(workTypeId);
+      if (indexToRemove !== -1) {
+        const updatedWorkTypes = [...prevForm.work_types_ids];
+        updatedWorkTypes.splice(indexToRemove, 1);
+        return { ...prevForm, work_types_ids: updatedWorkTypes };
+      }
+      return prevForm;
+    });
+  }
+
   async function saveEdit() {
     try {
-      // ✅ Автоматический расчёт цен на бэке, не передаём client_price и montajnik_reward
       const payload = {
         ...form,
-        equipment: (form.equipment_ids || []).map((id) => ({
-          equipment_id: id,
-          quantity: 1,
-        })),
+        equipment: form.equipment || [],
         work_types: form.work_types_ids || [],
         // client_price и montajnik_reward убраны — рассчитываются автоматически
         client_price: undefined,
@@ -135,56 +214,6 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
 
   function handleUploaded(file) {
     setForm((f) => ({ ...f, attachments: [...(f.attachments || []), file] }));
-  }
-
-  // ✅ Улучшенная функция отображения вложений
-  function renderAttachments(attachments) {
-    if (!Array.isArray(attachments) || attachments.length === 0) {
-      return <span>Нет вложений</span>;
-    }
-
-    return (
-      <div className="attached-list" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-        {attachments.map((a, index) => {
-          let src = "";
-          let key = `attachment-${index}`;
-
-          if (a && typeof a === "object") {
-            if (a.presigned_url) {
-              src = a.presigned_url;
-            } else if (a.storage_key) {
-              src = `${import.meta.env.VITE_API_URL}/attachments/${a.storage_key}`;
-            }
-            key = a.id ? `id-${a.id}` : a.storage_key ? `sk-${a.storage_key}` : `index-${index}`;
-          } else if (typeof a === "string") {
-            src = `${import.meta.env.VITE_API_URL}/attachments/${a}`;
-            key = `str-${a}`;
-          }
-
-          if (src) {
-            return (
-              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                <img
-                  src={src}
-                  alt={`Attachment ${index}`}
-                  style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
-                  onError={(e) => {
-                    e.target.onerror = null;
-                    e.target.parentElement.innerHTML = `<span style="font-size: 12px; text-align: center;">Img Err (${index})</span>`;
-                  }}
-                />
-              </div>
-            );
-          } else {
-            return (
-              <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                <span style={{ fontSize: '12px', textAlign: 'center' }}>Вложение ({index})</span>
-              </div>
-            );
-          }
-        })}
-      </div>
-    );
   }
 
   if (loading)
@@ -245,7 +274,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                     const val = e.target.value ? parseInt(e.target.value) : null;
                     setField("contact_person_id", val);
                   }}
-                  disabled={!form.company_id} // доступно только если выбрана компания
+                  disabled={!form.company_id}
                 >
                   <option value="">Выберите контактное лицо</option>
                   {contactPersons.map(cp => (
@@ -255,11 +284,20 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
               </label>
 
               <label>
-                ТС
+                ТС (марка, гос.номер)
                 <input
                   type="text"
                   value={form.vehicle_info || ""}
                   onChange={(e) => setField("vehicle_info", e.target.value)}
+                />
+              </label>
+              {/* ===== НОВОЕ ПОЛЕ: ГОС. НОМЕР ===== */}
+              <label>
+                Гос. номер
+                <input
+                  type="text"
+                  value={form.gos_number || ""}
+                  onChange={(e) => setField("gos_number", e.target.value)}
                 />
               </label>
               <label>
@@ -267,7 +305,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 <input
                   type="datetime-local"
                   value={form.scheduled_at ? new Date(form.scheduled_at).toISOString().slice(0, 16) : ""}
-                  onChange={(e) => setField("scheduled_at", e.target.value ? new Date(e.target.value) : null)}
+                  onChange={(e) => setField("scheduled_at", e.target.value)}
                 />
               </label>
               <label>
@@ -301,7 +339,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                   type="number"
                   step="0.01"
                   value={task.client_price || ""}
-                  disabled // ✅ Отключено для редактирования
+                  disabled
                 />
               </label>
               <label>
@@ -310,7 +348,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                   type="number"
                   step="0.01"
                   value={task.montajnik_reward || ""}
-                  disabled // ✅ Отключено для редактирования
+                  disabled
                 />
               </label>
               <label>
@@ -322,35 +360,32 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 />
               </label>
 
-              {/* ===== Оборудование (редактирование) ===== */}
+              {/* ===== Оборудование (новая логика) ===== */}
               <label>Оборудование</label>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-                {form.equipment_ids?.map((id) => {
-                  const eq = equipment.find((e) => e.id === id);
-                  if (!eq) return null;
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+                {form.equipment.map((item, index) => {
+                  const eq = equipment.find((e) => e.id === item.equipment_id);
                   return (
-                    <div
-                      key={id}
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid #ccc",
-                        borderRadius: 12,
-                        backgroundColor: "#4caf50",
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {eq.name}
-                      <span
-                        style={{ cursor: "pointer" }}
-                        onClick={() =>
-                          setField("equipment_ids", form.equipment_ids.filter((i) => i !== id))
-                        }
+                    <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#e0e0e0' }}>
+                        {eq?.name || `ID ${item.equipment_id}`}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <input
+                          type="text"
+                          placeholder="Серийный номер"
+                          value={item.serial_number || ""}
+                          onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)}
+                          style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeEquipmentItem(index)}
+                        style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       >
                         ×
-                      </span>
+                      </button>
                     </div>
                   );
                 })}
@@ -360,87 +395,89 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 value=""
                 onChange={(e) => {
                   const val = Number(e.target.value);
-                  if (!isNaN(val) && val > 0 && !form.equipment_ids?.includes(val)) {
-                    setField("equipment_ids", [...(form.equipment_ids || []), val]);
+                  if (!isNaN(val) && val > 0) {
+                    addEquipmentItem(val);
                   }
                   e.target.value = "";
                 }}
                 style={{ width: "100%" }}
               >
-                {equipment
-                  .filter(eq => !form.equipment_ids?.includes(eq.id))
-                  .map((eq) => (
-                    <option key={eq.id} value={eq.id}>
-                      {eq.name}
-                    </option>
-                  ))}
+                {equipment.map((eq) => (
+                  <option key={eq.id} value={eq.id}>
+                    {eq.name}
+                  </option>
+                ))}
               </select>
 
-              {/* ===== Виды работ (редактирование) ===== */}
+              {/* ===== Виды работ (новая логика) ===== */}
               <label>Виды работ</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-                {form.work_types_ids?.map((id) => {
-                  const wt = workTypes.find((w) => w.id === id);
-                  if (!wt) return null;
-                  return (
-                    <div
-                      key={id}
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid #ccc",
-                        borderRadius: 12,
-                        backgroundColor: "#2196f3",
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {wt.name}
-                      <span
-                        style={{ cursor: "pointer" }}
-                        onClick={() =>
-                          setField("work_types_ids", form.work_types_ids.filter((w) => w !== id))
-                        }
+                {(() => {
+                  const counts = {};
+                  form.work_types_ids.forEach(id => {
+                    counts[id] = (counts[id] || 0) + 1;
+                  });
+                  const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+                    id: parseInt(id, 10),
+                    count,
+                  }));
+
+                  return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+                    const wt = workTypes.find((w) => w.id === id);
+                    if (!wt) return null;
+                    return (
+                      <div
+                        key={id}
+                        style={{
+                          padding: "4px 8px",
+                          border: "1px solid #ccc",
+                          borderRadius: 12,
+                          backgroundColor: "#2196f3",
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
                       >
-                        ×
-                      </span>
-                    </div>
-                  );
-                })}
+                        {wt.name} (x{count})
+                        <span
+                          style={{ cursor: "pointer" }}
+                          onClick={() => removeWorkType(id)}
+                        >
+                          ×
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
               <select
                 size={5}
                 value=""
                 onChange={(e) => {
                   const val = Number(e.target.value);
-                  if (!isNaN(val) && val > 0 && !form.work_types_ids?.includes(val)) {
-                    setField("work_types_ids", [...(form.work_types_ids || []), val]);
+                  if (!isNaN(val) && val > 0) {
+                    addWorkType(val);
                   }
                   e.target.value = "";
                 }}
                 style={{ width: "100%" }}
               >
-                {workTypes
-                  .filter(wt => !form.work_types_ids?.includes(wt.id))
-                  .map((wt) => (
-                    <option key={wt.id} value={wt.id}>
-                      {wt.name}
-                    </option>
-                  ))}
+                {workTypes.map((wt) => (
+                  <option key={wt.id} value={wt.id}>
+                    {wt.name}
+                  </option>
+                ))}
               </select>
 
-              <label className="full-row">
-                Вложения:
-                <FileUploader onUploaded={handleUploaded} />
-                {renderAttachments(form.attachments || [])}
-              </label>
             </div>
           ) : (
             <div className="task-view">
               <p><b>Компания:</b> {task.company_name || "—"}</p>
               <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
               <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
+              {/* ===== Отображение гос. номера ===== */}
+              <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
               <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
               <p><b>Статус:</b> {task.status || "—"}</p>
               <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
@@ -448,42 +485,42 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
               <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
               <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>
               <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
+              {/* ===== Отображение оборудования с серийниками ===== */}
               <p>
-                <b>Оборудование:</b>{" "}
-                {(task.equipment || [])
-                  .map(
-                    (e) =>
-                      equipment.find((eq) => eq.id === e.equipment_id)?.name ||
-                      e.equipment_id
-                  )
-                  .join(", ") || "—"}
+                <b>Оборудование:</b> {" "}
+                {task.equipment && task.equipment.length > 0 ? (
+                  task.equipment.map(e => {
+                    const eq = equipment.find(eq => eq.id === e.equipment_id);
+                    const name = eq?.name || e.equipment_id;
+                    const serial = e.serial_number ? ` (сер. ${e.serial_number})` : '';
+                    return `${name}${serial}`;
+                  }).join(", ")
+                ) : "—"}
               </p>
+              {/* ===== Отображение видов работ с количеством ===== */}
               <p>
-                <b>Виды работ:</b>{" "}
-                {(task.work_types || [])
-                  .map(
-                    (wtId) => workTypes.find((wt) => wt.id === wtId)?.name || wtId
-                  )
-                  .join(", ") || "—"}
+                <b>Виды работ:</b> {" "}
+                {task.work_types && task.work_types.length > 0 ? (
+                  (() => {
+                    const counts = {};
+                    task.work_types.forEach(id => {
+                      counts[id] = (counts[id] || 0) + 1;
+                    });
+                    const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+                      id: parseInt(id, 10),
+                      count,
+                    }));
+
+                    return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+                      const wt = workTypes.find(w => w.id === id);
+                      if (!wt) return `ID ${id} x${count}`;
+                      return `${wt.name} x${count}`;
+                    }).join(", ");
+                  })()
+                ) : "—"}
               </p>
-              <div>
-                <b>Вложения:</b>
-                {renderAttachments(task.attachments)}
-              </div>
             </div>
           )}
-
-          <div className="section">
-            <h3>История</h3>
-            <ul>
-              {(task.history || []).map((h, i) => (
-                <li key={i}>
-                  {new Date(h.ts).toLocaleString()} — <b>{h.action}</b> —{" "}
-                  {h.comment || "—"}
-                </li>
-              ))}
-            </ul>
-          </div>
 
           <div className="section">
             <h3>Отчёты монтажников</h3>

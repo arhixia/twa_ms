@@ -198,6 +198,7 @@ export default function TaskHistoryPage() {
                       getContactPersonNameById={getContactPersonNameById}
                     />
                     <div><b>ТС:</b> {h.vehicle_info || "—"}</div>
+                    <div><b>Гос. номер:</b> {h.gos_number || "—"}</div>
                     <div><b>Дата:</b> {h.scheduled_at ? new Date(h.scheduled_at).toLocaleString() : "—"}</div>
                     <div><b>Место:</b> {h.location || "—"}</div>
                     <div><b>Статус:</b> {h.status || "—"}</div>
