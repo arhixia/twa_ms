@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['nor-teams-prophet-ellen.trycloudflare.com']
+    allowedHosts: ['cigarettes-judge-category-sunday.trycloudflare.com']
   },
 })
 

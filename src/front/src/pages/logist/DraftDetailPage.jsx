@@ -1,8 +1,18 @@
 // front/src/pages/logist/DraftDetailPage.jsx
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-// ✅ Добавим импорт для получения списка компаний и контактных лиц
-import { getDraft, patchDraft, deleteDraft, publishTask, getEquipmentList, getWorkTypes, getCompaniesList, getContactPersonsByCompany } from "../../api";
+// ✅ Добавим импорт для получения списка компаний и контактных лиц и телефона
+import {
+  getDraft,
+  patchDraft,
+  deleteDraft,
+  publishTask,
+  getEquipmentList,
+  getWorkTypes,
+  getCompaniesList,
+  getContactPersonsByCompany,
+  getContactPersonPhone, // <--- Новый импорт
+} from "../../api";
 import "../../styles/LogistPage.css";
 
 export default function DraftDetailPage() {
@@ -18,6 +28,8 @@ export default function DraftDetailPage() {
   const [companies, setCompanies] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
   const [loadingRefs, setLoadingRefs] = useState(false); // Для загрузки справочников при редактировании
+  // ✅ Состояние для загрузки телефона в режиме редактирования
+  const [loadingPhone, setLoadingPhone] = useState(false); // <--- Добавлено
 
   useEffect(() => {
     loadRefs();
@@ -83,10 +95,25 @@ export default function DraftDetailPage() {
         ...d,
         equipment: processedEquipment, // массив объектов { equipment_id, serial_number }
         work_types_ids: formWorkTypesIds, // плоский массив ID, например, [3, 3, 5]
+        // ✅ Инициализируем contact_person_phone в форме
+        contact_person_phone: d.contact_person_phone || null, // <--- Добавлено
       };
 
       setDraft(processedDraftForView); // Для отображения в task-view
       setForm(initialForm); // Для редактирования
+
+      // --- ЗАГРУЗКА КОНТАКТНЫХ ЛИЦ ДЛЯ КОМПАНИИ ЧЕРНОВИКА ---
+      if (initialForm.company_id) {
+        try {
+          const contactsForDraftCompany = await getContactPersonsByCompany(initialForm.company_id);
+          setContactPersons(contactsForDraftCompany || []);
+        } catch (err) {
+          console.error("Ошибка загрузки контактных лиц при инициализации черновика:", err);
+          setContactPersons([]);
+        }
+      } else {
+        setContactPersons([]);
+      }
     } catch (e) {
       console.error(e);
       alert("Ошибка загрузки черновика");
@@ -104,6 +131,8 @@ export default function DraftDetailPage() {
     if (!companyId) {
       setContactPersons([]);
       setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон
+      setField("contact_person_phone", null); // <--- Добавлено
       return;
     }
     try {
@@ -112,13 +141,38 @@ export default function DraftDetailPage() {
       setContactPersons(contacts || []);
       // Сбрасываем выбор контактного лица при смене компании
       setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон
+      setField("contact_person_phone", null); // <--- Добавлено
     } catch (e) {
       console.error("Ошибка загрузки контактных лиц:", e);
       setContactPersons([]);
       setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон
+      setField("contact_person_phone", null); // <--- Добавлено
       alert("Ошибка загрузки контактных лиц");
     } finally {
       setLoadingRefs(false); // Скрываем индикатор
+    }
+  }
+
+  // ✅ Новая функция для загрузки телефона контактного лица в форме редактирования
+  async function handleContactPersonChangeForForm(contactPersonId) { // <--- Добавлено
+    const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
+    setField("contact_person_id", val);
+
+    if (val) {
+      setLoadingPhone(true); // <--- Показываем индикатор загрузки телефона
+      try {
+        const { phone } = await getContactPersonPhone(val); // <--- Вызываем отдельный эндпоинт
+        setField("contact_person_phone", phone); // <--- Устанавливаем телефон
+      } catch (e) {
+        console.error("Ошибка загрузки телефона контактного лица:", e);
+        setField("contact_person_phone", null); // <--- Сброс при ошибке
+      } finally {
+        setLoadingPhone(false); // <--- Скрываем индикатор
+      }
+    } else {
+      setField("contact_person_phone", null); // <--- Сброс если нет выбора
     }
   }
 
@@ -181,6 +235,8 @@ export default function DraftDetailPage() {
         // ❌ Явно исключаем client_price и montajnik_reward, так как они рассчитываются автоматически
         client_price: undefined,
         montajnik_reward: undefined,
+        // ❌ contact_person_phone не отправляем, сервер сам его возьмёт по contact_person_id
+        contact_person_phone: undefined, // <--- Добавлено для ясности
       };
       await patchDraft(id, payload);
       alert("💾 Изменения сохранены");
@@ -204,6 +260,8 @@ export default function DraftDetailPage() {
         // ❌ Явно исключаем client_price и montajnik_reward
         client_price: undefined,
         montajnik_reward: undefined,
+        // ❌ contact_person_phone не отправляем
+        contact_person_phone: undefined, // <--- Добавлено для ясности
       };
       await publishTask(publishPayload);
       await deleteDraft(id);
@@ -252,6 +310,8 @@ export default function DraftDetailPage() {
                 } else {
                   setContactPersons([]);
                   setField("contact_person_id", null);
+                  // ✅ Сбрасываем телефон
+                  setField("contact_person_phone", null); // <--- Добавлено
                 }
               }}
             >
@@ -267,10 +327,8 @@ export default function DraftDetailPage() {
             Контактное лицо
             <select
               value={form.contact_person_id || ""}
-              onChange={(e) => {
-                const val = e.target.value ? parseInt(e.target.value) : null;
-                setField("contact_person_id", val);
-              }}
+              // ✅ Используем новую функцию
+              onChange={(e) => handleContactPersonChangeForForm(e.target.value)} // <--- Изменено
               disabled={!form.company_id} // доступно только если выбрана компания
             >
               <option value="">Выберите контактное лицо</option>
@@ -278,6 +336,49 @@ export default function DraftDetailPage() {
                 <option key={cp.id} value={cp.id}>{cp.name}</option>
               ))}
             </select>
+            {/* ✅ Индикатор загрузки телефона */}
+            {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>} {/* <--- Добавлено */}
+          </label>
+
+          {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА (в режиме редактирования) ===== */}
+          <label>
+            Телефон контактного лица
+            <input
+              type="text"
+              value={form.contact_person_phone || ""}
+              // ✅ Поле только для чтения, заполняется автоматически
+              readOnly // <--- Изменено с disabled на readOnly
+              placeholder="Выберите контактное лицо"
+              style={{
+                width: "100%",
+                padding: "8px",
+                borderRadius: "4px",
+                border: "1px solid #ccc",
+                backgroundColor: "#e0e0e0", // Светло-серый фон для readonly
+                color: "#333",
+                cursor: "not-allowed", // Курсор "запрещено"
+              }}
+            />
+            {/* ✅ Ссылка для вызова, если телефон есть */}
+            {form.contact_person_phone && ( // <--- Добавлено
+              <a
+                href={`tel:${form.contact_person_phone}`}
+                style={{
+                  display: 'inline-block',
+                  marginTop: '4px',
+                  fontSize: '0.9em',
+                  color: '#1e88e5', // Синий цвет
+                  textDecoration: 'none',
+                }}
+                onClick={(e) => {
+                  // Предотвращаем отправку формы, если это внутри label
+                  e.preventDefault();
+                  window.location.href = `tel:${form.contact_person_phone}`;
+                }}
+              >
+                📞 Позвонить
+              </a>
+            )}
           </label>
 
           <label>
@@ -427,26 +528,6 @@ export default function DraftDetailPage() {
             <input value={form.assigned_user_id || ""} onChange={(e) => setField("assigned_user_id", e.target.value)} />
           </label>
 
-          {/* ❌ Убираем поля редактирования цен */}
-          {/* <label>
-            Цена клиента
-            <input
-              type="number"
-              step="0.01"
-              value={form.client_price || ""}
-              onChange={(e) => setField("client_price", e.target.value)}
-            />
-          </label>
-          <label>
-            Награда монтажнику
-            <input
-              type="number"
-              step="0.01"
-              value={form.montajnik_reward || ""}
-              onChange={(e) => setField("montajnik_reward", e.target.value)}
-            />
-          </label> */}
-
         </div>
       ) : (
         <div className="task-view">
@@ -456,6 +537,25 @@ export default function DraftDetailPage() {
           </p>
           <p>
             <b>Контактное лицо:</b> {draft.contact_person_name || "—"}
+          </p>
+          {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА (в режиме просмотра) ===== */}
+          <p>
+            <b>Телефон контактного лица:</b> {draft.contact_person_phone || "—"}
+            {/* ✅ Ссылка для вызова, если телефон есть */}
+            {draft.contact_person_phone && ( // <--- Добавлено
+              <a
+                href={`tel:${draft.contact_person_phone}`}
+                style={{
+                  display: 'inline-block',
+                  marginLeft: '8px',
+                  fontSize: '0.9em',
+                  color: '#1e88e5', // Синий цвет
+                  textDecoration: 'none',
+                }}
+              >
+                📞 Позвонить
+              </a>
+            )}
           </p>
 
           <p>
@@ -492,16 +592,16 @@ export default function DraftDetailPage() {
           </p>
           {/* ===== Виды работ (отображение) ===== */}
           <p>
-  <b>Виды работ:</b>{" "}
-  {draft.work_types && draft.work_types.length > 0 ? (
-    draft.work_types.map(wt => { // wt = { work_type_id: 3, quantity: 2 }
-      const wtObj = workTypes.find(w => w.id === wt.work_type_id); // w.id === 3
-      const name = wtObj?.name || wt.work_type_id; // "Проверка оборудования" или 3
-      const count = wt.quantity || 1; // 2
-      return `${name} (x${count})`; // "Проверка оборудования (x2)"
-    }).join(", ")
-  ) : "—"}
-</p>
+            <b>Виды работ:</b>{" "}
+            {draft.work_types && draft.work_types.length > 0 ? (
+              draft.work_types.map(wt => {
+                const wtObj = workTypes.find(w => w.id === wt.work_type_id);
+                const name = wtObj?.name || wt.work_type_id;
+                const count = wt.quantity || 1;
+                return `${name} (x${count})`;
+              }).join(", ")
+            ) : "—"}
+          </p>
         </div>
       )}
 
@@ -510,8 +610,8 @@ export default function DraftDetailPage() {
           <>
             <button className="primary" onClick={saveEdit}>💾 Сохранить</button>
             <button onClick={() => setEdit(false)}>❌ Отмена</button>
-            {/* ✅ Показываем индикатор загрузки при выборе компании */}
-            {loadingRefs && <span>Загрузка...</span>}
+            {/* ✅ Показываем индикатор загрузки при выборе компании или телефона */}
+            {(loadingRefs || loadingPhone) && <span>Загрузка...</span>} {/* <--- Обновлено */}
           </>
         ) : (
           <>

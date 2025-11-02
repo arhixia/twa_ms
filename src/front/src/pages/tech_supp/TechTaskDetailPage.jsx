@@ -8,6 +8,7 @@ import {
   getWorkTypes,
   getTechCompaniesList,      // ✅ Новое
   getTechContactPersonsByCompany, // ✅ Новое
+  getTechContactPersonPhone, // <--- Новый импорт
 } from "../../api";
 import "../../styles/LogistPage.css";
 
@@ -24,6 +25,8 @@ export default function TechTaskDetailPage() {
   const [workTypes, setWorkTypes] = useState([]); // Состояние для списка видов работ
   const [companies, setCompanies] = useState([]); // ✅ Новое
   const [contactPersons, setContactPersons] = useState([]); // ✅ Новое
+  // ✅ Состояние для хранения телефона контактного лица
+  const [contactPersonPhone, setContactPersonPhone] = useState(null); // <--- Добавлено
 
   useEffect(() => {
     loadRefs();
@@ -67,6 +70,23 @@ export default function TechTaskDetailPage() {
       t.work_types_ids = t.work_types;
 
       setTask(t);
+
+      // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
+      // Если contact_person_id есть, но contact_person_phone нет в data, загрузим его
+      if (t.contact_person_id && !t.contact_person_phone) {
+         try {
+            const { phone } = await getTechContactPersonPhone(t.contact_person_id); // <--- Вызываем эндпоинт
+            setContactPersonPhone(phone); // <--- Устанавливаем телефон для просмотра
+            // t.contact_person_phone = phone; // <--- Опционально: можно обновить и в task
+         } catch (err) {
+            console.error("Ошибка загрузки телефона при инициализации задачи:", err);
+            setContactPersonPhone(null); // <--- Сброс при ошибке
+         }
+      } else {
+        // Если телефон уже есть в data или contact_person_id отсутствует
+        setContactPersonPhone(t.contact_person_phone || null);
+      }
+
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       setError(err.response?.data?.detail || err.message || "Ошибка загрузки задачи");
@@ -124,8 +144,6 @@ export default function TechTaskDetailPage() {
     }
   }
 
-
-
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
   if (!task) return <div className="logist-main"><div className="empty">Задача не найдена</div></div>;
@@ -143,8 +161,29 @@ export default function TechTaskDetailPage() {
             {/* ✅ Заменено client на company_name и contact_person_name */}
             <p><b>Компания:</b> {task.company_name || "—"}</p>
             <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
+            {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+            <p>
+              <b>Телефон контактного лица:</b>{" "}
+              {contactPersonPhone || task.contact_person_phone || "—"} {/* <--- Используем загруженный или из задачи */}
+              {/* ✅ Ссылка для вызова, если телефон есть */}
+              {(contactPersonPhone || task.contact_person_phone) && ( // <--- Добавлено
+                <a
+                  href={`tel:${contactPersonPhone || task.contact_person_phone}`}
+                  style={{
+                    display: 'inline-block',
+                    marginLeft: '8px',
+                    fontSize: '0.9em',
+                    color: '#1e88e5', // Синий цвет
+                    textDecoration: 'none',
+                  }}
+                >
+                  📞 Позвонить
+                </a>
+              )}
+            </p>
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
+            <p><b>Место:</b> {task.location || "—"}</p>
             <p><b>Статус:</b> {task.status || "—"}</p>
             <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
@@ -154,22 +193,26 @@ export default function TechTaskDetailPage() {
             <p>
               <b>Оборудование:</b>{" "}
               {(task.equipment || [])
-                .map(
-                  (e) =>
-                    equipment.find((eq) => eq.id === e.equipment_id)?.name ||
-                    e.equipment_id
-                )
+                .map((e) => {
+                  const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
+                  // ✅ Отображаем serial_number и quantity
+                  return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+                })
                 .join(", ") || "—"}
             </p>
+
             <p>
               <b>Виды работ:</b>{" "}
-              {(task.work_types || [])
-                .map(
-                  (wtId) => workTypes.find((wt) => wt.id === wtId)?.name || wtId
-                )
-                .join(", ") || "—"}
+              {task.work_types && task.work_types.length > 0 ? (
+                task.work_types.map(wt => {
+                  const wtObj = workTypes.find(w => w.id === wt.work_type_id);
+                  const name = wtObj?.name || wt.work_type_id;
+                  const count = wt.quantity || 1; // Берём quantity из объекта
+                  return `${name} (x${count})`;
+                }).join(", ")
+              ) : "—"}
             </p>
-           
+
           </div>
 
           <div className="section">

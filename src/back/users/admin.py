@@ -9,7 +9,7 @@ from back.db.database import get_db
 from back.db.models import AssignmentType, ClientCompany, ContactPerson, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
 from back.auth.auth import get_current_user,create_user as auth_create_user
 from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
-from back.users.users_schemas import SimpleMsg, TaskPatch, TaskUpdate, require_roles
+from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskPatch, TaskUpdate, require_roles
 from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -140,11 +140,17 @@ async def admin_update_task(
         raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
 
     # Сохраняем *старые* значения связей для истории
-    old_works = [tw.work_type.name for tw in task.works]
-    old_equipment = [(te.equipment.name, te.quantity) for te in task.equipment_links]
+    # ✅ Обновляем получение старых данных с учетом quantity
+    old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
+    # ✅ Обновляем получение старых данных оборудования с serial_number и quantity
+    old_equipment_with_sn_qty = [
+        (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
+    ]
     old_contact_person_name = task.contact_person.name if task.contact_person else None
     old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment}, work_types={old_works}, contact_person={old_contact_person_name}, company={old_company_name}")
+    # ✅ Сохраняем старый телефон
+    old_contact_person_phone = task.contact_person.phone if task.contact_person else None
+    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
     logger.info(f"Полный incoming dict: {incoming}")
@@ -155,13 +161,15 @@ async def admin_update_task(
         incoming["assigned_user_id"] = _normalize_assigned_user_id(incoming["assigned_user_id"])
 
     # --- извлекаем equipment/work_types (если пришли) ---
-    equipment_data = incoming.pop("equipment", None)
+    equipment_data: List[TaskEquipmentItem] = incoming.pop("equipment", None)
+    # ✅ work_types_data - список ID
     work_types_data = incoming.pop("work_types", None)
-    logger.info(f"equipment_ {equipment_data}, work_types_data: {work_types_data}")
+    logger.info(f"equipment_data: {equipment_data}, work_types_data: {work_types_data}")
 
     # --- Обновление основных полей задачи ---
     for field, value in incoming.items():
-        if field in {"id", "created_at", "created_by", "is_draft"}:
+        # ✅ Пропускаем equipment и work_types, они обрабатываются отдельно
+        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
             continue
         old = getattr(task, field)
         old_cmp = old.value if hasattr(old, "value") else old
@@ -178,7 +186,7 @@ async def admin_update_task(
             changed.append((field, old, value))
             logger.info(f"Поле '{field}' помечено как изменённое: {old_cmp} -> {new_cmp}")
 
-    # --- Обновление contact_person_id и company_id ---
+    # --- Обновление contact_person_id, company_id и contact_person_phone ---
     contact_person_id = incoming.get("contact_person_id")
     if contact_person_id is not None:
         if contact_person_id:
@@ -188,48 +196,115 @@ async def admin_update_task(
                 raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
             old_cp_id = task.contact_person_id
             old_co_id = task.company_id
+            old_cp_phone = task.contact_person_phone # <--- Сохраняем старый телефон
             setattr(task, "contact_person_id", contact_person_id)
             setattr(task, "company_id", contact_person.company_id)
+            setattr(task, "contact_person_phone", contact_person.phone) # <--- Установка телефона из CP
             changed.append(("contact_person_id", old_cp_id, contact_person_id))
             changed.append(("company_id", old_co_id, contact_person.company_id))
-            logger.info(f"Поле 'contact_person_id' и 'company_id' помечены как изменённые: {old_cp_id}->{contact_person_id}, {old_co_id}->{contact_person.company_id}")
+            changed.append(("contact_person_phone", old_cp_phone, contact_person.phone)) # <--- Добавляем телефон в изменения
+            logger.info(f"Поле 'contact_person_id', 'company_id', 'contact_person_phone' помечены как изменённые: {old_cp_id}->{contact_person_id}, {old_co_id}->{contact_person.company_id}, {old_cp_phone}->{contact_person.phone}")
         else:
             old_cp_id = task.contact_person_id
             old_co_id = task.company_id
+            old_cp_phone = task.contact_person_phone # <--- Сохраняем старый телефон
             setattr(task, "contact_person_id", None)
             setattr(task, "company_id", None)
+            setattr(task, "contact_person_phone", None) # <--- Сброс телефона
             changed.append(("contact_person_id", old_cp_id, None))
             changed.append(("company_id", old_co_id, None))
-            logger.info(f"Поле 'contact_person_id' и 'company_id' сброшены: {old_cp_id}->{None}, {old_co_id}->{None}")
+            changed.append(("contact_person_phone", old_cp_phone, None)) # <--- Добавляем телефон в изменения
+            logger.info(f"Поле 'contact_person_id', 'company_id', 'contact_person_phone' сброшены: {old_cp_id}->{None}, {old_co_id}->{None}, {old_cp_phone}->{None}")
 
     # --- Обновление оборудования ---
+    # ✅ НОВАЯ ЛОГИКА обновления оборудования
     if equipment_data is not None:
-        await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
-        for eq in equipment_data:
-            if "equipment_id" not in eq or "quantity" not in eq:
-                raise HTTPException(status_code=400, detail="equipment items must have equipment_id and quantity")
-            res = await db.execute(select(Equipment).where(Equipment.id == eq["equipment_id"]))
-            equip = res.scalars().first()
-            if not equip:
-                raise HTTPException(status_code=400, detail=f"Оборудование id={eq['equipment_id']} не найдено")
-            db.add(TaskEquipment(task_id=task.id, equipment_id=eq["equipment_id"], quantity=eq["quantity"]))
+        # 1. Получаем существующие записи TaskEquipment для этой задачи
+        existing_te_res = await db.execute(
+            select(TaskEquipment).where(TaskEquipment.task_id == task.id)
+        )
+        existing_te_list = existing_te_res.scalars().all()
+        existing_te_map = {te.id: te for te in existing_te_list} # Map для быстрого поиска
+
+        incoming_te_ids = set() # Будем собирать ID пришедших записей для сравнения
+
+        # 2. Обрабатываем каждый пришедший элемент
+        for item_data_dict in equipment_data:
+            # Pydantic автоматически преобразует dict в TaskEquipmentItem
+            item_data: TaskEquipmentItem = item_data_dict if isinstance(item_data_dict, TaskEquipmentItem) else TaskEquipmentItem(**item_data_dict)
+            
+            item_id = item_data.id
+            equipment_id = item_data.equipment_id
+            serial_number = item_data.serial_number
+            quantity = item_data.quantity
+
+            # Проверяем, существует ли оборудование
+            eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+            equipment_obj = eq_res.scalars().first()
+            if not equipment_obj:
+                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+
+            if item_id:
+                # 2a. Обновление существующей записи
+                if item_id in existing_te_map:
+                    te_record = existing_te_map[item_id]
+                    # Проверка, что запись принадлежит этой задаче
+                    if te_record.task_id != task.id:
+                        raise HTTPException(status_code=400, detail=f"Запись оборудования id={item_id} не принадлежит задаче {task.id}")
+                    
+                    te_record.equipment_id = equipment_id
+                    te_record.serial_number = serial_number
+                    te_record.quantity = quantity
+                    # db.add(te_record) # Не обязательно, если объект уже отслеживается
+                    incoming_te_ids.add(item_id)
+                    logger.info(f"Обновлена запись TaskEquipment id={item_id}")
+                else:
+                    raise HTTPException(status_code=400, detail=f"Запись TaskEquipment id={item_id} не найдена для задачи {task.id}")
+            else:
+                # 2b. Создание новой записи
+                new_te = TaskEquipment(
+                    task_id=task.id,
+                    equipment_id=equipment_id,
+                    serial_number=serial_number,
+                    quantity=quantity
+                )
+                db.add(new_te)
+                await db.flush() # Нужно для получения new_te.id
+                incoming_te_ids.add(new_te.id) # Добавляем ID новой записи
+                logger.info(f"Создана новая запись TaskEquipment id={new_te.id}")
+
+        # 3. Удаление записей, которых нет во входящих данных
+        ids_to_delete = set(existing_te_map.keys()) - incoming_te_ids
+        if ids_to_delete:
+            delete_stmt = delete(TaskEquipment).where(TaskEquipment.id.in_(ids_to_delete))
+            await db.execute(delete_stmt)
+            logger.info(f"Удалены записи TaskEquipment ids={ids_to_delete}")
+
         changed.append(("equipment", "old_equipment_set", equipment_data))
         logger.info("Оборудование помечено как изменённое")
 
-    # --- Обновление типов работ ---
+
     if work_types_data is not None:
-        await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-        for wt_id in work_types_data:
-            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-            wt = res.scalars().first()
-            if not wt:
-                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id))
-        changed.append(("work_types", "old_work_set", work_types_data))
-        logger.info("Типы работ помечены как изменённые")
+         # Подсчитываем количество для каждого типа работ
+         from collections import Counter
+         work_type_counts = Counter(work_types_data)
+         
+         # 1. Удаляем все старые записи TaskWork
+         await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
+         
+         # 2. Создаем новые записи с учетом количества
+         for wt_id, count in work_type_counts.items():
+             res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+             wt = res.scalars().first()
+             if not wt:
+                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+             db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+         
+         changed.append(("work_types", "old_work_set", work_types_data))
+         logger.info("Типы работ помечены как изменённые")
 
     logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
-    has_changes = bool(changed) 
+    has_changes = bool(changed)
     logger.info(f"'has_changes' рассчитано как: {has_changes}")
 
     if not has_changes:
@@ -243,29 +318,53 @@ async def admin_update_task(
         # Обновляем связи в объекте задачи в сессии, чтобы получить новые значения
         await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person'])
         # Получаем *новые* значения связей
-        new_works = [tw.work_type.name for tw in task.works]
-        new_equipment = [(te.equipment.name, te.quantity) for te in task.equipment_links]
+        # ✅ Обновляем получение новых данных с учетом quantity
+        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
+        # ✅ Обновляем получение новых данных оборудования с serial_number и quantity
+        new_equipment_with_sn_qty = [
+            (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
+        ]
         new_contact_person_name = task.contact_person.name if task.contact_person else None
         new_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-        logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment}, work_types={new_works}, contact_person={new_contact_person_name}, company={new_company_name}")
+        # contact_person_phone уже в task.contact_person_phone
+        logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment_with_sn_qty}, work_types={new_works_with_qty}, contact_person={new_contact_person_name}, contact_person_phone={task.contact_person_phone}, company={new_company_name}")
 
         # Собираем *все* изменения, включая equipment и work_types
         all_changes = []
         for f, o, n in changed:
-            if f not in ["equipment", "work_types", "contact_person_id", "company_id"]: # Обрабатываем отдельно
+            # ✅ Обрабатываем equipment и work_types отдельно
+            if f not in ["equipment", "work_types", "contact_person_id", "company_id", "contact_person_phone"]:
                 all_changes.append({"field": f, "old": str(o), "new": str(n)})
 
-        # Проверяем и добавляем изменения equipment и work_types
-        # old_* и new_* уже содержат названия/кортежи для отображения
-        if old_equipment != new_equipment:
-            all_changes.append({"field": "equipment", "old": old_equipment, "new": new_equipment})
-        if old_works != new_works:
-            all_changes.append({"field": "work_types", "old": old_works, "new": new_works})
+        # ✅ Проверяем и добавляем изменения equipment
+        if old_equipment_with_sn_qty != new_equipment_with_sn_qty:
+            # Можно сделать более детализированное сравнение, но для простоты просто запишем весь список
+            all_changes.append({
+                "field": "equipment", 
+                "old": old_equipment_with_sn_qty, 
+                "new": new_equipment_with_sn_qty
+            })
+            
+        # ✅ Проверяем и добавляем изменения work_types
+        if old_works_with_qty != new_works_with_qty:
+            # Можно сделать более детализированное сравнение, но для простоты просто запишем весь список
+            all_changes.append({
+                "field": "work_types", 
+                "old": old_works_with_qty, 
+                "new": new_works_with_qty
+            })
+            
         # Проверяем изменения contact_person и company
         old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
         new_cp_co = f"{new_contact_person_name} ({new_company_name})" if new_contact_person_name and new_company_name else "—"
         if old_cp_co != new_cp_co:
             all_changes.append({"field": "contact_person", "old": old_cp_co, "new": new_cp_co})
+
+        # --- Добавляем изменение телефона в all_changes, если оно было ---
+        # Найдём изменение телефона в списке changed
+        cp_phone_change = next((item for item in changed if item[0] == "contact_person_phone"), None)
+        if cp_phone_change:
+            all_changes.append({"field": "contact_person_phone", "old": str(cp_phone_change[1]), "new": str(cp_phone_change[2])})
 
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
         # Создаём комментарий с *всеми* изменениями
@@ -275,11 +374,12 @@ async def admin_update_task(
             task_id=task.id,
             user_id=getattr(admin_user, "id", None),
             action=task.status,
-            event_type=TaskHistoryEventType.updated, # ✅ Новый тип
             comment=comment,
+            event_type=TaskHistoryEventType.updated, # ✅ Новый тип
             # --- Сохраняем все основные поля задачи ---
             company_id=task.company_id,  # ✅ Заменено
             contact_person_id=task.contact_person_id,  # ✅ Заменено
+            contact_person_phone=task.contact_person_phone, # <--- Сохранение телефона в историю
             vehicle_info=task.vehicle_info,
             scheduled_at=task.scheduled_at,
             location=task.location,
@@ -290,11 +390,11 @@ async def admin_update_task(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
+            gos_number = task.gos_number
         )
         db.add(hist)
         await db.flush()
         logger.info("Запись в TaskHistory добавлена и зафлашена")
-
 
         await db.commit()
         logger.info("Транзакция успешно зафиксирована")
@@ -396,10 +496,14 @@ async def admin_get_task_by_id(
 
     # --- equipment и work_types ---
     equipment = [
-        {"equipment_id": te.equipment_id, "quantity": te.quantity}
+        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number} # <--- Добавлен serial_number
         for te in (task.equipment_links or [])
     ] or None
-    work_types = [tw.work_type_id for tw in (task.works or [])] or None
+
+    work_types = [
+        {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
+        for tw in (task.works or []) 
+    ] or None
 
     # --- history ---
     history = [
@@ -438,7 +542,9 @@ async def admin_get_task_by_id(
         "id": task.id,
         "company_name": company_name,  # ✅ Новое
         "contact_person_name": contact_person_name,  # ✅ Новое
+        "contact_person_phone": task.contact_person_phone,
         "vehicle_info": task.vehicle_info or None,
+        "gos_number": task.gos_number or None,
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
         "status": task.status.value if task.status else None,
         "assigned_user_id": task.assigned_user_id or None,
@@ -494,3 +600,22 @@ async def admin_get_contact_persons(company_id: int, db: AsyncSession = Depends(
     res = await db.execute(select(ContactPerson).where(ContactPerson.company_id == company_id))
     contacts = res.scalars().all()
     return [{"id": c.id, "name": c.name} for c in contacts]
+
+
+@router.get("/contact-persons/{contact_person_id}/phone", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_get_contact_person_phone(
+    contact_person_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Получить телефон контактного лица по его ID.
+    """
+    res = await db.execute(
+        select(ContactPerson.phone).where(ContactPerson.id == contact_person_id)
+    )
+    phone_number = res.scalar_one_or_none()
+
+    if phone_number is None:
+        raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
+
+    return {"phone": phone_number}

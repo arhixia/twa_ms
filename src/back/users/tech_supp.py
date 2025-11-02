@@ -170,6 +170,8 @@ async def review_report(
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,  # ✅ Заменено
                 contact_person_id=task.contact_person_id,  # ✅ Заменено
+                contact_person_phone = task.contact_person_phone,
+                gos_number = task.gos_number,
                 vehicle_info=task.vehicle_info,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
@@ -204,7 +206,9 @@ async def review_report(
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,  # ✅ Заменено
                 contact_person_id=task.contact_person_id,  # ✅ Заменено
+                contact_person_phone = task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
+                gos_number = task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
@@ -238,6 +242,8 @@ async def review_report(
             # --- Сохраняем все основные поля задачи ---
             company_id=task.company_id,  # ✅ Заменено
             contact_person_id=task.contact_person_id,  # ✅ Заменено
+            contact_person_phone = task.contact_person_phone,
+            gos_number = task.gos_number,
             vehicle_info=task.vehicle_info,
             scheduled_at=task.scheduled_at,
             location=task.location,
@@ -289,10 +295,14 @@ async def tech_task_detail(
 
     # --- equipment и work_types ---
     equipment = [
-        {"equipment_id": te.equipment_id, "quantity": te.quantity}
+        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number} # <--- Добавлен serial_number
         for te in (task.equipment_links or [])
     ] or None
-    work_types = [tw.work_type_id for tw in (task.works or [])] or None
+
+    work_types = [
+        {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
+        for tw in (task.works or []) 
+    ] or None
 
     # --- history ---
     history = [
@@ -331,6 +341,7 @@ async def tech_task_detail(
         "id": task.id,
         "company_name": company_name,  # ✅ Новое
         "contact_person_name": contact_person_name,  # ✅ Новое
+        "contact_person_phone": task.contact_person_phone,
         "vehicle_info": task.vehicle_info or None,
         "location" : task.location or None,
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
@@ -389,3 +400,20 @@ async def tech_get_contact_persons(company_id: int, db: AsyncSession = Depends(g
     res = await db.execute(select(ContactPerson).where(ContactPerson.company_id == company_id))
     contacts = res.scalars().all()
     return [{"id": c.id, "name": c.name} for c in contacts]
+
+
+@router.get("/contact-persons/{contact_person_id}/phone", dependencies=[Depends(require_roles(Role.tech_supp))])
+async def tech_get_contact_person_phone(
+    contact_person_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+
+    res = await db.execute(
+        select(ContactPerson.phone).where(ContactPerson.id == contact_person_id)
+    )
+    phone_number = res.scalar_one_or_none()
+
+    if phone_number is None:
+        raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
+
+    return {"phone": phone_number}

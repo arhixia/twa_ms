@@ -8,6 +8,7 @@ import {
   getWorkTypes,
   getCompaniesList,
   getContactPersonsByCompany,
+  getContactPersonPhone, // <--- Новый импорт
 } from "../../api";
 
 export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraft = false }) {
@@ -16,6 +17,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   const [form, setForm] = useState({
     company_id: null,
     contact_person_id: null,
+    // ✅ Новое поле для телефона контактного лица
+    contact_person_phone: null, // <--- Добавлено
     vehicle_info: "",
     scheduled_at: "", // ✅ Оставляем пустую строку
     location: "",
@@ -38,6 +41,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   const [contactPersons, setContactPersons] = useState([]);
   const [saving, setSaving] = useState(false);
   const [taskId, setTaskId] = useState(null);
+  // ✅ Состояние для загрузки телефона
+  const [loadingPhone, setLoadingPhone] = useState(false); // <--- Добавлено
 
   useEffect(() => {
     loadRefs();
@@ -68,16 +73,43 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     if (!companyId) {
       setContactPersons([]);
       setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон при смене компании
+      setField("contact_person_phone", null); // <--- Добавлено
       return;
     }
     try {
       const contacts = await getContactPersonsByCompany(companyId);
       setContactPersons(contacts || []);
       setField("contact_person_id", null); // Сброс при смене компании
+      // ✅ Сбрасываем телефон при смене компании
+      setField("contact_person_phone", null); // <--- Добавлено
     } catch (e) {
       console.error("Ошибка загрузки контактных лиц:", e);
       setContactPersons([]);
       setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон при ошибке
+      setField("contact_person_phone", null); // <--- Добавлено
+    }
+  }
+
+  // ✅ Новая функция для загрузки телефона контактного лица
+  async function handleContactPersonChange(contactPersonId) { // <--- Добавлено
+    const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
+    setField("contact_person_id", val);
+
+    if (val) {
+      setLoadingPhone(true); // <--- Добавлено
+      try {
+        const { phone } = await getContactPersonPhone(val); // <--- Добавлено
+        setField("contact_person_phone", phone); // <--- Добавлено
+      } catch (e) {
+        console.error("Ошибка загрузки телефона контактного лица:", e);
+        setField("contact_person_phone", null); // <--- Добавлено
+      } finally {
+        setLoadingPhone(false); // <--- Добавлено
+      }
+    } else {
+      setField("contact_person_phone", null); // <--- Добавлено
     }
   }
 
@@ -100,6 +132,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
         assignment_type: form.assignment_type || "broadcast",
         // ✅ gos_number передаётся как есть
         gos_number: form.gos_number || null,
+        // ❌ contact_person_phone не передаём, сервер сам его возьмёт по contact_person_id
+        contact_person_phone: undefined, // <--- Добавлено для ясности
       };
 
       let result;
@@ -222,6 +256,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               } else {
                 setContactPersons([]);
                 setField("contact_person_id", null);
+                // ✅ Сбрасываем телефон
+                setField("contact_person_phone", null); // <--- Добавлено
               }
             }}
             style={{
@@ -245,10 +281,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           Контактное лицо
           <select
             value={form.contact_person_id || ""}
-            onChange={(e) => {
-              const val = e.target.value ? parseInt(e.target.value, 10) : null;
-              setField("contact_person_id", val);
-            }}
+            // ✅ Используем новую функцию
+            onChange={(e) => handleContactPersonChange(e.target.value)} // <--- Изменено
             disabled={!form.company_id} // доступно только если выбрана компания
             style={{
               width: "100%",
@@ -264,6 +298,49 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               <option key={cp.id} value={cp.id}>{cp.name}</option>
             ))}
           </select>
+          {/* ✅ Индикатор загрузки телефона */}
+          {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>} {/* <--- Добавлено */}
+        </label>
+
+        {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА (только для чтения) ===== */}
+        <label>
+          Телефон контактного лица
+          <input
+            type="text"
+            value={form.contact_person_phone || ""}
+            // ✅ Поле только для чтения, заполняется автоматически
+            readOnly // <--- Изменено с disabled на readOnly
+            placeholder="Выберите контактное лицо"
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #ccc",
+              backgroundColor: "#e0e0e0", // Светло-серый фон для readonly
+              color: "#333",
+              cursor: "not-allowed", // Курсор "запрещено"
+            }}
+          />
+          {/* ✅ Ссылка для вызова, если телефон есть */}
+          {form.contact_person_phone && ( // <--- Добавлено
+            <a
+              href={`tel:${form.contact_person_phone}`}
+              style={{
+                display: 'inline-block',
+                marginTop: '4px',
+                fontSize: '0.9em',
+                color: '#1e88e5', // Синий цвет
+                textDecoration: 'none',
+              }}
+              onClick={(e) => {
+                // Предотвращаем отправку формы, если это внутри label
+                e.preventDefault();
+                window.location.href = `tel:${form.contact_person_phone}`;
+              }}
+            >
+              📞 Позвонить
+            </a>
+          )}
         </label>
 
         <label>

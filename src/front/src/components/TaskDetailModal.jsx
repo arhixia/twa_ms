@@ -8,6 +8,7 @@ import {
   getWorkTypes,
   getAdminCompaniesList,
   getAdminContactPersonsByCompany,
+  getAdminContactPersonPhone, // <--- Новый импорт
 } from '../api';
 import FileUploader from './FileUploader';
 import "../styles/LogistPage.css";
@@ -21,6 +22,10 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
   const [workTypes, setWorkTypes] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
+  // ✅ Новое состояние для хранения телефона контактного лица
+  const [contactPersonPhone, setContactPersonPhone] = useState(null);
+  // ✅ Состояние для загрузки телефона в режиме редактирования
+  const [loadingPhone, setLoadingPhone] = useState(false);
 
   useEffect(() => {
     loadRefs();
@@ -48,34 +53,70 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
     try {
       const data = await adminGetTaskById(taskId);
 
+      // --- НОВАЯ ЛОГИКА ОБРАБОТКИ equipment и work_types ---
+      // equipment: массив объектов {equipment_id, serial_number, quantity}
+      const processedEquipment = (data.equipment || []).map(e => ({
+        equipment_id: e.equipment_id,
+        serial_number: e.serial_number || "",
+        quantity: e.quantity || 1,
+      }));
+
+      // work_types: для отображения в task-view нужен массив объектов { work_type_id, quantity }
+      const processedWorkTypesForView = (data.work_types || []).map(wt => ({
+        work_type_id: wt.work_type_id,
+        quantity: wt.quantity
+      }));
+
       const t = {
         ...data,
-        equipment: data.equipment || [],
-        work_types: data.work_types || [], // Это теперь массив ID
+        equipment: processedEquipment,
+        work_types: processedWorkTypesForView,
         history: data.history || [],
         reports: data.reports || [],
         attachments: data.attachments || [],
       };
 
-      // Инициализируем form с новыми полями
+      setTask(t);
+
+      // --- ИНИЦИАЛИЗАЦИЯ form ДЛЯ РЕДАКТИРОВАНИЯ ---
+      // equipment: массив объектов { equipment_id, serial_number }
+      const formEquipment = t.equipment.map(e => ({
+        equipment_id: e.equipment_id,
+        serial_number: e.serial_number || "",
+      }));
+
+      // work_types_ids: плоский массив ID, как в AddTaskModal
+      const formWorkTypesIds = [];
+      (data.work_types || []).forEach(wtItem => {
+        for (let i = 0; i < wtItem.quantity; i++) {
+          formWorkTypesIds.push(wtItem.work_type_id);
+        }
+      });
+
       const initialForm = {
         ...t,
-        // Оборудование: массив объектов {equipment_id, serial_number}
-        equipment: t.equipment.map(eq => ({
-          id: eq.id, // если ID есть, иначе null
-          equipment_id: eq.equipment_id,
-          equipment_name: eq.equipment_name, // для удобства отображения
-          serial_number: eq.serial_number || "",
-        })),
-        // Виды работ: массив ID (для подсчёта quantity на бэкенде)
-        work_types_ids: t.work_types,
-        gos_number: t.gos_number || "",
+        equipment: formEquipment,
+        work_types_ids: formWorkTypesIds,
+        gos_number: t.gos_number || "", // ✅ Инициализируем gos_number
+        contact_person_phone: t.contact_person_phone || null, // ✅ Инициализируем contact_person_phone
       };
 
-      setTask(t);
       setForm(initialForm);
 
-      // Загрузим контактные лица, если есть company_id
+      // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
+      if (t.contact_person_id && !t.contact_person_phone) {
+         try {
+            const { phone } = await getAdminContactPersonPhone(t.contact_person_id);
+            setContactPersonPhone(phone);
+         } catch (err) {
+            console.error("Ошибка загрузки телефона контактного лица:", err);
+            setContactPersonPhone(null);
+         }
+      } else {
+        setContactPersonPhone(t.contact_person_phone || null);
+      }
+
+      // --- ЗАГРУЗКА КОНТАКТНЫХ ЛИЦ ДЛЯ КОМПАНИИ ЗАДАЧИ ---
       if (initialForm.company_id) {
         try {
           const contacts = await getAdminContactPersonsByCompany(initialForm.company_id);
@@ -100,46 +141,71 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
     setForm((f) => ({ ...f, [k]: v }));
   }
 
-  // Загрузка контактных лиц при выборе компании
-  async function handleCompanyChange(companyId) {
+  // ✅ Загрузка контактных лиц при выборе компании в форме редактирования
+  async function handleCompanyChangeForForm(companyId) {
     if (!companyId) {
       setContactPersons([]);
       setField("contact_person_id", null);
+      setField("contact_person_phone", null); // ✅ Сбрасываем телефон
       return;
     }
     try {
+      setLoadingPhone(true); // ✅ Показываем индикатор загрузки
       const contacts = await getAdminContactPersonsByCompany(companyId);
       setContactPersons(contacts || []);
-      // Сбрасываем выбор контактного лица при смене компании
       setField("contact_person_id", null);
+      setField("contact_person_phone", null); // ✅ Сбрасываем телефон
     } catch (e) {
       console.error("Ошибка загрузки контактных лиц:", e);
       setContactPersons([]);
       setField("contact_person_id", null);
+      setField("contact_person_phone", null); // ✅ Сбрасываем телефон
+      alert("Ошибка загрузки контактных лиц");
+    } finally {
+      setLoadingPhone(false); // ✅ Скрываем индикатор
     }
   }
 
-  // --- ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ ---
+  // ✅ Новая функция для загрузки телефона контактного лица в форме редактирования
+  async function handleContactPersonChangeForForm(contactPersonId) {
+    const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
+    setField("contact_person_id", val);
 
-  function addEquipmentItem(equipmentId) {
+    if (val) {
+      setLoadingPhone(true); // ✅ Показываем индикатор загрузки
+      try {
+        const { phone } = await getAdminContactPersonPhone(val);
+        setField("contact_person_phone", phone); // ✅ Устанавливаем телефон
+      } catch (e) {
+        console.error("Ошибка загрузки телефона контактного лица:", e);
+        setField("contact_person_phone", null); // ✅ Сброс при ошибке
+      } finally {
+        setLoadingPhone(false); // ✅ Скрываем индикатор
+      }
+    } else {
+      setField("contact_person_phone", null); // ✅ Сброс если нет выбора
+    }
+  }
+
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ ---
+  function addEquipmentItemToForm(equipmentId) {
     if (!equipmentId) return;
     const eq = equipment.find(e => e.id === equipmentId);
     if (!eq) return;
 
     const newItem = {
       equipment_id: equipmentId,
-      equipment_name: eq.name,
       serial_number: "",
     };
     setForm((prevForm) => ({
       ...prevForm,
-      equipment: [...prevForm.equipment, newItem],
+      equipment: [...(prevForm.equipment || []), newItem],
     }));
   }
 
-  function updateEquipmentItem(index, field, value) {
+  function updateEquipmentItemInForm(index, field, value) {
     setForm((prevForm) => {
-      const updatedEquipment = [...prevForm.equipment];
+      const updatedEquipment = [...(prevForm.equipment || [])];
       if (updatedEquipment[index]) {
         updatedEquipment[index] = { ...updatedEquipment[index], [field]: value };
         return { ...prevForm, equipment: updatedEquipment };
@@ -148,28 +214,27 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
     });
   }
 
-  function removeEquipmentItem(index) {
+  function removeEquipmentItemFromForm(index) {
     setForm((prevForm) => ({
       ...prevForm,
       equipment: prevForm.equipment.filter((_, i) => i !== index),
     }));
   }
 
-  // --- ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ ---
-
-  function addWorkType(workTypeId) {
+  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ ---
+  function addWorkTypeItemToForm(workTypeId) {
     if (!workTypeId) return;
     setForm((prevForm) => ({
       ...prevForm,
-      work_types_ids: [...prevForm.work_types_ids, workTypeId],
+      work_types_ids: [...(prevForm.work_types_ids || []), workTypeId],
     }));
   }
 
-  function removeWorkType(workTypeId) {
+  function removeWorkTypeItemFromForm(workTypeId) {
     setForm((prevForm) => {
-      const indexToRemove = prevForm.work_types_ids.indexOf(workTypeId);
+      const indexToRemove = (prevForm.work_types_ids || []).indexOf(workTypeId);
       if (indexToRemove !== -1) {
-        const updatedWorkTypes = [...prevForm.work_types_ids];
+        const updatedWorkTypes = [...(prevForm.work_types_ids || [])];
         updatedWorkTypes.splice(indexToRemove, 1);
         return { ...prevForm, work_types_ids: updatedWorkTypes };
       }
@@ -183,9 +248,10 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
         ...form,
         equipment: form.equipment || [],
         work_types: form.work_types_ids || [],
-        // client_price и montajnik_reward убраны — рассчитываются автоматически
         client_price: undefined,
         montajnik_reward: undefined,
+        gos_number: form.gos_number || null,
+        contact_person_phone: undefined, // ❌ Не отправляем, сервер сам возьмёт
       };
       await adminUpdateTask(taskId, payload);
       alert("✅ Изменения сохранены");
@@ -243,19 +309,20 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
         <div className="modal-body">
           {edit ? (
             <div className="form-grid">
-              {/* ===== Компания и контактное лицо ===== */}
+              {/* ===== Компания ===== */}
               <label>
                 Компания
                 <select
                   value={form.company_id || ""}
                   onChange={(e) => {
-                    const val = e.target.value ? parseInt(e.target.value) : null;
+                    const val = e.target.value ? parseInt(e.target.value, 10) : null;
                     setField("company_id", val);
                     if (val) {
-                      handleCompanyChange(val);
+                      handleCompanyChangeForForm(val);
                     } else {
                       setContactPersons([]);
                       setField("contact_person_id", null);
+                      setField("contact_person_phone", null); // ✅ Сбрасываем телефон
                     }
                   }}
                 >
@@ -266,14 +333,12 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 </select>
               </label>
 
+              {/* ===== Контактное лицо ===== */}
               <label>
                 Контактное лицо
                 <select
                   value={form.contact_person_id || ""}
-                  onChange={(e) => {
-                    const val = e.target.value ? parseInt(e.target.value) : null;
-                    setField("contact_person_id", val);
-                  }}
+                  onChange={(e) => handleContactPersonChangeForForm(e.target.value)} // ✅ Используем новую функцию
                   disabled={!form.company_id}
                 >
                   <option value="">Выберите контактное лицо</option>
@@ -281,27 +346,58 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                     <option key={cp.id} value={cp.id}>{cp.name}</option>
                   ))}
                 </select>
+                {/* ✅ Индикатор загрузки телефона */}
+                {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
+              </label>
+
+              {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+              <label>
+                Телефон контактного лица
+                <input
+                  type="text"
+                  value={form.contact_person_phone || ""}
+                  readOnly // ✅ Поле только для чтения
+                  placeholder="Выберите контактное лицо"
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ccc",
+                    backgroundColor: "#e0e0e0",
+                    color: "#333",
+                    cursor: "not-allowed",
+                  }}
+                />
+                {/* ✅ Ссылка для вызова */}
+                {form.contact_person_phone && (
+                  <a
+                    href={`tel:${form.contact_person_phone}`}
+                    style={{
+                      display: 'inline-block',
+                      marginTop: '4px',
+                      fontSize: '0.9em',
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    📞 Позвонить
+                  </a>
+                )}
               </label>
 
               <label>
                 ТС (марка, гос.номер)
-                <input
-                  type="text"
-                  value={form.vehicle_info || ""}
-                  onChange={(e) => setField("vehicle_info", e.target.value)}
-                />
+                <input value={form.vehicle_info || ""} onChange={(e) => setField("vehicle_info", e.target.value)} />
               </label>
+
               {/* ===== НОВОЕ ПОЛЕ: ГОС. НОМЕР ===== */}
               <label>
                 Гос. номер
-                <input
-                  type="text"
-                  value={form.gos_number || ""}
-                  onChange={(e) => setField("gos_number", e.target.value)}
-                />
+                <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)} />
               </label>
+
               <label>
-                Дата
+                Дата и время
                 <input
                   type="datetime-local"
                   value={form.scheduled_at ? new Date(form.scheduled_at).toISOString().slice(0, 16) : ""}
@@ -309,20 +405,12 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 />
               </label>
               <label>
-                Место
-                <textarea
-                  value={form.location || ""}
-                  onChange={(e) => setField("location", e.target.value)}
-                  rows="3"
-                />
+                Место/адрес
+                <textarea value={form.location || ""} onChange={(e) => setField("location", e.target.value)} rows="3" />
               </label>
               <label>
                 Комментарий
-                <textarea
-                  value={form.comment || ""}
-                  onChange={(e) => setField("comment", e.target.value)}
-                  rows="3"
-                />
+                <textarea value={form.comment || ""} onChange={(e) => setField("comment", e.target.value)} rows="3" />
               </label>
               <label>
                 Монтажник (ID)
@@ -332,38 +420,28 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                   onChange={(e) => setField("assigned_user_id", e.target.value ? parseInt(e.target.value) : null)}
                 />
               </label>
-              {/* ===== Цены (не редактируются, рассчитываются автоматически) ===== */}
+              {/* Цены — не редактируются */}
               <label>
                 Цена клиента (авто)
-                <input
-                  type="number"
-                  step="0.01"
-                  value={task.client_price || ""}
-                  disabled
-                />
+                <input value="" disabled placeholder="Рассчитывается автоматически" />
               </label>
               <label>
                 Награда монтажнику (авто)
-                <input
-                  type="number"
-                  step="0.01"
-                  value={task.montajnik_reward || ""}
-                  disabled
-                />
+                <input value="" disabled placeholder="Рассчитывается автоматически" />
               </label>
               <label>
-                Фото обязательно
                 <input
                   type="checkbox"
                   checked={form.photo_required || false}
                   onChange={(e) => setField("photo_required", e.target.checked)}
-                />
+                />{" "}
+                Фото обязательно
               </label>
 
-              {/* ===== Оборудование (новая логика) ===== */}
+              {/* ===== Оборудование (редактирование) ===== */}
               <label>Оборудование</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
-                {form.equipment.map((item, index) => {
+                {(form.equipment || []).map((item, index) => {
                   const eq = equipment.find((e) => e.id === item.equipment_id);
                   return (
                     <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -375,13 +453,13 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                           type="text"
                           placeholder="Серийный номер"
                           value={item.serial_number || ""}
-                          onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)}
+                          onChange={(e) => updateEquipmentItemInForm(index, "serial_number", e.target.value)}
                           style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
                         />
                       </div>
                       <button
                         type="button"
-                        onClick={() => removeEquipmentItem(index)}
+                        onClick={() => removeEquipmentItemFromForm(index)}
                         style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       >
                         ×
@@ -396,7 +474,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 onChange={(e) => {
                   const val = Number(e.target.value);
                   if (!isNaN(val) && val > 0) {
-                    addEquipmentItem(val);
+                    addEquipmentItemToForm(val);
                   }
                   e.target.value = "";
                 }}
@@ -409,12 +487,12 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 ))}
               </select>
 
-              {/* ===== Виды работ (новая логика) ===== */}
+              {/* ===== Виды работ (редактирование) ===== */}
               <label>Виды работ</label>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
                 {(() => {
                   const counts = {};
-                  form.work_types_ids.forEach(id => {
+                  (form.work_types_ids || []).forEach(id => {
                     counts[id] = (counts[id] || 0) + 1;
                   });
                   const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
@@ -442,7 +520,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                         {wt.name} (x{count})
                         <span
                           style={{ cursor: "pointer" }}
-                          onClick={() => removeWorkType(id)}
+                          onClick={() => removeWorkTypeItemFromForm(id)}
                         >
                           ×
                         </span>
@@ -457,7 +535,7 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                 onChange={(e) => {
                   const val = Number(e.target.value);
                   if (!isNaN(val) && val > 0) {
-                    addWorkType(val);
+                    addWorkTypeItemToForm(val);
                   }
                   e.target.value = "";
                 }}
@@ -469,14 +547,33 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
                   </option>
                 ))}
               </select>
-
             </div>
           ) : (
             <div className="task-view">
               <p><b>Компания:</b> {task.company_name || "—"}</p>
               <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
+              {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+              <p>
+                <b>Телефон контактного лица:</b>{" "}
+                {contactPersonPhone || task.contact_person_phone || "—"}
+                {/* ✅ Ссылка для вызова */}
+                {(contactPersonPhone || task.contact_person_phone) && (
+                  <a
+                    href={`tel:${contactPersonPhone || task.contact_person_phone}`}
+                    style={{
+                      display: 'inline-block',
+                      marginLeft: '8px',
+                      fontSize: '0.9em',
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    📞 Позвонить
+                  </a>
+                )}
+              </p>
               <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
-              {/* ===== Отображение гос. номера ===== */}
+              {/* ===== НОВОЕ ПОЛЕ: ГОС. НОМЕР ===== */}
               <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
               <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
               <p><b>Статус:</b> {task.status || "—"}</p>
@@ -485,51 +582,46 @@ export default function TaskDetailModal({ taskId, onClose, onTaskUpdated, onTask
               <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
               <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>
               <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
-              {/* ===== Отображение оборудования с серийниками ===== */}
+              
+              {/* ===== Оборудование (отображение) ===== */}
               <p>
-                <b>Оборудование:</b> {" "}
-                {task.equipment && task.equipment.length > 0 ? (
-                  task.equipment.map(e => {
-                    const eq = equipment.find(eq => eq.id === e.equipment_id);
-                    const name = eq?.name || e.equipment_id;
-                    const serial = e.serial_number ? ` (сер. ${e.serial_number})` : '';
-                    return `${name}${serial}`;
-                  }).join(", ")
-                ) : "—"}
+                <b>Оборудование:</b>{" "}
+                {(task.equipment || [])
+                  .map((e) => {
+                    const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
+                    return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+                  })
+                  .join(", ") || "—"}
               </p>
-              {/* ===== Отображение видов работ с количеством ===== */}
-              <p>
-                <b>Виды работ:</b> {" "}
-                {task.work_types && task.work_types.length > 0 ? (
-                  (() => {
-                    const counts = {};
-                    task.work_types.forEach(id => {
-                      counts[id] = (counts[id] || 0) + 1;
-                    });
-                    const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
-                      id: parseInt(id, 10),
-                      count,
-                    }));
 
-                    return uniqueWorkTypesWithCounts.map(({ id, count }) => {
-                      const wt = workTypes.find(w => w.id === id);
-                      if (!wt) return `ID ${id} x${count}`;
-                      return `${wt.name} x${count}`;
-                    }).join(", ");
-                  })()
+              {/* ===== Виды работ (отображение) ===== */}
+              <p>
+                <b>Виды работ:</b>{" "}
+                {task.work_types && task.work_types.length > 0 ? (
+                  task.work_types.map(wt => {
+                    const wtObj = workTypes.find(w => w.id === wt.work_type_id);
+                    const name = wtObj?.name || wt.work_type_id;
+                    const count = wt.quantity || 1;
+                    return `${name} (x${count})`;
+                  }).join(", ")
                 ) : "—"}
               </p>
             </div>
           )}
 
           <div className="section">
+            <h3>История</h3>
+            <button className="add-btn" onClick={() => navigate(`/admin/tasks/${taskId}/history`)}>
+              Подробнее
+            </button>
+          </div>
+
+          <div className="section">
             <h3>Отчёты монтажников</h3>
             {(task.reports || []).length ? (
               task.reports.map((r) => (
                 <div key={r.id} className="report">
-                  <p>
-                    #{r.id}: {r.text || "—"}
-                  </p>
+                  <p>#{r.id}: {r.text || "—"}</p>
                   <p>
                     logist: <b>{r.approval_logist || "—"}</b> | tech:{" "}
                     <b>{r.approval_tech || "—"}</b>

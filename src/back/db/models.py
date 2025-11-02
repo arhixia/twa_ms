@@ -80,6 +80,7 @@ class Task(AsyncAttrs, Base):
     scheduled_at = Column(DateTime(timezone=True), nullable=True, index=True)
     location = Column(String, nullable=True)
     contact_person_id = Column(Integer, ForeignKey("contact_persons.id", ondelete="SET NULL"), index=True, nullable=True)
+    contact_person_phone = Column(String, nullable=True)
     company_id = Column(Integer, ForeignKey("client_companies.id", ondelete="SET NULL"), index=True, nullable=True)
     vehicle_info = Column(String, nullable=True)
     gos_number = Column(String, nullable=True)
@@ -191,6 +192,8 @@ class ContactPerson(AsyncAttrs, Base):
     id = Column(Integer, primary_key=True)
     company_id = Column(Integer, ForeignKey("client_companies.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
+    phone = Column(String,nullable = False)
+
     
 
     company = relationship("ClientCompany", back_populates="contact_persons")
@@ -249,25 +252,14 @@ class TaskHistory(AsyncAttrs, Base):
     
     # comment - текстовое описание или JSON, как раньше
     comment = Column(Text, nullable=True) 
-
-    # --- НОВЫЕ ПОЛЯ ДЛЯ СТРУКТУРИРОВАННЫХ ДАННЫХ ---
-    # Имя поля, которое изменилось (например, "client", "scheduled_at")
     field_name = Column(String, nullable=True) 
-    
-    # Старое значение поля (в виде строки)
     old_value = Column(Text, nullable=True) 
-    
-    # Новое значение поля (в виде строки)
     new_value = Column(Text, nullable=True) 
-
-    # ID связанной сущности (например, ID отчета или вложения)
     related_entity_id = Column(Integer, nullable=True) 
-    
-    # Тип связанной сущности (например, "report", "attachment")
     related_entity_type = Column(String, nullable=True) 
 
-    # --- ПОЛНЫЕ ПОЛЯ ЗАДАЧИ НА МОМЕНТ СОБЫТИЯ ---
     contact_person_id = Column(Integer, ForeignKey("contact_persons.id", ondelete="SET NULL"), index=True, nullable=True)
+    contact_person_phone = Column(String, nullable=True)
     company_id = Column(Integer, ForeignKey("client_companies.id", ondelete="SET NULL"), index=True, nullable=True)
     vehicle_info = Column(String, nullable=True)
     scheduled_at = Column(DateTime(timezone=True), nullable=True)

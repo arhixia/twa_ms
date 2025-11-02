@@ -154,12 +154,14 @@ async def create_draft(
     gos_number = data.get("gos_number")
 
     company_id = None
+    contact_person_phone = None
     if contact_person_id:
         cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
         contact_person = cp_res.scalars().first()
         if not contact_person:
             raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
         company_id = contact_person.company_id
+        contact_person_phone = contact_person.phone
 
     scheduled_at = _parse_datetime(data.get("scheduled_at")) if data.get("scheduled_at") else None
     assignment_type = _parse_assignment_type(data.get("assignment_type")) if data.get("assignment_type") else None
@@ -195,6 +197,7 @@ async def create_draft(
     task = Task(
         contact_person_id=contact_person_id,
         company_id=company_id,
+        contact_person_phone=contact_person_phone,
         vehicle_info=data.get("vehicle_info"),
         scheduled_at=scheduled_at,
         location=data.get("location"),
@@ -303,6 +306,7 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
         "company_id": task.company_id,
         "contact_person_id": task.contact_person_id,
         "company_name": company_name,
+        "contact_person_phone": task.contact_person_phone,
         "contact_person_name": contact_person_name,
         "vehicle_info": task.vehicle_info,
         "scheduled_at": task.scheduled_at,
@@ -341,20 +345,20 @@ async def patch_draft(
     # ✅ Получаем новое поле gos_number
     gos_number = data.get("gos_number")
 
-    # ✅ Проверяем contact_person_id и получаем company_id
-    company_id = None
-    if contact_person_id:
-        cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
-        contact_person = cp_res.scalars().first()
-        if not contact_person:
-            raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
-        company_id = contact_person.company_id
-        setattr(task, "contact_person_id", contact_person_id)
-        setattr(task, "company_id", company_id)
-    elif contact_person_id is None: # ✅ Явно проверяем на None
-        # Если передано null, сбрасываем
-        setattr(task, "contact_person_id", None)
-        setattr(task, "company_id", None)
+    # --- Обновление contact_person_id, company_id, contact_person_phone ---
+    if contact_person_id is not None:
+        if contact_person_id:
+            cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
+            contact_person = cp_res.scalars().first()
+            if not contact_person:
+                raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
+            setattr(task, "contact_person_id", contact_person_id)
+            setattr(task, "company_id", contact_person.company_id)
+            setattr(task, "contact_person_phone", contact_person.phone) # <--- Установка телефона
+        else:
+            setattr(task, "contact_person_id", None)
+            setattr(task, "company_id", None)
+            setattr(task, "contact_person_phone", None) # <--- Сброс телефона
 
     # Обновляем все простые поля (кроме связей и gos_number)
     for key, value in data.items():
@@ -398,8 +402,7 @@ async def patch_draft(
         task.montajnik_reward = calculated_montajnik_reward
 
 
-    # --- Обновление оборудования (новая логика) ---
-    # ✅ Обновляем equipment, если оно передано
+
     equipment_data = data.get("equipment", None) # Проверяем, передано ли оборудование
     if equipment_data is not None: # Если передано оборудование
         # 1. Получаем существующие записи TaskEquipment для этой задачи
@@ -428,7 +431,6 @@ async def patch_draft(
                 raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
 
             if item_id:
-                # 2a. Обновление существующей записи
                 if item_id in existing_te_map:
                     te_record = existing_te_map[item_id]
                     # Проверка, что запись принадлежит этой задаче
@@ -438,7 +440,6 @@ async def patch_draft(
                     te_record.equipment_id = equipment_id
                     te_record.serial_number = serial_number
                     te_record.quantity = quantity
-                    # db.add(te_record) # Не обязательно, если объект уже отслеживается
                     incoming_te_ids.add(item_id)
                     logger.info(f"Обновлена запись TaskEquipment id={item_id}")
                 else:
@@ -475,8 +476,6 @@ async def patch_draft(
                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
             db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
 
-
-    db.add(TaskHistory(task_id=task.id, user_id=int(current_user.id), action=TaskStatus.new, comment="Draft updated"))
     await db.commit()
     await db.refresh(task)
     return {"draft_id": task.id, "saved_at": task.created_at, "data": data}
@@ -519,12 +518,14 @@ async def publish_task(
 
     contact_person = None
     company_id = None
+    contact_person_phone = None
     if contact_person_id:
         cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
         contact_person = cp_res.scalars().first()
         if not contact_person:
             raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
         company_id = contact_person.company_id
+        contact_person_phone = contact_person.phone
 
     work_types_ids_raw = data.get("work_types", [])
     from collections import Counter
@@ -567,9 +568,11 @@ async def publish_task(
                         raise HTTPException(status_code=400, detail=f"Контактное лицо id={val} не найдено")
                     setattr(task, "contact_person_id", val)
                     setattr(task, "company_id", cp.company_id)
+                    setattr(task,"contacnt_person_phone", cp.phone)
                 else:
                     setattr(task, "contact_person_id", None)
                     setattr(task, "company_id", None)
+                    setattr(task,"contacnt_person_phone",None)
             # ✅ Устанавливаем gos_number
             elif key == "gos_number":
                 setattr(task, key, val)
@@ -622,6 +625,7 @@ async def publish_task(
             comment="Published from draft",
             company_id=task.company_id,  
             contact_person_id=task.contact_person_id,
+            contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
             scheduled_at=task.scheduled_at,
             location=task.location,
@@ -641,6 +645,7 @@ async def publish_task(
         # ✅ Передаем gos_number в конструктор Task
         task = Task(
             contact_person_id=contact_person_id,
+            contact_person_phone=contact_person_phone,
             company_id=company_id, 
             vehicle_info=data.get("vehicle_info"),
             scheduled_at=_parse_datetime(data.get("scheduled_at")),
@@ -692,6 +697,7 @@ async def publish_task(
             comment="Задача добавлена",
             company_id=task.company_id,  
             contact_person_id=task.contact_person_id,
+            contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
             scheduled_at=task.scheduled_at,
             location=task.location,
@@ -749,7 +755,8 @@ async def edit_task(
     ]
     old_contact_person_name = task.contact_person.name if task.contact_person else None
     old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, company={old_company_name}")
+    old_contact_person_phone = task.contact_person.phone if task.contact_person else None
+    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name},contact_person_phone = {old_contact_person_phone}, company={old_company_name}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
     logger.info(f"Полный incoming dict: {incoming}")
@@ -795,19 +802,25 @@ async def edit_task(
                 raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
             old_cp_id = task.contact_person_id
             old_co_id = task.company_id
+            old_cp_phone = task.contact_person_phone
             setattr(task, "contact_person_id", contact_person_id)
             setattr(task, "company_id", contact_person.company_id)
+            setattr(task, "contact_person_phone", contact_person.phone) 
             changed.append(("contact_person_id", old_cp_id, contact_person_id))
             changed.append(("company_id", old_co_id, contact_person.company_id))
-            logger.info(f"Поле 'contact_person_id' и 'company_id' помечены как изменённые: {old_cp_id}->{contact_person_id}, {old_co_id}->{contact_person.company_id}")
+            changed.append(("contact_person_phone", old_cp_phone, contact_person.phone))
+            logger.info(f"Поле 'contact_person_id' и 'company_id' помечены как изменённые: {old_cp_id}->{contact_person_id}, {old_co_id}->{contact_person.company_id},{old_cp_phone}->{contact_person.phone}")
         else:
             old_cp_id = task.contact_person_id
             old_co_id = task.company_id
+            old_cp_phone = task.contact_person_phone
             setattr(task, "contact_person_id", None)
             setattr(task, "company_id", None)
+            setattr(task, "contact_person_phone", None)
             changed.append(("contact_person_id", old_cp_id, None))
             changed.append(("company_id", old_co_id, None))
-            logger.info(f"Поле 'contact_person_id' и 'company_id' сброшены: {old_cp_id}->{None}, {old_co_id}->{None}")
+            changed.append(("contact_person_phone", old_cp_phone, None))
+            logger.info(f"Поле 'contact_person_id' и 'company_id' сброшены: {old_cp_id}->{None}, {old_co_id}->{None},{old_cp_phone}->{None}")
 
     # --- Обновление оборудования ---
     # ✅ НОВАЯ ЛОГИКА обновления оборудования
@@ -947,12 +960,18 @@ async def edit_task(
                 "old": old_works_with_qty, 
                 "new": new_works_with_qty
             })
-            
+
+       
         # Проверяем изменения contact_person и company
         old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
         new_cp_co = f"{new_contact_person_name} ({new_company_name})" if new_contact_person_name and new_company_name else "—"
         if old_cp_co != new_cp_co:
             all_changes.append({"field": "contact_person", "old": old_cp_co, "new": new_cp_co})
+        
+        cp_phone_change = next((item for item in changed if item[0] == "contact_person_phone"), None)
+        if cp_phone_change:
+            all_changes.append({"field": "contact_person_phone", "old": str(cp_phone_change[1]), "new": str(cp_phone_change[2])})
+    
 
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
         # Создаём комментарий с *всеми* изменениями
@@ -967,6 +986,7 @@ async def edit_task(
             # --- Сохраняем все основные поля задачи ---
             company_id=task.company_id,  # ✅ Заменено
             contact_person_id=task.contact_person_id,  # ✅ Заменено
+            contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
             scheduled_at=task.scheduled_at,
             location=task.location,
@@ -1089,6 +1109,7 @@ async def review_report(
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,  # ✅ Заменено
                 contact_person_id=task.contact_person_id,  # ✅ Заменено
+                contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
                 gos_number = task.gos_number,
                 scheduled_at=task.scheduled_at,
@@ -1124,6 +1145,7 @@ async def review_report(
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,  # ✅ Заменено
                 contact_person_id=task.contact_person_id,  # ✅ Заменено
+                contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
@@ -1350,6 +1372,7 @@ async def task_detail(
         "id": task.id,
         "company_name": company_name,  
         "contact_person_name": contact_person_name,  
+        "contact_person_phone": task.contact_person_phone,
         "vehicle_info": task.vehicle_info or None,
         "gos_number":task.gos_number or None,
         "location": task.location or None,
@@ -1394,7 +1417,7 @@ async def get_companies(db: AsyncSession = Depends(get_db)):
 async def get_contact_persons(company_id: int, db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(ContactPerson).where(ContactPerson.company_id == company_id))
     contacts = res.scalars().all()
-    return [{"id": c.id, "name": c.name} for c in contacts]
+    return [{"id": c.id, "name": c.name, "phone": c.phone} for c in contacts]
 
 
 @router.post("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
@@ -1412,14 +1435,37 @@ async def add_company(payload: dict = Body(...), db: AsyncSession = Depends(get_
 @router.post("/companies/{company_id}/contacts", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
 async def add_contact_person(company_id: int, payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
     name = payload.get("name")
+    phone = payload.get("phone") 
     if not name:
         raise HTTPException(status_code=400, detail="ФИО контактного лица обязательно")
     res = await db.execute(select(ClientCompany).where(ClientCompany.id == company_id))
     company = res.scalars().first()
     if not company:
         raise HTTPException(status_code=404, detail="Компания не найдена")
-    contact = ContactPerson(company_id=company_id, name=name)
+    contact = ContactPerson(company_id=company_id, name=name, phone=phone) 
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
-    return {"id": contact.id, "name": contact.name}
+    return {"id": contact.id, "name": contact.name, "phone": contact.phone} # 
+
+
+
+@router.get("/contact-persons/{contact_person_id}/phone", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def get_contact_person_phone(
+    contact_person_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Получить телефон контактного лица по его ID.
+    """
+    res = await db.execute(
+        select(ContactPerson.phone).where(ContactPerson.id == contact_person_id)
+    )
+    phone_number = res.scalar_one_or_none()
+
+    if phone_number is None:
+        raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
+
+    return {"phone": phone_number}
+
+#пофиксить редактирование задачи

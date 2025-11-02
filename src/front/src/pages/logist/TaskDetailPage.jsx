@@ -9,6 +9,7 @@ import {
   getWorkTypes,
   getCompaniesList,
   getContactPersonsByCompany,
+  getContactPersonPhone, // <--- Новый импорт
 } from "../../api";
 import "../../styles/LogistPage.css";
 
@@ -77,6 +78,10 @@ export default function TaskDetailPage() {
   const [workTypes, setWorkTypes] = useState([]);
   const [companies, setCompanies] = useState([]); // ✅ Новое
   const [contactPersons, setContactPersons] = useState([]); // ✅ Новое
+  // ✅ Состояние для хранения телефона контактного лица в режиме просмотра
+  const [contactPersonPhone, setContactPersonPhone] = useState(null); // <--- Добавлено
+  // ✅ Состояние для загрузки телефона в режиме редактирования
+  const [loadingPhone, setLoadingPhone] = useState(false); // <--- Добавлено
   const [rejectModal, setRejectModal] = useState({ open: false, taskId: null, reportId: null });
 
   useEffect(() => {
@@ -145,9 +150,42 @@ export default function TaskDetailPage() {
         ...t,
         equipment: formEquipment,
         work_types_ids: formWorkTypesIds, // используем плоский массив
+        // ✅ Инициализируем contact_person_phone в форме
+        contact_person_phone: t.contact_person_phone || null,
       };
 
       setForm(initialForm);
+
+      // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
+      // Если contact_person_id есть, но contact_person_phone нет в данных задачи, загрузим его
+      if (t.contact_person_id && !t.contact_person_phone) {
+         try {
+            const { phone } = await getContactPersonPhone(t.contact_person_id);
+            setContactPersonPhone(phone); // Устанавливаем телефон для просмотра
+            // Опционально: можно обновить и в task
+            // t.contact_person_phone = phone;
+         } catch (err) {
+            console.error("Ошибка загрузки телефона при инициализации задачи:", err);
+            setContactPersonPhone(null); // Сброс при ошибке
+         }
+      } else {
+        // Если телефон уже есть в data или contact_person_id отсутствует
+        setContactPersonPhone(t.contact_person_phone || null);
+      }
+
+      if (initialForm.company_id) {
+              try {
+                const contactsForDraftCompany = await getContactPersonsByCompany(initialForm.company_id);
+                setContactPersons(contactsForDraftCompany || []);
+              } catch (err) {
+                console.error("Ошибка загрузки контактных лиц при инициализации черновика:", err);
+                setContactPersons([]);
+              }
+            } else {
+              setContactPersons([]);
+            }
+      // --- КОНЕЦ НОВОГО БЛОКА ---
+
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       alert("Ошибка загрузки задачи");
@@ -212,6 +250,56 @@ export default function TaskDetailPage() {
     });
   }
 
+  // ✅ Загрузка контактных лиц при выборе компании в форме редактирования
+  async function handleCompanyChangeForForm(companyId) { // <--- Переименовано для ясности
+    if (!companyId) {
+      setContactPersons([]);
+      setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон
+      setField("contact_person_phone", null); // <--- Добавлено
+      return;
+    }
+    try {
+      setLoadingPhone(true); // <--- Используем для индикатора загрузки
+      const contacts = await getContactPersonsByCompany(companyId);
+      setContactPersons(contacts || []);
+      // Сбрасываем выбор контактного лица при смене компании
+      setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон
+      setField("contact_person_phone", null); // <--- Добавлено
+    } catch (e) {
+      console.error("Ошибка загрузки контактных лиц:", e);
+      setContactPersons([]);
+      setField("contact_person_id", null);
+      // ✅ Сбрасываем телефон
+      setField("contact_person_phone", null); // <--- Добавлено
+      alert("Ошибка загрузки контактных лиц");
+    } finally {
+      setLoadingPhone(false); // <--- Скрываем индикатор
+    }
+  }
+
+  // ✅ Новая функция для загрузки телефона контактного лица в форме редактирования
+  async function handleContactPersonChangeForForm(contactPersonId) { // <--- Добавлено
+    const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
+    setField("contact_person_id", val);
+
+    if (val) {
+      setLoadingPhone(true); // <--- Показываем индикатор загрузки
+      try {
+        const { phone } = await getContactPersonPhone(val); // <--- Вызываем отдельный эндпоинт
+        setField("contact_person_phone", phone); // <--- Устанавливаем телефон
+      } catch (e) {
+        console.error("Ошибка загрузки телефона контактного лица:", e);
+        setField("contact_person_phone", null); // <--- Сброс при ошибке
+      } finally {
+        setLoadingPhone(false); // <--- Скрываем индикатор
+      }
+    } else {
+      setField("contact_person_phone", null); // <--- Сброс если нет выбора
+    }
+  }
+
   async function saveEdit() {
     try {
       const payload = {
@@ -221,11 +309,13 @@ export default function TaskDetailPage() {
         client_price: undefined,
         montajnik_reward: undefined,
         gos_number: form.gos_number || null,
+        // ❌ contact_person_phone не отправляем, сервер сам его возьмёт по contact_person_id
+        contact_person_phone: undefined, // <--- Добавлено для ясности
       };
       await editTask(id, payload);
       alert("✅ Изменения сохранены");
       setEdit(false);
-      loadTask();
+      loadTask(); // Перезагружаем данные
     } catch (err) {
       console.error(err);
       alert("Ошибка при сохранении");
@@ -275,12 +365,12 @@ export default function TaskDetailPage() {
             if (a.presigned_url) {
               src = a.presigned_url;
             } else if (a.storage_key) {
-              src = `https://s3.storage.selcloud.ru/mobile-service-testing/ 
+              src = `https://s3.storage.selcloud.ru/mobile-service-testing/   
   ${a.storage_key}`;
             }
             key = a.id ? `id-${a.id}` : a.storage_key ? `sk-${a.storage_key}` : `index-${index}`;
           } else if (typeof a === "string") {
-            src = `https://s3.storage.selcloud.ru/mobile-service-testing/ 
+            src = `https://s3.storage.selcloud.ru/mobile-service-testing/   
   ${a}`;
             key = `str-${a}`;
           }
@@ -296,7 +386,7 @@ export default function TaskDetailPage() {
                   onError={(e) => {
                     console.error(`❌ IMG Error: ${src}`, e);
                     e.target.onerror = null;
-                    e.target.parentElement.innerHTML = `<span style="font-size: 12px; text-align: center;">Img Err (${index})</span>`;
+                    e.target.parentElement.innerHTML = `<span style={{ fontSize: 12px, textAlign: 'center' }}>Img Err (${index})</span>`;
                   }}
                 />
               </div>
@@ -348,18 +438,21 @@ export default function TaskDetailPage() {
         <div className="task-detail">
           {edit ? (
             <div className="form-grid">
+              {/* ===== Компания ===== */}
               <label>
                 Компания:
                 <select
                   value={form.company_id || ""}
                   onChange={(e) => {
-                    const val = e.target.value ? parseInt(e.target.value) : null;
+                    const val = e.target.value ? parseInt(e.target.value, 10) : null;
                     setField("company_id", val);
                     if (val) {
-                      handleCompanyChange(val);
+                      handleCompanyChangeForForm(val); // <--- Используем новую функцию
                     } else {
                       setContactPersons([]);
                       setField("contact_person_id", null);
+                      // ✅ Сбрасываем телефон
+                      setField("contact_person_phone", null); // <--- Добавлено
                     }
                   }}
                 >
@@ -370,14 +463,13 @@ export default function TaskDetailPage() {
                 </select>
               </label>
 
+              {/* ===== Контактное лицо ===== */}
               <label>
                 Контактное лицо:
                 <select
                   value={form.contact_person_id || ""}
-                  onChange={(e) => {
-                    const val = e.target.value ? parseInt(e.target.value) : null;
-                    setField("contact_person_id", val);
-                  }}
+                  // ✅ Используем новую функцию
+                  onChange={(e) => handleContactPersonChangeForForm(e.target.value)} // <--- Изменено
                   disabled={!form.company_id} // доступно только если выбрана компания
                 >
                   <option value="">Выберите контактное лицо</option>
@@ -385,6 +477,49 @@ export default function TaskDetailPage() {
                     <option key={cp.id} value={cp.id}>{cp.name}</option>
                   ))}
                 </select>
+                {/* ✅ Индикатор загрузки телефона */}
+                {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>} {/* <--- Добавлено */}
+              </label>
+
+              {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА (в режиме редактирования) ===== */}
+              <label>
+                Телефон контактного лица:
+                <input
+                  type="text"
+                  value={form.contact_person_phone || ""}
+                  // ✅ Поле только для чтения, заполняется автоматически
+                  readOnly // <--- Изменено с disabled на readOnly
+                  placeholder="Выберите контактное лицо"
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ccc",
+                    backgroundColor: "#e0e0e0", // Светло-серый фон для readonly
+                    color: "#333",
+                    cursor: "not-allowed", // Курсор "запрещено"
+                  }}
+                />
+                {/* ✅ Ссылка для вызова, если телефон есть */}
+                {form.contact_person_phone && ( // <--- Добавлено
+                  <a
+                    href={`tel:${form.contact_person_phone}`}
+                    style={{
+                      display: 'inline-block',
+                      marginTop: '4px',
+                      fontSize: '0.9em',
+                      color: '#1e88e5', // Синий цвет
+                      textDecoration: 'none',
+                    }}
+                    onClick={(e) => {
+                      // Предотвращаем отправку формы, если это внутри label
+                      e.preventDefault();
+                      window.location.href = `tel:${form.contact_person_phone}`;
+                    }}
+                  >
+                    📞 Позвонить
+                  </a>
+                )}
               </label>
 
               <label>
@@ -578,6 +713,26 @@ export default function TaskDetailPage() {
             <div className="task-view">
               <p><b>Компания:</b> {task.company_name || "—"}</p>
               <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
+              {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА (в режиме просмотра) ===== */}
+              <p>
+                <b>Телефон контактного лица:</b>{" "}
+                {contactPersonPhone || task.contact_person_phone || "—"} 
+                {/* ✅ Ссылка для вызова, если телефон есть */}
+                {(contactPersonPhone || task.contact_person_phone) && ( // <--- Добавлено
+                  <a
+                    href={`tel:${contactPersonPhone || task.contact_person_phone}`}
+                    style={{
+                      display: 'inline-block',
+                      marginLeft: '8px',
+                      fontSize: '0.9em',
+                      color: '#1e88e5', // Синий цвет
+                      textDecoration: 'none',
+                    }}
+                  >
+                    📞 Позвонить
+                  </a>
+                )}
+              </p>
               <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
               <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
               <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>

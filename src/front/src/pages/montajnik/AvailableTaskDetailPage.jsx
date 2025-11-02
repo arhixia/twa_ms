@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { fetchAvailableMontTaskDetail, acceptTask, getEquipmentList, getWorkTypes } from "../../api";
-// ✅ Импортируем функции для получения данных о компаниях и контактных лицах
-import { getMontCompaniesList, getMontContactPersonsByCompany } from "../../api"; // Убедитесь, что путь верный
+// ✅ Импортируем функции для получения данных о компаниях и контактных лицах и телефона
+import { getMontCompaniesList, getMontContactPersonsByCompany, getMontContactPersonPhone } from "../../api"; // Убедитесь, что путь верный
 import "../../styles/LogistPage.css";
 
 export default function AvailableTaskDetailPage() {
@@ -18,6 +18,8 @@ export default function AvailableTaskDetailPage() {
   
   const [companies, setCompanies] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
+  // ✅ Состояние для хранения телефона контактного лица
+  const [contactPersonPhone, setContactPersonPhone] = useState(null); // <--- Добавлено
 
   useEffect(() => {
     loadRefs(); // Загружаем справочники
@@ -45,6 +47,20 @@ export default function AvailableTaskDetailPage() {
       const data = await fetchAvailableMontTaskDetail(id);
       // Нет необходимости изменять структуру данных задачи, так как это только просмотр
       setTask(data);
+
+      // ✅ Загружаем телефон контактного лица, если contact_person_id есть в данных задачи
+      if (data.contact_person_id) {
+         try {
+            const { phone } = await getMontContactPersonPhone(data.contact_person_id); // <--- Вызываем эндпоинт
+            setContactPersonPhone(phone); // <--- Устанавливаем телефон
+         } catch (err) {
+            console.error("Ошибка загрузки телефона контактного лица:", err);
+            setContactPersonPhone(null); // <--- Сброс при ошибке
+         }
+      } else {
+        setContactPersonPhone(null); // <--- Сброс если contact_person_id нет
+      }
+
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       setError(err.response?.data?.detail || err.message || "Ошибка загрузки задачи");
@@ -122,32 +138,56 @@ export default function AvailableTaskDetailPage() {
             {/* ✅ Добавляем строки с компанией и контактным лицом */}
             <p><b>Компания:</b> {task.company_name || "—"}</p>
             <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
+            {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+            <p>
+              <b>Телефон контактного лица:</b>{" "}
+              {contactPersonPhone || task.contact_person_phone || "—"} {/* <--- Используем загруженный или из задачи */}
+              {/* ✅ Ссылка для вызова, если телефон есть */}
+              {(contactPersonPhone || task.contact_person_phone) && ( // <--- Добавлено
+                <a
+                  href={`tel:${contactPersonPhone || task.contact_person_phone}`}
+                  style={{
+                    display: 'inline-block',
+                    marginLeft: '8px',
+                    fontSize: '0.9em',
+                    color: '#1e88e5', // Синий цвет
+                    textDecoration: 'none',
+                  }}
+                >
+                  📞 Позвонить
+                </a>
+              )}
+            </p>
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
             <p><b>Место:</b> {task.location || "—"}</p>
             <p><b>Статус:</b> {task.status || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
-            <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>
+            <p><b>Награда за работу:</b> {task.montajnik_reward || "—"}</p>
             
             <p>
               <b>Оборудование:</b>{" "}
               {(task.equipment || [])
-                .map((e) =>
-                  equipment.find((eq) => eq.id === e.equipment_id)?.name ||
-                  e.equipment_id
-                )
+                .map((e) => {
+                  const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
+                  // ✅ Отображаем serial_number и quantity
+                  return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+                })
                 .join(", ") || "—"}
             </p>
 
             <p>
-              <b>Виды работ:</b>{" "}
-              {(task.work_types || [])
-                .map((wtId) =>
-                  workTypes.find((wt) => wt.id === wtId)?.name ||
-                  wtId
-                )
-                .join(", ") || "—"}</p>
+                <b>Виды работ:</b>{" "}
+                {task.work_types && task.work_types.length > 0 ? (
+                  task.work_types.map(wt => {
+                    const wtObj = workTypes.find(w => w.id === wt.work_type_id);
+                    const name = wtObj?.name || wt.work_type_id;
+                    const count = wt.quantity || 1; // Берём quantity из объекта
+                    return `${name} (x${count})`;
+                  }).join(", ")
+                ) : "—"}
+              </p>
             <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
             
 

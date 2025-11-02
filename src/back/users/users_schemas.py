@@ -59,6 +59,7 @@ class TaskUpdate(BaseModel):
     scheduled_at: Optional[datetime] = None
     location: Optional[str] = None
     contact_person_id: Optional[int] = None 
+    contact_person_phone: Optional[str] = None
     vehicle_info: Optional[str] = None
     comment: Optional[str] = None
     # client_price и montajnik_reward — не принимаем, только возвращаем
@@ -72,6 +73,7 @@ class TaskUpdate(BaseModel):
 
 class DraftIn(BaseModel):
     contact_person_id: Optional[int] = None  
+    contact_person_phone: Optional[str] = None
     vehicle_info: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     location: Optional[str] = None
@@ -104,6 +106,7 @@ class DraftOut(BaseModel):
 class PublishIn(BaseModel):
     draft_id: Optional[int] = None
     contact_person_id: Optional[int] = None  
+    contact_person_phone: Optional[str] = None
     vehicle_info: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     gos_number: Optional[str] = None
@@ -123,6 +126,7 @@ class TaskPatch(BaseModel):
     scheduled_at: Optional[datetime] = None
     location: Optional[str] = None
     contact_person_id: Optional[int] = None 
+    contact_person_phone: Optional[str] = None
     vehicle_info: Optional[str] = None
     comment: Optional[str] = None
     gos_number: Optional[str] = None    # client_price и montajnik_reward — не принимаем
@@ -153,6 +157,7 @@ class TaskHistoryItem(BaseModel):
 
     company_id: Optional[int] = None  
     contact_person_id: Optional[int] = None
+    contact_person_phone: Optional[str] = None
     vehicle_info: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     location: Optional[str] = None

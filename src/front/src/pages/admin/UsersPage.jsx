@@ -121,7 +121,7 @@ function UsersPage() {
             key={user.id}
             user={user}
             onDelete={handleDelete}
-            onEditRole={handleRoleChange} // ✅ Передаём userId и role
+            onEditRole={handleRoleChange} 
           />
         ))}
       </div>

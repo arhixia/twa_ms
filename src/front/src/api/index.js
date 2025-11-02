@@ -123,6 +123,10 @@ export async function getContactPersonsByCompany(companyId) {
   return (await api.get(`/logist/companies/${companyId}/contacts`)).data;
 }
 
+export async function getContactPersonPhone(contactPersonId) {
+  return (await api.get(`/logist/contact-persons/${contactPersonId}/phone`)).data;
+}
+
 
 export async function addNewCompany(payload) {
   // payload: { name: "Название компании" }
@@ -223,6 +227,9 @@ export async function getAdminCompaniesList() {
   return (await api.get("/admin/companies")).data;
 }
 
+export async function getAdminContactPersonPhone(contactPersonId) {
+  return (await api.get(`/admin/contact-persons/${contactPersonId}/phone`)).data;
+}
 
 export async function getAdminContactPersonsByCompany(companyId) {
   return (await api.get(`/admin/companies/${companyId}/contacts`)).data;
@@ -267,6 +274,10 @@ export async function getTechContactPersonsByCompany(companyId) {
   return (await api.get(`/tech_supp/companies/${companyId}/contacts`)).data;
 }
 
+
+export async function getTechContactPersonPhone(contactPersonId) {
+  return (await api.get(`/tech_supp/contact-persons/${contactPersonId}/phone`)).data;
+}
 
 // ---------- MONTAJNIK ---------- 
 
@@ -342,6 +353,10 @@ export async function fetchMontHistory() {
 
 export async function getMontCompaniesList() {
   return (await api.get("/montajnik/companies")).data;
+}
+
+export async function getMontContactPersonPhone(contactPersonId) {
+  return (await api.get(`/montajnik/contact-persons/${contactPersonId}/phone`)).data;
 }
 
 

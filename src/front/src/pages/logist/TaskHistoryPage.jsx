@@ -4,7 +4,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   fetchTaskFullHistory,
   getCompaniesList,
-  getContactPersonsByCompany, // ✅ Добавлен импорт
+  getContactPersonsByCompany,
+  getContactPersonPhone, // <--- Новый импорт
 } from "../../api";
 import "../../styles/LogistPage.css";
 
@@ -191,13 +192,15 @@ export default function TaskHistoryPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginTop: '4px' }}>
                     {/* ✅ Отображаем имена */}
                     <div><b>Компания:</b> {companyName}</div>
-                    {/* ✅ Используем специальный компонент для асинхронного имени контакта */}
+                    {/* ✅ Используем специальный компонент для асинхронного имени и телефона контакта */}
                     <ContactNameResolver
                       contactPersonId={h.contact_person_id}
                       companyId={h.company_id}
                       getContactPersonNameById={getContactPersonNameById}
+                      contactPersonPhone={h.contact_person_phone} // <--- Передаем телефон из истории
                     />
                     <div><b>ТС:</b> {h.vehicle_info || "—"}</div>
+                    {/* ===== НОВОЕ ПОЛЕ: Гос. номер ===== */}
                     <div><b>Гос. номер:</b> {h.gos_number || "—"}</div>
                     <div><b>Дата:</b> {h.scheduled_at ? new Date(h.scheduled_at).toLocaleString() : "—"}</div>
                     <div><b>Место:</b> {h.location || "—"}</div>
@@ -208,6 +211,29 @@ export default function TaskHistoryPage() {
                     <div><b>Награда монтажнику:</b> {h.montajnik_reward || "—"}</div>
                     <div><b>Фото обязательно:</b> {h.photo_required ? "Да" : "Нет"}</div>
                     <div><b>Тип назначения:</b> {h.assignment_type || "—"}</div>
+                    {/* ===== Оборудование (отображение) ===== */}
+                    <div style={{ gridColumn: '1 / -1' }}> {/* Занимает всю ширину */}
+                      <b>Оборудование:</b> {" "}
+                      {h.equipment_snapshot && h.equipment_snapshot.length > 0 ? (
+                        h.equipment_snapshot.map((e, idx) => {
+                          // Предполагаем, что в equipment_snapshot есть equipment_id, quantity, serial_number
+                          const eqName = /* ... нужно получить имя оборудования по equipment_id ... */ `ID ${e.equipment_id}`;
+                          const serial = e.serial_number ? ` (SN: ${e.serial_number})` : '';
+                          return `${eqName}${serial} x${e.quantity}`;
+                        }).join(", ")
+                      ) : "—"}
+                    </div>
+                    {/* ===== Виды работ (отображение) ===== */}
+                    <div style={{ gridColumn: '1 / -1' }}> {/* Занимает всю ширину */}
+                      <b>Виды работ:</b> {" "}
+                      {h.work_types_snapshot && h.work_types_snapshot.length > 0 ? (
+                        h.work_types_snapshot.map((wt) => {
+                          // Предполагаем, что в work_types_snapshot есть work_type_id, quantity
+                          const wtName = /* ... нужно получить имя типа работы по work_type_id ... */ `ID ${wt.work_type_id}`;
+                          return `${wtName} x${wt.quantity}`;
+                        }).join(", ")
+                      ) : "—"}
+                    </div>
                   </div>
                 </div>
               </li>
@@ -219,9 +245,10 @@ export default function TaskHistoryPage() {
   );
 }
 
-// ✅ Новый компонент для асинхронного разрешения имени контактного лица
-function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameById }) {
+// ✅ Новый компонент для асинхронного разрешения имени и телефона контактного лица
+function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameById, contactPersonPhone }) {
   const [contactPersonName, setContactPersonName] = useState("...");
+  const [resolvedPhone, setResolvedPhone] = useState(contactPersonPhone || null); // <--- Состояние для телефона
 
   useEffect(() => {
     let isCancelled = false; // Флаг для предотвращения установки состояния, если компонент размонтирован
@@ -229,6 +256,10 @@ function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameB
     async function resolveName() {
       if (!contactPersonId || !companyId) {
         setContactPersonName("—");
+        // Если контактное лицо или компания не указаны, сбрасываем телефон
+        if (!isCancelled) {
+            setResolvedPhone(null);
+        }
         return;
       }
 
@@ -238,10 +269,31 @@ function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameB
         if (!isCancelled) {
           setContactPersonName(name);
         }
+         // Если телефон не пришел из props, попробуем загрузить его
+        if (!contactPersonPhone) {
+            try {
+                const { phone } = await getContactPersonPhone(contactPersonId); // <--- Вызываем отдельный эндпоинт
+                if (!isCancelled) {
+                   setResolvedPhone(phone); // <--- Устанавливаем загруженный телефон
+                }
+            } catch (phoneError) {
+                console.error("Ошибка загрузки телефона контактного лица в истории:", phoneError);
+                if (!isCancelled) {
+                    setResolvedPhone(null); // <--- Сброс при ошибке
+                }
+            }
+        } else {
+            // Если телефон пришел из props, используем его
+            if (!isCancelled) {
+                setResolvedPhone(contactPersonPhone);
+            }
+        }
       } catch (error) {
         console.error("Ошибка при разрешении имени контакта:", error);
         if (!isCancelled) {
           setContactPersonName(`Контакт ${contactPersonId}`);
+          // Также сбрасываем телефон при ошибке имени
+          setResolvedPhone(null);
         }
       }
     }
@@ -252,7 +304,18 @@ function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameB
     return () => {
       isCancelled = true;
     };
-  }, [contactPersonId, companyId, getContactPersonNameById]); // Перезапускаем, если ID или функция изменятся
+  }, [contactPersonId, companyId, getContactPersonNameById, contactPersonPhone]); // Перезапускаем, если ID, функция или телефон из props изменятся
 
-  return <div><b>Контакт:</b> {contactPersonName}</div>;
+  return (
+   <div>
+      <b>Контакт:</b> {contactPersonName}
+      {/* ===== НОВОЕ ПОЛЕ: Телефон контактного лица (в истории) ===== */}
+      {resolvedPhone && ( // <--- Отображаем телефон, если он есть
+        <span>
+          {" "}
+          (<a href={`tel:${resolvedPhone}`} style={{ color: '#1e88e5', textDecoration: 'none' }}>{resolvedPhone}</a>) {/* <--- Ссылка для вызова */}
+        </span>
+      )}
+    </div>
+  );
 }
