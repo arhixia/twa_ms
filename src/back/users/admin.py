@@ -9,7 +9,7 @@ from back.db.database import get_db
 from back.db.models import AssignmentType, ClientCompany, ContactPerson, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
 from back.auth.auth import get_current_user,create_user as auth_create_user
 from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
-from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskPatch, TaskUpdate, require_roles
+from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles
 from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -586,6 +586,36 @@ async def admin_delete_task(
 
     return {"detail": "Задача успешно удалена"}
 
+
+@router.get("/tasks/{task_id}/history", response_model=List[TaskHistoryItem], dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_get_task_full_history(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user) # Для проверки существования задачи и прав (упрощенно)
+):
+    """
+    Получить полную историю изменений задачи.
+    """
+    # 1. Проверить существование задачи (можно добавить проверку прав)
+    res = await db.execute(select(Task).where(Task.id == task_id))
+    task = res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    # 2. Получить историю, отсортированную по времени
+    res = await db.execute(
+        select(TaskHistory)
+        .where(TaskHistory.task_id == task_id)
+        .order_by(TaskHistory.timestamp.asc()) # От самых старых к новым
+        # .options(selectinload(TaskHistory.user)) # Если нужно имя пользователя
+    )
+    history_records = res.scalars().all()
+
+    # 3. Форматируем для ответа
+    out = []
+    for h in history_records:
+        out.append(TaskHistoryItem.model_validate(h)) # Pydantic сам преобразует поля
+    return out
 
 
 @router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])

@@ -156,14 +156,11 @@ export default function TaskDetailPage() {
 
       setForm(initialForm);
 
-      // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
-      // Если contact_person_id есть, но contact_person_phone нет в данных задачи, загрузим его
+
       if (t.contact_person_id && !t.contact_person_phone) {
          try {
             const { phone } = await getContactPersonPhone(t.contact_person_id);
             setContactPersonPhone(phone); // Устанавливаем телефон для просмотра
-            // Опционально: можно обновить и в task
-            // t.contact_person_phone = phone;
          } catch (err) {
             console.error("Ошибка загрузки телефона при инициализации задачи:", err);
             setContactPersonPhone(null); // Сброс при ошибке
@@ -174,16 +171,27 @@ export default function TaskDetailPage() {
       }
 
       if (initialForm.company_id) {
-              try {
-                const contactsForDraftCompany = await getContactPersonsByCompany(initialForm.company_id);
-                setContactPersons(contactsForDraftCompany || []);
-              } catch (err) {
-                console.error("Ошибка загрузки контактных лиц при инициализации черновика:", err);
-                setContactPersons([]);
-              }
-            } else {
-              setContactPersons([]);
-            }
+  try {
+    const contactsForDraftCompany = await getContactPersonsByCompany(initialForm.company_id);
+    setContactPersons(contactsForDraftCompany || []);
+
+    // ✅ Устанавливаем уже выбранное контактное лицо
+    if (initialForm.contact_person_id) {
+      setField("contact_person_id", initialForm.contact_person_id);
+      // При желании, можно сразу подгрузить телефон
+      if (!initialForm.contact_person_phone) {
+        const { phone } = await getContactPersonPhone(initialForm.contact_person_id);
+        setField("contact_person_phone", phone);
+        setContactPersonPhone(phone);
+      }
+    }
+  } catch (err) {
+    console.error("Ошибка загрузки контактных лиц при инициализации задачи:", err);
+    setContactPersons([]);
+  }
+} else {
+  setContactPersons([]);
+}
       // --- КОНЕЦ НОВОГО БЛОКА ---
 
     } catch (err) {

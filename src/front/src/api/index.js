@@ -202,6 +202,11 @@ export async function adminChangeUserRole(userId, role) {
 }
 
 
+export async function adminfetchTaskFullHistory(taskId) {
+  return (await api.get(`/admin/tasks/${taskId}/history`)).data;
+}
+
+
 // Изменить задачу
 export async function adminUpdateTask(taskId, payload) {
   return (await api.patch(`/admin/tasks/${taskId}`, payload)).data;

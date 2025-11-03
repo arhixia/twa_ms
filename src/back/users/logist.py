@@ -726,6 +726,7 @@ async def edit_task(
     current_user=Depends(get_current_user),
 ):
     logger.info(f"edit_task вызван для задачи ID: {task_id}")
+
     # --- Проверки роли и существования задачи ---
     if getattr(current_user, "role", None) not in (Role.logist, Role.admin):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -923,24 +924,57 @@ async def edit_task(
 
     try:
         # --- Логируем изменения в историю ---
-        # Обновляем связи в объекте задачи в сессии, чтобы получить новые значения
-        await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person'])
-        # Получаем *новые* значения связей
-        # ✅ Обновляем получение новых данных с учетом quantity
-        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
-        # ✅ Обновляем получение новых данных оборудования с serial_number и quantity
+        # Обновляем *основные* поля задачи и связи, которые были изменены напрямую
+        # refresh после обновления связей, но до получения новых значений для истории
+        # await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person']) # <- Это может быть недостаточно
+
+        # Вместо refresh, выполним явные запросы для получения полных данных связей
+        # 1. Получить полные данные по работам (включая work_type.name)
+        res_works = await db.execute(
+            select(TaskWork)
+            .options(selectinload(TaskWork.work_type)) # Загрузить work_type для каждой TaskWork
+            .where(TaskWork.task_id == task.id)
+        )
+        full_works_list = res_works.scalars().all()
+        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in full_works_list] # <- Теперь .name доступно синхронно
+
+        # 2. Получить полные данные по оборудованию (включая equipment.name)
+        res_equip = await db.execute(
+            select(TaskEquipment)
+            .options(selectinload(TaskEquipment.equipment)) # Загрузить equipment для каждого TaskEquipment
+            .where(TaskEquipment.task_id == task.id)
+        )
+        full_equip_list = res_equip.scalars().all()
         new_equipment_with_sn_qty = [
-            (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
+            (te.equipment.name, te.serial_number, te.quantity) for te in full_equip_list # <- Теперь .name доступно синхронно
         ]
-        new_contact_person_name = task.contact_person.name if task.contact_person else None
-        new_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+
+        # 3. Получить обновленные данные по контактному лицу и компании
+        # Так как contact_person_id и company_id были установлены вручную,
+        # и, возможно, task.contact_person и task.company обновлены в сессии,
+        # мы можем получить их напрямую, но если связь lazy, это снова вызовет ошибку.
+        # Лучше получить через отдельный запрос, используя новое task.contact_person_id
+        new_contact_person_name = None
+        new_company_name = None
+        if task.contact_person_id: # Если контактное лицо установлено
+            res_cp = await db.execute(
+                select(ContactPerson)
+                .options(selectinload(ContactPerson.company)) # Загрузить компанию для контактного лица
+                .where(ContactPerson.id == task.contact_person_id)
+            )
+            new_contact_person_obj = res_cp.scalars().first()
+            if new_contact_person_obj: # Убедимся, что объект найден
+                new_contact_person_name = new_contact_person_obj.name
+                new_company_name = new_contact_person_obj.company.name if new_contact_person_obj.company else None
+        # Если task.contact_person_id == None, то и имена останутся None
+
         logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment_with_sn_qty}, work_types={new_works_with_qty}, contact_person={new_contact_person_name}, company={new_company_name}")
 
         # Собираем *все* изменения, включая equipment и work_types
         all_changes = []
         for f, o, n in changed:
             # ✅ Обрабатываем equipment и work_types отдельно
-            if f not in ["equipment", "work_types", "contact_person_id", "company_id"]:
+            if f not in ["equipment", "work_types", "contact_person_id", "company_id", "contact_person_phone"]:
                 all_changes.append({"field": f, "old": str(o), "new": str(n)})
 
         # ✅ Проверяем и добавляем изменения equipment
@@ -968,10 +1002,10 @@ async def edit_task(
         if old_cp_co != new_cp_co:
             all_changes.append({"field": "contact_person", "old": old_cp_co, "new": new_cp_co})
         
+        # Обработка изменения contact_person_phone отдельно, если оно произошло
         cp_phone_change = next((item for item in changed if item[0] == "contact_person_phone"), None)
         if cp_phone_change:
             all_changes.append({"field": "contact_person_phone", "old": str(cp_phone_change[1]), "new": str(cp_phone_change[2])})
-    
 
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
         # Создаём комментарий с *всеми* изменениями
@@ -1000,10 +1034,10 @@ async def edit_task(
             gos_number = task.gos_number
         )
         db.add(hist)
-        await db.flush()
+        await db.flush() # flush после добавления истории
         logger.info("Запись в TaskHistory добавлена и зафлашена")
 
-        await db.commit()
+        await db.commit() # теперь коммитим все изменения
         logger.info("Транзакция успешно зафиксирована")
     except Exception as e:
         logger.exception("Failed to update task: %s", e) # Убедитесь, что logger импортирован
@@ -1034,6 +1068,7 @@ async def edit_task(
             background_tasks.add_task("back.utils.notify.notify_user", task.assigned_user_id, f"Задача #{task.id} обновлена", task.id)
 
     return {"detail": "Updated"}
+
 
 
 
@@ -1308,14 +1343,16 @@ async def task_detail(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
+    # Используем Task вместо TaskView
     res = await db.execute(
         select(Task)
         .options(
-            selectinload(Task.equipment_links),
-            selectinload(Task.works),
-            selectinload(Task.history),
-            selectinload(Task.reports),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type),
+            selectinload(Task.history).selectinload(TaskHistory.user), # Загрузим и пользователя истории, если нужно
+            selectinload(Task.reports), # ✅ УБРАНО .selectinload(TaskReport.user)
+            # Загружаем контактное лицо и компанию для получения company_id и contact_person_id
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
         )
         .where(Task.id == task_id)
     )
@@ -1323,16 +1360,16 @@ async def task_detail(
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
-
-    # --- equipment и work_types ---
+    # --- equipment ---
     equipment = [
-        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number} # <--- Добавлен serial_number
+        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number}
         for te in (task.equipment_links or [])
     ] or None
 
+    # --- work_types ---
     work_types = [
         {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
-        for tw in (task.works or []) 
+        for tw in (task.works or [])
     ] or None
 
     # --- history ---
@@ -1365,16 +1402,22 @@ async def task_detail(
         })
 
     # --- company и contact_person ---
+    # Извлекаем ID и имена из связанных объектов
+    company_id = task.contact_person.company.id if task.contact_person and task.contact_person.company else None
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+    contact_person_id = task.contact_person.id if task.contact_person else None
     contact_person_name = task.contact_person.name if task.contact_person else None
 
+    # Формируем ответ, включая company_id и contact_person_id
     return {
         "id": task.id,
-        "company_name": company_name,  
-        "contact_person_name": contact_person_name,  
+        "company_id": company_id,  # ✅ Добавлено
+        "contact_person_id": contact_person_id,  # ✅ Добавлено
+        "company_name": company_name,
+        "contact_person_name": contact_person_name,
         "contact_person_phone": task.contact_person_phone,
         "vehicle_info": task.vehicle_info or None,
-        "gos_number":task.gos_number or None,
+        "gos_number": task.gos_number or None,
         "location": task.location or None,
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
         "status": task.status.value if task.status else None,
@@ -1388,6 +1431,8 @@ async def task_detail(
         "history": history,
         "reports": reports or None
     }
+
+#редактирование лоигврование 
 
 
 

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['cigarettes-judge-category-sunday.trycloudflare.com']
+    allowedHosts: ['rogers-screening-dolls-county.trycloudflare.com']
   },
 })
 

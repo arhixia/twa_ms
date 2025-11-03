@@ -91,8 +91,8 @@ function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, ta
 
 // --- Новый компонент: Модальное окно создания отчёта ---
 function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSubmitSuccess }) {
-  // taskWorkTypes - это массив ID, назначенных задаче
-  // allWorkTypes - это полный список WorkType из справочника
+  // taskWorkTypes - это массив ID, назначенных задаче (например, [3])
+  // allWorkTypes - это полный список WorkType из справочника (например, [{id: 1, name: "A"}, {id: 2, name: "B"}, ...])
   const [selectedWorkTypes, setSelectedWorkTypes] = useState([]); // Массив ID выбранных для отчёта
   const [comment, setComment] = useState("");
   const [photos, setPhotos] = useState([]); // Массив объектов файлов/ключей
@@ -156,7 +156,7 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
     }
   };
 
-  // Фильтруем allWorkTypes, оставляя только те, что назначены задаче
+  // Фильтруем allWorkTypes, оставляя только те, чей id есть в taskWorkTypes (массиве ID)
   const relevantWorkTypes = allWorkTypes.filter(wt => taskWorkTypes.includes(wt.id));
 
   return (
@@ -329,7 +329,8 @@ export default function MontajnikTaskDetailPage() {
 
       // Извлекаем ID для редактирования, как в TaskDetailPage
       t.equipment_ids = t.equipment.map((e) => e.equipment_id);
-      t.work_types_ids = t.work_types;
+      // t.work_types_ids = t.work_types; // <-- НЕПРАВИЛЬНО
+      t.work_types_ids = t.work_types.map(wt => wt.work_type_id); // <-- ПРАВИЛЬНО: извлекаем work_type_id
 
       setTask(t);
       // При загрузке задачи, устанавливаем form в состояние задачи (включая *_ids)
@@ -390,7 +391,8 @@ export default function MontajnikTaskDetailPage() {
     );
 
   // Получаем ID назначенных работ для задачи
-  const taskWorkTypeIds = (task.work_types || []).map(wt => wt); // task.work_types уже массив ID
+  // const taskWorkTypeIds = (task.work_types || []).map(wt => wt); // <-- НЕПРАВИЛЬНО: извлекает объекты
+  const taskWorkTypeIds = (task?.work_types || []).map(wt => wt.work_type_id); // <-- ПРАВИЛЬНО: извлекает work_type_id
 
   return (
     <div className="logist-main">
@@ -602,3 +604,6 @@ export default function MontajnikTaskDetailPage() {
     </div>
   );
 }
+
+
+//личный кабинет монтажника

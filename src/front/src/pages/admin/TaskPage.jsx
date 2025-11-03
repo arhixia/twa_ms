@@ -2,12 +2,12 @@
 import React, { useState, useEffect } from 'react';
 import { adminListTasks } from '../../api';
 import TaskCard from '../../components/TaskCard';
-import TaskDetailModal from '../../components/TaskDetailModal'; // ✅ Новый компонент
+import { useNavigate } from 'react-router-dom'; // Импортируем navigate
 
 function AdminTasksPage() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const navigate = useNavigate(); // Используем navigate для перехода
 
   const fetchTasks = async () => {
     try {
@@ -26,16 +26,9 @@ function AdminTasksPage() {
   }, []);
 
   const openTaskDetail = (task) => {
-    setSelectedTaskId(task.id);
+    navigate(`/admin/tasks/${task.id}`); // Перенаправляем на страницу деталей задачи
   };
 
-  const handleTaskUpdated = () => {
-    fetchTasks(); // обновить список задач
-  };
-
-  const handleTaskDeleted = (deletedId) => {
-    setTasks(tasks.filter(t => t.id !== deletedId));
-  };
 
   if (loading) return <div className="empty">Загрузка задач...</div>;
 
@@ -49,18 +42,10 @@ function AdminTasksPage() {
           <TaskCard
             key={task.id}
             task={task}
-            onClick={() => openTaskDetail(task)} // ✅ при клике открываем модалку
+            onClick={() => openTaskDetail(task)} // При клике переходим на страницу задачи
           />
         ))}
       </div>
-      {selectedTaskId && (
-        <TaskDetailModal
-          taskId={selectedTaskId}
-          onClose={() => setSelectedTaskId(null)}
-          onTaskUpdated={handleTaskUpdated}
-          onTaskDeleted={handleTaskDeleted}
-        />
-      )}
     </div>
   );
 }

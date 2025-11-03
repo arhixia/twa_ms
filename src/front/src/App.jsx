@@ -23,7 +23,7 @@ import AdminPage from "./pages/admin/AdminPage";
 import UsersPage from "./pages/admin/UsersPage";
 import AdminTasksPage from "./pages/admin/TaskPage";
 import AdminTaskDetailPage from "./pages/admin/AdminTaskDetailPage";
-
+import AdminTaskHistoryPage from "./pages/admin/AdminTaskHistoryPage";
 
 import MontajnikPage from "./pages/montajnik/MontajnikPage"; // <- Новый импорт
 import AvailableTasksPage from "./pages/montajnik/AvailableTasksPage"; 
@@ -66,7 +66,7 @@ export default function App() {
           <Route path="users" element={<UsersPage />} />
           <Route path="tasks" element={<AdminTasksPage />} />
           <Route path="tasks/:id" element={<AdminTaskDetailPage />} />
-
+          <Route path="tasks/:id/history" element={<AdminTaskHistoryPage />} />
         </Route>
       )}
 
