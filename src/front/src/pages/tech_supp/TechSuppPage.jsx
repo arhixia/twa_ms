@@ -28,7 +28,7 @@ export default function TechSuppPage() {
 
       <nav className="logist-nav">
         <NavLink to="/tech_supp/tasks/active">Активные заявки</NavLink>
-        <NavLink to="/tech_supp/tasks/history">История</NavLink>
+        <NavLink to="/tech_supp/me">Личный кабинет</NavLink>
         {/* Добавьте другие ссылки, если нужно */}
       </nav>
 

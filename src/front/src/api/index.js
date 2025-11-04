@@ -128,18 +128,24 @@ export async function getContactPersonPhone(contactPersonId) {
 }
 
 
-export async function addNewCompany(payload) {
-  // payload: { name: "Название компании" }
-  return (await api.post("/logist/companies", payload)).data;
+export async function fetchLogistProfile() {
+  return (await api.get("/logist/me")).data;
 }
 
 
-export async function addContactPersonToCompany(companyId, payload) {
-  // payload: { name: "ФИО контактного лица" }
+export async function logistCompletedTaskDetail(taskId) {
+  return (await api.get(`/logist/completed-tasks/${taskId}`)).data;
+}
+
+// Добавить компанию
+export async function addCompany(payload) {
+  return (await api.post(`/logist/companies`, payload)).data;
+}
+
+// Добавить контактное лицо
+export async function addContactPerson(companyId, payload) {
   return (await api.post(`/logist/companies/${companyId}/contacts`, payload)).data;
 }
-
-
 
 
 
@@ -241,6 +247,21 @@ export async function getAdminContactPersonsByCompany(companyId) {
 }
 
 
+export async function adminAddCompany(payload) {
+  return (await api.post(`/admin/companies`, payload)).data; // Используем админский эндпоинт
+}
+
+// Добавить контактное лицо (админ)
+export async function adminAddContactPerson(companyId, payload) {
+  return (await api.post(`/admin/companies/${companyId}/contacts`, payload)).data; // Используем админский эндпоинт
+}
+
+
+export async function fetchAdminProfile() { // <- НОВОЕ: Экспортируем новый API метод
+  return (await api.get(`/admin/me`)).data; // <- Используем новый эндпоинт
+}
+
+
 // ---------- TECH_SUPP ----------
 
 
@@ -283,6 +304,17 @@ export async function getTechContactPersonsByCompany(companyId) {
 export async function getTechContactPersonPhone(contactPersonId) {
   return (await api.get(`/tech_supp/contact-persons/${contactPersonId}/phone`)).data;
 }
+
+
+export async function techSuppProfile() {
+  return (await api.get(`/tech_supp/me`)).data;
+}
+
+
+export async function techSuppCompletedTaskDetail(taskId) {
+  return (await api.get(`/tech_supp/completed-tasks/${taskId}`)).data;
+}
+
 
 // ---------- MONTAJNIK ---------- 
 
@@ -369,3 +401,7 @@ export async function getMontContactPersonsByCompany(companyId) {
   return (await api.get(`/montajnik/companies/${companyId}/contacts`)).data;
 }
 
+
+export async function fetchMontCompletedTaskDetail(id) {
+  return (await api.get(`/montajnik/completed-tasks/${id}`)).data;
+}

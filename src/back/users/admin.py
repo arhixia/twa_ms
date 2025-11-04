@@ -28,10 +28,36 @@ router = APIRouter()
 
 
 
+def _ensure_admin_or_403(user: User):
+    if getattr(user, "role", None) != Role.admin:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    
+
+@router.get("/me")
+async def admin_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Личный кабинет администратора:
+    - ID, имя, фамилия, роль
+    """
+    _ensure_admin_or_403(current_user) # Убедимся, что пользователь - админ
+
+    return {
+        "id": current_user.id,
+        "name": current_user.name,
+        "lastname": current_user.lastname,
+        "role": current_user.role.value if current_user.role else None,
+        # Дополнительные поля можно добавить сюда при необходимости
+    }
+
+
+
+
 async def require_admin(current_user:User=Depends(get_current_user)) -> User:
     if current_user.role != RoleEnum.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Недастаточно прав пользователя")
     return current_user
+
+
 
 @router.get("/users", response_model=List[UserResponse], summary="Список всех пользователей (только админ)")
 async def admin_list_users(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
@@ -439,7 +465,7 @@ async def admin_list_tasks(
     # Загружаем задачи с контактным лицом и компанией
     q = await db.execute(
         select(Task)
-        .where(Task.is_draft != True)
+        .where(Task.is_draft != True,Task.status != TaskStatus.completed)
         .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем контактное лицо и компанию
     )
     tasks = q.scalars().all()
@@ -564,6 +590,7 @@ async def admin_get_task_by_id(
         "reports": reports or None
     }
 
+
 @router.delete(
     "/tasks/{task_id}",
     summary="Удалить задачу (только админ)",
@@ -649,3 +676,32 @@ async def admin_get_contact_person_phone(
         raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
 
     return {"phone": phone_number}
+
+
+@router.post("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_add_company(payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    name = payload.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Название компании обязательно")
+    company = ClientCompany(name=name)
+    db.add(company)
+    await db.commit()
+    await db.refresh(company)
+    return {"id": company.id, "name": company.name}
+
+
+@router.post("/companies/{company_id}/contacts", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_add_contact_person(company_id: int, payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
+    name = payload.get("name")
+    phone = payload.get("phone") 
+    if not name:
+        raise HTTPException(status_code=400, detail="ФИО контактного лица обязательно")
+    res = await db.execute(select(ClientCompany).where(ClientCompany.id == company_id))
+    company = res.scalars().first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+    contact = ContactPerson(company_id=company_id, name=name, phone=phone) 
+    db.add(contact)
+    await db.commit()
+    await db.refresh(contact)
+    return {"id": contact.id, "name": contact.name, "phone": contact.phone} # 

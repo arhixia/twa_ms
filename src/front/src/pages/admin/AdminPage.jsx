@@ -30,6 +30,7 @@ export default function AdminPage() {
       <nav className="logist-nav">
         <NavLink to="/admin/users">Пользователи</NavLink>
         <NavLink to="/admin/tasks">Задачи</NavLink>
+         <NavLink to="/admin/me">Личный кабинет</NavLink>
       </nav>
 
       {/* Контент страницы (UsersPage, TasksPage и т.д.) */}

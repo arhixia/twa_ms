@@ -43,6 +43,11 @@ S3_PUBLIC_URL = S3_CLIENT.endpoint_url
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+def _ensure_logist_or_403(user: User):
+    if getattr(user, "role", None) != Role.logist:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    
+
 
 def _parse_datetime(val):
     if val is None:
@@ -1513,4 +1518,139 @@ async def get_contact_person_phone(
 
     return {"phone": phone_number}
 
-#пофиксить редактирование задачи
+
+@router.get("/me")
+async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Личный кабинет логиста:
+    - имя, фамилия, роль
+    - история выполненных задач (где логист был создателем или участвовал в истории)
+    """
+    _ensure_logist_or_403(current_user)
+
+    # Загружаем задачи и *предварительно* загружаем связанные объекты company и contact_person
+    q = select(Task).options(
+        selectinload(Task.company), # ✅ Загружаем компанию
+        selectinload(Task.contact_person) # ✅ Загружаем контактное лицо
+    ).where(
+        Task.created_by == current_user.id,
+        Task.status == TaskStatus.completed
+    )
+    res = await db.execute(q)
+    completed = res.scalars().all()
+
+    total = sum([float(t.client_price or 0) for t in completed])
+
+    history = []
+    for t in completed: # Теперь обращение к t.company и t.contact_person НЕ вызывает ленивую загрузку
+        history.append({
+            "id": t.id,
+            # Теперь t.company и t.contact_person уже загружены, обращение к .name безопасно
+            "client": t.company.name if t.company else "—", # Имя компании
+            "contact_person": t.contact_person.name if t.contact_person else "—", # Имя контактного лица
+            "vehicle_info": t.vehicle_info,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "reward": str(t.client_price) if t.client_price is not None else None,
+        })
+
+    return {
+        "id": current_user.id,
+        "name": current_user.name,
+        "lastname": current_user.lastname,
+        "role": current_user.role.value if current_user.role else None,
+        "completed_count": len(completed),
+        "total_earned": str(round(total, 2)),
+        "history": history,
+    }
+
+
+@router.get("/completed-tasks/{task_id}")
+async def logist_completed_task_detail(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    _ensure_logist_or_403(current_user) # Проверяем, что пользователь - логист
+
+    res = await db.execute(
+        select(Task)
+        .options(
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type),
+            selectinload(Task.history),
+            selectinload(Task.reports),
+            selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+        )
+        .where(
+            Task.id == task_id,
+            Task.created_by == current_user.id, # ✅ Убедимся, что задача создана текущим логистом
+            Task.status == TaskStatus.completed      # ✅ И что она завершена
+        )
+    )
+    task = res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена или недоступна")
+
+    # --- equipment и work_types ---
+    equipment = [
+        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number}
+        for te in (task.equipment_links or [])
+    ] or None
+
+    work_types = [
+        {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
+        for tw in (task.works or [])
+    ] or None
+
+    # --- history ---
+    history = [
+        {
+            "action": h.action.value if h.action else None,
+            "user_id": h.user_id,
+            "comment": h.comment,
+            "ts": str(h.timestamp)
+        }
+        for h in (task.history or [])
+    ] or None
+
+    # --- reports с фото ---
+    reports = []
+    for r in (task.reports or []):
+        photos = []
+        if r.photos_json:
+            try:
+                keys = json.loads(r.photos_json)
+                photos = keys # Возвращаем список storage_key
+            except Exception:
+                photos = []
+        reports.append({
+            "id": r.id,
+            "text": r.text,
+            "approval_logist": r.approval_logist.value if r.approval_logist else None,
+            "approval_tech": r.approval_tech.value if r.approval_tech else None,
+            "photos": photos or None
+        })
+
+    company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+    contact_person_name = task.contact_person.name if task.contact_person else None
+
+    return {
+        "id": task.id,
+        "company_name": company_name,
+        "contact_person_name": contact_person_name,
+        "contact_person_phone": task.contact_person_phone,
+        "vehicle_info": task.vehicle_info or None,
+        "gos_number": task.gos_number or None,
+        "location": task.location or None,
+        "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
+        "status": task.status.value if task.status else None,
+        "assigned_user_id": task.assigned_user_id or None,
+        "comment": task.comment or None,
+        "photo_required": task.photo_required,
+        "client_price": str(task.client_price) if task.client_price else None,
+        "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
+        "equipment": equipment,
+        "work_types": work_types,
+        "history": history,
+        "reports": reports or None
+    }

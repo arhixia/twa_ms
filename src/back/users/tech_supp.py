@@ -33,6 +33,15 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+#страничка редактирвоания админа
+
+
+def _ensure_tech_supp_or_403(user: User):
+    if getattr(user, "role", None) != Role.tech_supp:
+        raise HTTPException(status_code=403, detail="Недостаточно прав")
+    
+
+
 def _now_utc():
     return datetime.now(timezone.utc)
 
@@ -417,3 +426,169 @@ async def tech_get_contact_person_phone(
         raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
 
     return {"phone": phone_number}
+
+
+
+@router.get("/me")
+async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """
+    Личный кабинет тех.спеца:
+    - имя, фамилия, роль
+    - история задач, где тех.спец участвовал (например, проверял отчёты)
+    """
+    _ensure_tech_supp_or_403(current_user)
+
+    # Задачи, где тех.спец проверял отчёты (approval_tech)
+    # Получаем ID отчётов, которые проверял текущий тех.спец
+    report_res = await db.execute(
+        select(TaskReport.task_id).where(TaskReport.approval_tech != ReportApproval.waiting) # Не "ожидает", т.е. проверен
+    )
+    checked_task_ids = [row[0] for row in report_res.fetchall() if row[0] is not None]
+
+    # Получаем задачи по этим ID, включая связанные объекты
+    if checked_task_ids:
+        task_res = await db.execute(
+            select(Task).options(
+                selectinload(Task.company),
+                selectinload(Task.contact_person),
+                selectinload(Task.reports.and_(TaskReport.approval_tech != ReportApproval.waiting)) # Опционально: только отчёты, проверенные техспецом
+            ).where(
+                Task.id.in_(checked_task_ids),
+                Task.status == TaskStatus.completed # Только завершённые
+            )
+        )
+        completed = task_res.scalars().all()
+    else:
+        completed = []
+
+    # Сумма цен клиента по выполненным задачам (где участвовал тех.спец)
+    total = sum([float(t.client_price or 0) for t in completed])
+
+    history = []
+    for t in completed:
+        # Найдём отчёты, проверенные тех.спецом (если загружены)
+        # Для простоты возьмём любое упоминание в отчётах или просто факт участия
+        # Можно уточнить логику: например, брать только задачи, где хотя бы один отчёт был одобрен/отклонён тех.спецом
+        # Пока просто добавляем задачу, если она в списке checked_task_ids
+        history.append({
+            "id": t.id,
+            "client": t.company.name if t.company else "—", # Имя компании
+            "contact_person": t.contact_person.name if t.contact_person else "—", # Имя контактного лица
+            "vehicle_info": t.vehicle_info,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "reward": str(t.client_price) if t.client_price is not None else None, # Цена клиента как "награда"
+        })
+
+    return {
+        "id": current_user.id,
+        "name": current_user.name,
+        "lastname": current_user.lastname,
+        "role": current_user.role.value if current_user.role else None,
+        "completed_count": len(completed),
+        "total_earned": str(round(total, 2)),
+        "history": history,
+    }
+
+
+# --- НОВЫЙ ЭНДПОИНТ: Детали завершённой задачи для тех.спеца ---
+@router.get("/completed-tasks/{task_id}")
+async def tech_supp_completed_task_detail(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    _ensure_tech_supp_or_403(current_user) # Проверяем, что пользователь - тех.спец
+
+    report_res = await db.execute(
+        select(TaskReport.task_id).where(
+            TaskReport.task_id == task_id,
+            TaskReport.approval_tech != ReportApproval.waiting # Не "ожидает", т.е. проверен
+        )
+    )
+    checked_task_ids = [row[0] for row in report_res.fetchall() if row[0] is not None]
+
+    if not checked_task_ids: # Если нет отчётов, проверенных тех.спецом, задача недоступна
+        raise HTTPException(status_code=404, detail="Задача не найдена или недоступна (нет проверенных отчётов)")
+
+    # Теперь загружаем саму задачу
+    res = await db.execute(
+        select(Task)
+        .options(
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type),
+            selectinload(Task.history),
+            selectinload(Task.reports), # Загружаем отчёты
+            selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+        )
+        .where(
+            Task.id == task_id,
+            Task.status == TaskStatus.completed      # ✅ И что она завершена
+        )
+    )
+    task = res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена или недоступна")
+
+    # --- equipment и work_types ---
+    equipment = [
+        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number}
+        for te in (task.equipment_links or [])
+    ] or None
+
+    work_types = [
+        {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
+        for tw in (task.works or [])
+    ] or None
+
+    # --- history ---
+    history = [
+        {
+            "action": h.action.value if h.action else None,
+            "user_id": h.user_id,
+            "comment": h.comment,
+            "ts": str(h.timestamp)
+        }
+        for h in (task.history or [])
+    ] or None
+
+    # --- reports с фото ---
+    reports = []
+    for r in (task.reports or []):
+        photos = []
+        if r.photos_json:
+            try:
+                keys = json.loads(r.photos_json)
+                photos = keys # Возвращаем список storage_key
+            except Exception:
+                photos = []
+        reports.append({
+            "id": r.id,
+            "text": r.text,
+            "approval_logist": r.approval_logist.value if r.approval_logist else None,
+            "approval_tech": r.approval_tech.value if r.approval_tech else None,
+            "photos": photos or None
+        })
+
+    company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+    contact_person_name = task.contact_person.name if task.contact_person else None
+
+    return {
+        "id": task.id,
+        "company_name": company_name,
+        "contact_person_name": contact_person_name,
+        "contact_person_phone": task.contact_person_phone,
+        "vehicle_info": task.vehicle_info or None,
+        "gos_number": task.gos_number or None,
+        "location": task.location or None,
+        "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
+        "status": task.status.value if task.status else None,
+        "assigned_user_id": task.assigned_user_id or None,
+        "comment": task.comment or None,
+        "photo_required": task.photo_required,
+        "client_price": str(task.client_price) if task.client_price else None,
+        "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
+        "equipment": equipment,
+        "work_types": work_types,
+        "history": history,
+        "reports": reports or None
+    }

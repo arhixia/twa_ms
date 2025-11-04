@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['rogers-screening-dolls-county.trycloudflare.com']
+    allowedHosts: ['tue-ears-metres-solve.trycloudflare.com']
   },
 })
 
