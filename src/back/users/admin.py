@@ -13,7 +13,7 @@ from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryIt
 from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from typing import Any, Dict, Optional
+from typing import Any, Counter, Dict, Optional
 from sqlalchemy.orm import selectinload
 
 import logging
@@ -312,7 +312,7 @@ async def admin_update_task(
 
     if work_types_data is not None:
          # Подсчитываем количество для каждого типа работ
-         from collections import Counter
+         # from collections import Counter # Уже импортирован выше
          work_type_counts = Counter(work_types_data)
          
          # 1. Удаляем все старые записи TaskWork
@@ -341,17 +341,50 @@ async def admin_update_task(
 
     try:
         # --- Логируем изменения в историю ---
-        # Обновляем связи в объекте задачи в сессии, чтобы получить новые значения
-        await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person'])
-        # Получаем *новые* значения связей
-        # ✅ Обновляем получение новых данных с учетом quantity
-        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
-        # ✅ Обновляем получение новых данных оборудования с serial_number и quantity
+        # Обновляем *основные* поля задачи и связи, которые были изменены напрямую
+        # refresh после обновления связей, но до получения новых значений для истории
+        # await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person']) # <- Это может быть недостаточно
+
+        # Вместо refresh, выполним явные запросы для получения полных данных связей
+        # 1. Получить полные данные по работам (включая work_type.name)
+        res_works = await db.execute(
+            select(TaskWork)
+            .options(selectinload(TaskWork.work_type)) # Загрузить work_type для каждой TaskWork
+            .where(TaskWork.task_id == task.id)
+        )
+        full_works_list = res_works.scalars().all()
+        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in full_works_list] # <- Теперь .name доступно синхронно
+
+        # 2. Получить полные данные по оборудованию (включая equipment.name)
+        res_equip = await db.execute(
+            select(TaskEquipment)
+            .options(selectinload(TaskEquipment.equipment)) # Загрузить equipment для каждого TaskEquipment
+            .where(TaskEquipment.task_id == task.id)
+        )
+        full_equip_list = res_equip.scalars().all()
         new_equipment_with_sn_qty = [
-            (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
+            (te.equipment.name, te.serial_number, te.quantity) for te in full_equip_list # <- Теперь .name доступно синхронно
         ]
-        new_contact_person_name = task.contact_person.name if task.contact_person else None
-        new_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+
+        # 3. Получить обновленные данные по контактному лицу и компании
+        # Так как contact_person_id и company_id были установлены вручную,
+        # и, возможно, task.contact_person и task.company обновлены в сессии,
+        # мы можем получить их напрямую, но если связь lazy, это снова вызовет ошибку.
+        # Лучше получить через отдельный запрос, используя новое task.contact_person_id
+        new_contact_person_name = None
+        new_company_name = None
+        if task.contact_person_id: # Если контактное лицо установлено
+            res_cp = await db.execute(
+                select(ContactPerson)
+                .options(selectinload(ContactPerson.company)) # Загрузить компанию для контактного лица
+                .where(ContactPerson.id == task.contact_person_id)
+            )
+            new_contact_person_obj = res_cp.scalars().first()
+            if new_contact_person_obj: # Убедимся, что объект найден
+                new_contact_person_name = new_contact_person_obj.name
+                new_company_name = new_contact_person_obj.company.name if new_contact_person_obj.company else None
+        # Если task.contact_person_id == None, то и имена останутся None
+
         # contact_person_phone уже в task.contact_person_phone
         logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment_with_sn_qty}, work_types={new_works_with_qty}, contact_person={new_contact_person_name}, contact_person_phone={task.contact_person_phone}, company={new_company_name}")
 
@@ -453,7 +486,6 @@ async def admin_update_task(
             background_tasks.add_task("back.utils.notify.notify_user", task.assigned_user_id, f"Задача #{task.id} обновлена", task.id)
 
     return {"detail": "Updated"}
-
 
 
 
@@ -563,9 +595,13 @@ async def admin_get_task_by_id(
     # --- company и contact_person ---
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
+    company_id = task.contact_person.company.id if task.contact_person and task.contact_person.company else None
+    contact_person_id = task.contact_person.id if task.contact_person else None
 
     return {
         "id": task.id,
+        "company_id" : company_id,
+        "contact_person_id": contact_person_id,
         "company_name": company_name,  # ✅ Новое
         "contact_person_name": contact_person_name,  # ✅ Новое
         "contact_person_phone": task.contact_person_phone,

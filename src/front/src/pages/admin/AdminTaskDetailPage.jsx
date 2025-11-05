@@ -25,7 +25,7 @@ export default function AdminTaskDetailPage() {
   const [equipment, setEquipment] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
   const [companies, setCompanies] = useState([]);
-  const [contactPersons, setContactPersons] = useState([]);
+  const [contactPersons, setContactPersons] = useState([]); // Состояние для списка контактных лиц
   const [contactPersonPhone, setContactPersonPhone] = useState(null);
   const [loadingPhone, setLoadingPhone] = useState(false);
 
@@ -105,7 +105,7 @@ export default function AdminTaskDetailPage() {
         contact_person_phone: t.contact_person_phone || null,
       };
 
-      setForm(initialForm);
+      setForm(initialForm); // <-- initialForm установлен
 
       // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
       if (t.contact_person_id && !t.contact_person_phone) {
@@ -120,18 +120,48 @@ export default function AdminTaskDetailPage() {
         setContactPersonPhone(t.contact_person_phone || null);
       }
 
-      // --- ЗАГРУЗКА КОНТАКТНЫХ ЛИЦ ДЛЯ КОМПАНИИ ЗАДАЧИ ---
+      // --- ИНИЦИАЛИЗАЦИЯ КОНТАКТНЫХ ЛИЦ И ВЫБОРА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА РЕДАКТИРОВАНИЯ ---
+      // Проверяем, была ли выбрана компания в initialForm
       if (initialForm.company_id) {
         try {
+          // Загружаем список контактных лиц для выбранной компании
           const contacts = await getAdminContactPersonsByCompany(initialForm.company_id);
-          setContactPersons(contacts || []);
+          setContactPersons(contacts || []); // <-- Устанавливаем список
+
+          // Если в initialForm был выбран контакт, устанавливаем его в form
+          if (initialForm.contact_person_id) {
+            setField("contact_person_id", initialForm.contact_person_id); // <-- Устанавливаем выбранный ID
+            // При желании, можно сразу подгрузить телефон, если его нет в initialForm
+            if (!initialForm.contact_person_phone) {
+                try {
+                    const { phone } = await getAdminContactPersonPhone(initialForm.contact_person_id);
+                    setField("contact_person_phone", phone);
+                    // setContactPersonPhone(phone); // Опционально: обновить и state для просмотра
+                } catch (phoneErr) {
+                    console.error("Ошибка загрузки телефона контактного лица при инициализации:", phoneErr);
+                    setField("contact_person_phone", null);
+                    // setContactPersonPhone(null); // Опционально: обновить и state для просмотра
+                }
+            }
+          } else {
+             // Если contact_person_id не был установлен, но компания есть, можно сбросить телефон
+             setField("contact_person_phone", null);
+          }
         } catch (e) {
-          console.error("Ошибка загрузки контактных лиц:", e);
+          console.error("Ошибка загрузки контактных лиц при инициализации задачи (админ):", e);
           setContactPersons([]);
+          // Если не удалось загрузить, сбрасываем выбор контактного лица и телефона
+          setField("contact_person_id", null);
+          setField("contact_person_phone", null);
         }
       } else {
+        // Если компания не была выбрана, сбрасываем список и выбор
         setContactPersons([]);
+        setField("contact_person_id", null);
+        setField("contact_person_phone", null);
       }
+      // --- КОНЕЦ НОВОГО БЛОКА ---
+
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       alert("Ошибка загрузки задачи");
@@ -156,6 +186,7 @@ export default function AdminTaskDetailPage() {
       setLoadingPhone(true);
       const contacts = await getAdminContactPersonsByCompany(companyId);
       setContactPersons(contacts || []);
+      // Сбрасываем выбор контактного лица при смене компании
       setField("contact_person_id", null);
       setField("contact_person_phone", null);
     } catch (e) {
@@ -633,15 +664,6 @@ export default function AdminTaskDetailPage() {
           <button className="add-btn" onClick={() => navigate(`/admin/tasks/${task.id}/history`)}>
             Подробнее
           </button>
-          {/* Пример отображения истории на месте (закомментирован) */}
-          {/* <ul>
-            {(task.history || []).map((h, i) => (
-              <li key={i}>
-                {new Date(h.ts).toLocaleString()} — <b>{h.action}</b> —{" "}
-                {h.comment || "—"}
-              </li>
-            ))}
-          </ul> */}
         </div>
 
         <div className="section">

@@ -509,6 +509,7 @@ async def delete_draft(draft_id: int, db: AsyncSession = Depends(get_db), curren
     return {"detail": "Deleted"}
 
 
+
 @router.post("/tasks", status_code=201, dependencies=[Depends(require_roles(Role.logist, Role.admin))])
 async def publish_task(
     background_tasks: BackgroundTasks,

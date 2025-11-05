@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['tue-ears-metres-solve.trycloudflare.com']
+    allowedHosts: ['arrange-salvador-talented-forth.trycloudflare.com']
   },
 })
 

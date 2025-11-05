@@ -264,7 +264,6 @@ export default function DraftDetailPage() {
         contact_person_phone: undefined, // <--- Добавлено для ясности
       };
       await publishTask(publishPayload);
-      await deleteDraft(id);
       alert("✅ Задача опубликована");
       navigate("/logist/tasks/active");
     } catch (e) {

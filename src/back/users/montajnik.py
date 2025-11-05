@@ -1101,3 +1101,6 @@ async def get_mont_contact_person_phone(
         raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
 
     return {"phone": phone_number}
+
+
+#статусы монтажнику
