@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 import enum
 import json
 from fastapi import APIRouter, Body,Depends,HTTPException,status
@@ -176,7 +177,10 @@ async def admin_update_task(
     old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     # ✅ Сохраняем старый телефон
     old_contact_person_phone = task.contact_person.phone if task.contact_person else None
-    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
+    # ✅ Сохраняем старые цены для проверки изменений
+    old_client_price = task.client_price
+    old_montajnik_reward = task.montajnik_reward
+    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}, client_price={old_client_price}, montajnik_reward={old_montajnik_reward}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
     logger.info(f"Полный incoming dict: {incoming}")
@@ -310,9 +314,10 @@ async def admin_update_task(
         logger.info("Оборудование помечено как изменённое")
 
 
+   
     if work_types_data is not None:
          # Подсчитываем количество для каждого типа работ
-         # from collections import Counter # Уже импортирован выше
+         from collections import Counter
          work_type_counts = Counter(work_types_data)
          
          # 1. Удаляем все старые записи TaskWork
@@ -329,15 +334,52 @@ async def admin_update_task(
          changed.append(("work_types", "old_work_set", work_types_data))
          logger.info("Типы работ помечены как изменённые")
 
+
+    # --- НОВАЯ ЛОГИКА РАСЧЁТА ЦЕН ---
+    calculated_client_price = Decimal('0')
+    calculated_montajnik_reward = Decimal('0')
+
+    # 1. Рассчитываем стоимость оборудования (для клиента и монтажника)
+    equipment_res = await db.execute(
+        select(TaskEquipment)
+        .options(selectinload(TaskEquipment.equipment)) # Загрузим оборудование для получения цены
+        .where(TaskEquipment.task_id == task.id)
+    )
+    task_equipment_list = equipment_res.scalars().all()
+    for te in task_equipment_list:
+        equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле
+        calculated_client_price += equipment_unit_price * te.quantity
+        calculated_montajnik_reward += equipment_unit_price * te.quantity # Монтажник получает за оборудование
+
+    # 2. Рассчитываем стоимость работ (только для клиента)
+    work_res = await db.execute(
+        select(TaskWork)
+        .options(selectinload(TaskWork.work_type)) # Загрузим тип работы для получения цены
+        .where(TaskWork.task_id == task.id)
+    )
+    task_work_list = work_res.scalars().all()
+    for tw in task_work_list:
+        work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле
+        calculated_client_price += work_unit_price * tw.quantity
+        # montajnik_reward НЕ увеличивается за работы
+
+    # 3. Устанавливаем рассчитанные цены в объект задачи
+    task.client_price = calculated_client_price
+    task.montajnik_reward = calculated_montajnik_reward
+    logger.info(f"Рассчитанные цены: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
+
     logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
     has_changes = bool(changed)
     logger.info(f"'has_changes' рассчитано как: {has_changes}")
 
-    if not has_changes:
-        logger.info("Нет изменений для сохранения, возвращаем 'Без изменений'")
+    # Проверяем, изменились ли цены (даже если другие поля не изменились)
+    prices_changed = (task.client_price != old_client_price) or (task.montajnik_reward != old_montajnik_reward)
+
+    if not has_changes and not prices_changed:
+        logger.info("Нет изменений (включая цены) для сохранения, возвращаем 'Без изменений'")
         return {"detail": "Без изменений"}
     else:
-        logger.info("Обнаружены изменения, продолжаем выполнение")
+        logger.info("Обнаружены изменения (или изменились цены), продолжаем выполнение")
 
     try:
         # --- Логируем изменения в историю ---
@@ -385,8 +427,7 @@ async def admin_update_task(
                 new_company_name = new_contact_person_obj.company.name if new_contact_person_obj.company else None
         # Если task.contact_person_id == None, то и имена останутся None
 
-        # contact_person_phone уже в task.contact_person_phone
-        logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment_with_sn_qty}, work_types={new_works_with_qty}, contact_person={new_contact_person_name}, contact_person_phone={task.contact_person_phone}, company={new_company_name}")
+        logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment_with_sn_qty}, work_types={new_works_with_qty}, contact_person={new_contact_person_name}, company={new_company_name}")
 
         # Собираем *все* изменения, включая equipment и work_types
         all_changes = []
@@ -412,18 +453,31 @@ async def admin_update_task(
                 "old": old_works_with_qty, 
                 "new": new_works_with_qty
             })
-            
+
+       
         # Проверяем изменения contact_person и company
         old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
         new_cp_co = f"{new_contact_person_name} ({new_company_name})" if new_contact_person_name and new_company_name else "—"
         if old_cp_co != new_cp_co:
             all_changes.append({"field": "contact_person", "old": old_cp_co, "new": new_cp_co})
-
-        # --- Добавляем изменение телефона в all_changes, если оно было ---
-        # Найдём изменение телефона в списке changed
+        
+        # Обработка изменения contact_person_phone отдельно, если оно произошло
         cp_phone_change = next((item for item in changed if item[0] == "contact_person_phone"), None)
         if cp_phone_change:
             all_changes.append({"field": "contact_person_phone", "old": str(cp_phone_change[1]), "new": str(cp_phone_change[2])})
+
+        # ✅ Добавляем изменения цен в историю, если они произошли
+        if prices_changed:
+            all_changes.append({
+                "field": "client_price",
+                "old": str(old_client_price),
+                "new": str(task.client_price)
+            })
+            all_changes.append({
+                "field": "montajnik_reward",
+                "old": str(old_montajnik_reward),
+                "new": str(task.montajnik_reward)
+            })
 
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
         # Создаём комментарий с *всеми* изменениями
@@ -438,15 +492,15 @@ async def admin_update_task(
             # --- Сохраняем все основные поля задачи ---
             company_id=task.company_id,  # ✅ Заменено
             contact_person_id=task.contact_person_id,  # ✅ Заменено
-            contact_person_phone=task.contact_person_phone, # <--- Сохранение телефона в историю
+            contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
             scheduled_at=task.scheduled_at,
             location=task.location,
             comment_field=task.comment,
             status=task.status.value if task.status else None,
             assigned_user_id=task.assigned_user_id,
-            client_price=str(task.client_price) if task.client_price is not None else None,
-            montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+            client_price=str(task.client_price), # <--- Сохраняем новую рассчитанную цену
+            montajnik_reward=str(task.montajnik_reward), # <--- Сохраняем новую рассчитанную награду
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
             gos_number = task.gos_number

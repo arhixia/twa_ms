@@ -1103,4 +1103,3 @@ async def get_mont_contact_person_phone(
     return {"phone": phone_number}
 
 
-#статусы монтажнику

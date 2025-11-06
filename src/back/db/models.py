@@ -126,8 +126,7 @@ class WorkType(AsyncAttrs, Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)                      # Название работы (АТ, тахография и т.д.)
     created_at = Column(DateTime(timezone=True), default=now_ekb)
-    client_price = Column(Numeric(10, 2), nullable=True)         # Стоимость работы (цена клиента)
-    montajnik_price = Column(Numeric(10, 2), nullable=True)    # Цена монтажнику (если отличается)
+    price = Column(Numeric(10, 2), nullable=False)
     is_active = Column(Boolean, default=True)                  # Активен ли тип работы
 
     task_works = relationship("TaskWork", back_populates="work_type", cascade="all, delete-orphan")

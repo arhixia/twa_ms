@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['arrange-salvador-talented-forth.trycloudflare.com']
+    allowedHosts: ['itunes-sponsor-sufficient-planners.trycloudflare.com']
   },
 })
 

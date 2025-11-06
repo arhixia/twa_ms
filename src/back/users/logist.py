@@ -1,4 +1,4 @@
-from typing import List
+from typing import Counter, List
 from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from back.db.database import get_db
@@ -173,32 +173,54 @@ async def create_draft(
 
     data["assigned_user_id"] = _normalize_assigned_user_id(data.get("assigned_user_id"))
 
-    # === РАСЧЁТ ЦЕН НА ОСНОВЕ work_types ===
-    # ✅ Обновляем логику получения work_types_ids с учетом quantity
+    # === НОВАЯ РАСЧЁТНАЯ ЛОГИКА ЦЕН ===
     work_types_ids_raw = data.get("work_types", [])
-    from collections import Counter
+    equipment_data_raw = data.get("equipment", [])
+
+    # --- Рассчёт по Work Types ---
     work_type_counts = Counter(work_types_ids_raw)
     work_types_ids_unique = list(work_type_counts.keys())
-    
-    calculated_client_price = None
-    calculated_montajnik_reward = None
 
+    calculated_works_cost_for_client = Decimal('0')
     if work_types_ids_unique:
-        wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True))
+        wt_res = await db.execute(
+            select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
+        )
         work_types_from_db = wt_res.scalars().all()
         if len(work_types_from_db) != len(work_types_ids_unique):
             missing = set(work_types_ids_unique) - {wt.id for wt in work_types_from_db}
             raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
 
-        # Рассчитываем цены с учетом количества
-        calculated_client_price = Decimal('0')
-        calculated_montajnik_reward = Decimal('0')
         for wt in work_types_from_db:
             count = work_type_counts[wt.id]
-            calculated_client_price += (wt.client_price or Decimal('0')) * count
-            calculated_montajnik_reward += (wt.montajnik_price or wt.client_price or Decimal('0')) * count
+            calculated_works_cost_for_client += (wt.price or Decimal('0')) * count # Цена за единицу * количество
 
-    # ✅ Передаем gos_number в конструктор Task
+    # --- Рассчёт по Equipment ---
+    equipment_quantities = {}
+    for eq_item in equipment_data_raw:
+        # eq_item - это словарь { "equipment_id": ..., "serial_number": "...", "quantity": ... }
+        eq_id = eq_item.get("equipment_id")
+        qty = eq_item.get("quantity", 1) # Дефолтное значение 1
+        equipment_quantities[eq_id] = equipment_quantities.get(eq_id, 0) + qty
+
+    calculated_equipment_cost = Decimal('0')
+    if equipment_quantities:
+        eq_res = await db.execute(
+            select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
+        )
+        equipment_from_db = eq_res.scalars().all()
+        if len(equipment_from_db) != len(equipment_quantities):
+            missing = set(equipment_quantities.keys()) - {eq.id for eq in equipment_from_db}
+            raise HTTPException(status_code=400, detail=f"Оборудование не найдено: {list(missing)}")
+
+        for eq in equipment_from_db:
+            qty = equipment_quantities[eq.id]
+            calculated_equipment_cost += (eq.price or Decimal('0')) * qty # Цена за единицу * количество
+
+    # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
+    final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
+    final_montajnik_reward = calculated_equipment_cost
+
     task = Task(
         contact_person_id=contact_person_id,
         company_id=company_id,
@@ -212,9 +234,9 @@ async def create_draft(
         assigned_user_id=data.get("assigned_user_id"),
         logist_contact_id=getattr(current_user, "telegram_id", None),
 
-        # ✅ Устанавливаем рассчитанные цены
-        client_price=calculated_client_price,
-        montajnik_reward=calculated_montajnik_reward,
+        # ✅ Устанавливаем рассчитанные цены по НОВОЙ логике
+        client_price=final_client_price,
+        montajnik_reward=final_montajnik_reward,
 
         is_draft=True,
         photo_required=data.get("photo_required", False),
@@ -223,36 +245,40 @@ async def create_draft(
     )
 
     db.add(task)
-    await db.flush()
+    await db.flush() # flush, чтобы получить task.id
 
-    # --- SAVE EQUIPMENT (новая логика) ---
-    # ✅ Обработка equipment как списка TaskEquipmentItem
-    for eq_item in (data.get("equipment") or []):
-        # eq_item - это словарь TaskEquipmentItem
+    # --- SAVE EQUIPMENT ---
+    for eq_item in equipment_data_raw:
         equipment_id = eq_item.get("equipment_id")
         serial_number = eq_item.get("serial_number")
-        quantity = eq_item.get("quantity", 1) # Дефолтное значение 1
-        
-        res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
-        equip = res.scalars().first()
-        if not equip:
+        quantity = eq_item.get("quantity", 1)
+
+        # Проверяем, существует ли оборудование
+        eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+        equipment_obj = eq_res.scalars().first()
+        if not equipment_obj:
             raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
-        # ✅ Создаем TaskEquipment с serial_number и quantity
+
         db.add(TaskEquipment(
-            task_id=task.id, 
-            equipment_id=equipment_id, 
+            task_id=task.id,
+            equipment_id=equipment_id,
             serial_number=serial_number,
             quantity=quantity
         ))
 
-
+    # --- SAVE WORK TYPES ---
     for wt_id, count in work_type_counts.items():
-        res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-        wt = res.scalars().first()
+        # Проверяем, существует ли тип работы (уже делали выше, но на всякий случай)
+        wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+        wt = wt_res.scalars().first()
         if not wt:
             raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-        # ✅ Создаем TaskWork с quantity=count
-        db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+
+        db.add(TaskWork(
+            task_id=task.id,
+            work_type_id=wt_id,
+            quantity=count # ✅ Учитываем количество
+        ))
 
     await db.commit()
     await db.refresh(task)
@@ -347,7 +373,6 @@ async def patch_draft(
     data = payload.model_dump()
 
     contact_person_id = data.get("contact_person_id")
-    # ✅ Получаем новое поле gos_number
     gos_number = data.get("gos_number")
 
     # --- Обновление contact_person_id, company_id, contact_person_phone ---
@@ -359,127 +384,136 @@ async def patch_draft(
                 raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
             setattr(task, "contact_person_id", contact_person_id)
             setattr(task, "company_id", contact_person.company_id)
-            setattr(task, "contact_person_phone", contact_person.phone) # <--- Установка телефона
+            setattr(task, "contact_person_phone", contact_person.phone)
         else:
             setattr(task, "contact_person_id", None)
             setattr(task, "company_id", None)
-            setattr(task, "contact_person_phone", None) # <--- Сброс телефона
+            setattr(task, "contact_person_phone", None)
 
-    # Обновляем все простые поля (кроме связей и gos_number)
+    # Обновляем все простые поля (кроме связей, equipment, work_types, gos_number)
     for key, value in data.items():
-        # ✅ Пропускаем equipment, work_types, contact_person_id, gos_number - они обрабатываются отдельно
         if key in {"equipment", "work_types", "contact_person_id", "gos_number"}:
             continue
         if value is not None:
             setattr(task, key, value)
-            
-    # ✅ Устанавливаем gos_number
+
     if gos_number is not None: # Позволяем установить null
         setattr(task, "gos_number", gos_number)
 
-    # === РАСЧЁТ ЦЕН НА ОСНОВЕ work_types (как в publish_task) ===
-    work_types_ids_raw = data.get("work_types", None) # Проверяем, переданы ли work_types
-    if work_types_ids_raw is not None: # Если переданы work_types
-        from collections import Counter
+    # === НОВАЯ РАСЧЁТНАЯ ЛОГИКА ЦЕН (при изменении equipment или work_types) ===
+    work_types_ids_raw = data.get("work_types")
+    equipment_data_raw = data.get("equipment")
+
+    recalculate_prices = work_types_ids_raw is not None or equipment_data_raw is not None
+
+    if recalculate_prices:
+        # Если work_types не переданы, используем старые
+        if work_types_ids_raw is None:
+            # Загружаем старые связи для пересчёта
+            old_wt_res = await db.execute(
+                select(TaskWork).where(TaskWork.task_id == task.id)
+            )
+            old_work_items = old_wt_res.scalars().all()
+            # Воссоздаём плоский список ID, учитывая quantity
+            work_types_ids_raw = []
+            for tw in old_work_items:
+                work_types_ids_raw.extend([tw.work_type_id] * tw.quantity)
+
+        # Если equipment не передано, используем старые
+        if equipment_data_raw is None:
+            # Загружаем старые связи для пересчёта
+            old_eq_res = await db.execute(
+                select(TaskEquipment).where(TaskEquipment.task_id == task.id)
+            )
+            old_equipment_items = old_eq_res.scalars().all()
+            # Формируем список словарей
+            equipment_data_raw = [
+                {"equipment_id": te.equipment_id, "serial_number": te.serial_number, "quantity": te.quantity}
+                for te in old_equipment_items
+            ]
+
+        # --- Пересчёт Work Types ---
         work_type_counts = Counter(work_types_ids_raw)
         work_types_ids_unique = list(work_type_counts.keys())
-        
-        if work_types_ids_unique: # И если список не пуст
-            wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True))
+
+        calculated_works_cost_for_client = Decimal('0')
+        if work_types_ids_unique:
+            wt_res = await db.execute(
+                select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
+            )
             work_types_from_db = wt_res.scalars().all()
             if len(work_types_from_db) != len(work_types_ids_unique):
                 missing = set(work_types_ids_unique) - {wt.id for wt in work_types_from_db}
                 raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
 
-            # Рассчитываем цены с учетом количества
-            calculated_client_price = Decimal('0')
-            calculated_montajnik_reward = Decimal('0')
             for wt in work_types_from_db:
                 count = work_type_counts[wt.id]
-                calculated_client_price += (wt.client_price or Decimal('0')) * count
-                calculated_montajnik_reward += (wt.montajnik_price or wt.client_price or Decimal('0')) * count
-        else: # Если список work_types пуст
-            calculated_client_price = None
-            calculated_montajnik_reward = None
+                calculated_works_cost_for_client += (wt.price or Decimal('0')) * count
 
-        # Устанавливаем рассчитанные цены
-        task.client_price = calculated_client_price
-        task.montajnik_reward = calculated_montajnik_reward
+        # --- Пересчёт Equipment ---
+        equipment_quantities = {}
+        for eq_item in equipment_data_raw:
+            eq_id = eq_item.get("equipment_id")
+            qty = eq_item.get("quantity", 1)
+            equipment_quantities[eq_id] = equipment_quantities.get(eq_id, 0) + qty
 
+        calculated_equipment_cost = Decimal('0')
+        if equipment_quantities:
+            eq_res = await db.execute(
+                select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
+            )
+            equipment_from_db = eq_res.scalars().all()
+            if len(equipment_from_db) != len(equipment_quantities):
+                missing = set(equipment_quantities.keys()) - {eq.id for eq in equipment_from_db}
+                raise HTTPException(status_code=400, detail=f"Оборудование не найдено: {list(missing)}")
 
+            for eq in equipment_from_db:
+                qty = equipment_quantities[eq.id]
+                calculated_equipment_cost += (eq.price or Decimal('0')) * qty
 
-    equipment_data = data.get("equipment", None) # Проверяем, передано ли оборудование
-    if equipment_data is not None: # Если передано оборудование
-        # 1. Получаем существующие записи TaskEquipment для этой задачи
-        existing_te_res = await db.execute(
-            select(TaskEquipment).where(TaskEquipment.task_id == task.id)
-        )
-        existing_te_list = existing_te_res.scalars().all()
-        existing_te_map = {te.id: te for te in existing_te_list} # Map для быстрого поиска
+        # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
+        task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
+        task.montajnik_reward = calculated_equipment_cost
 
-        incoming_te_ids = set() # Будем собирать ID пришедших записей для сравнения
+    # --- Обновление Equipment ---
+    if equipment_data_raw is not None:
+        # Удаляем старые
+        await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
+        # Добавляем новые
+        for eq_item in equipment_data_raw:
+            equipment_id = eq_item.get("equipment_id")
+            serial_number = eq_item.get("serial_number")
+            quantity = eq_item.get("quantity", 1)
 
-        # 2. Обрабатываем каждый пришедший элемент
-        for item_data_dict in equipment_data:
-            # Pydantic автоматически преобразует dict в TaskEquipmentItem
-            item_data: TaskEquipmentItem = item_data_dict if isinstance(item_data_dict, TaskEquipmentItem) else TaskEquipmentItem(**item_data_dict)
-            
-            item_id = item_data.id
-            equipment_id = item_data.equipment_id
-            serial_number = item_data.serial_number
-            quantity = item_data.quantity
-
-            # Проверяем, существует ли оборудование
             eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
             equipment_obj = eq_res.scalars().first()
             if not equipment_obj:
                 raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
 
-            if item_id:
-                if item_id in existing_te_map:
-                    te_record = existing_te_map[item_id]
-                    # Проверка, что запись принадлежит этой задаче
-                    if te_record.task_id != task.id:
-                        raise HTTPException(status_code=400, detail=f"Запись оборудования id={item_id} не принадлежит задаче {task.id}")
-                    
-                    te_record.equipment_id = equipment_id
-                    te_record.serial_number = serial_number
-                    te_record.quantity = quantity
-                    incoming_te_ids.add(item_id)
-                    logger.info(f"Обновлена запись TaskEquipment id={item_id}")
-                else:
-                    raise HTTPException(status_code=400, detail=f"Запись TaskEquipment id={item_id} не найдена для задачи {task.id}")
-            else:
-                # 2b. Создание новой записи
-                new_te = TaskEquipment(
-                    task_id=task.id,
-                    equipment_id=equipment_id,
-                    serial_number=serial_number,
-                    quantity=quantity
-                )
-                db.add(new_te)
-                await db.flush() # Нужно для получения new_te.id
-                incoming_te_ids.add(new_te.id) # Добавляем ID новой записи
-                logger.info(f"Создана новая запись TaskEquipment id={new_te.id}")
+            db.add(TaskEquipment(
+                task_id=task.id,
+                equipment_id=equipment_id,
+                serial_number=serial_number,
+                quantity=quantity
+            ))
 
-        # 3. Удаление записей, которых нет во входящих данных
-        ids_to_delete = set(existing_te_map.keys()) - incoming_te_ids
-        if ids_to_delete:
-            delete_stmt = delete(TaskEquipment).where(TaskEquipment.id.in_(ids_to_delete))
-            await db.execute(delete_stmt)
-            logger.info(f"Удалены записи TaskEquipment ids={ids_to_delete}")
-
-
-    if work_types_ids_raw is not None: # Если переданы work_types
+    # --- Обновление Work Types ---
+    if work_types_ids_raw is not None:
+        # Удаляем старые
         await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-        
-        # 2. Создаем новые записи с учетом количества
+        # Добавляем новые
+        work_type_counts = Counter(work_types_ids_raw)
         for wt_id, count in work_type_counts.items():
-            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-            wt = res.scalars().first()
+            wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            wt = wt_res.scalars().first()
             if not wt:
                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+
+            db.add(TaskWork(
+                task_id=task.id,
+                work_type_id=wt_id,
+                quantity=count # ✅ Учитываем количество
+            ))
 
     await db.commit()
     await db.refresh(task)
@@ -519,42 +553,6 @@ async def publish_task(
 ):
     data = payload.model_dump()
     draft_id = data.get("draft_id")
-    contact_person_id = data.get("contact_person_id")
-    gos_number = data.get("gos_number")
-
-    contact_person = None
-    company_id = None
-    contact_person_phone = None
-    if contact_person_id:
-        cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
-        contact_person = cp_res.scalars().first()
-        if not contact_person:
-            raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
-        company_id = contact_person.company_id
-        contact_person_phone = contact_person.phone
-
-    work_types_ids_raw = data.get("work_types", [])
-    from collections import Counter
-    work_type_counts = Counter(work_types_ids_raw)
-    work_types_ids_unique = list(work_type_counts.keys())
-    
-    if work_types_ids_unique:
-        wt_res = await db.execute(select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True))
-        work_types = wt_res.scalars().all()
-        if len(work_types) != len(work_types_ids_unique):
-            missing = set(work_types_ids_unique) - {wt.id for wt in work_types}
-            raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
-        
-        # Рассчитываем цены с учетом количества
-        client_price = Decimal('0')
-        montajnik_reward = Decimal('0')
-        for wt in work_types:
-            count = work_type_counts[wt.id]
-            client_price += (wt.client_price or Decimal('0')) * count
-            montajnik_reward += (wt.montajnik_price or wt.client_price or Decimal('0')) * count
-    else:
-        client_price = None
-        montajnik_reward = None
 
     if draft_id:
         # --- Публикация из черновика ---
@@ -563,73 +561,83 @@ async def publish_task(
         if not task:
             raise HTTPException(status_code=404, detail="Черновик не найден")
 
-        # Обновляем поля перед публикацией
-        for key, val in data.items():
-            # ✅ Обрабатываем contact_person_id отдельно
-            if key == "contact_person_id":
-                if val:
-                    cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == val))
-                    cp = cp_res.scalars().first()
-                    if not cp:
-                        raise HTTPException(status_code=400, detail=f"Контактное лицо id={val} не найдено")
-                    setattr(task, "contact_person_id", val)
-                    setattr(task, "company_id", cp.company_id)
-                    setattr(task,"contacnt_person_phone", cp.phone)
-                else:
-                    setattr(task, "contact_person_id", None)
-                    setattr(task, "company_id", None)
-                    setattr(task,"contacnt_person_phone",None)
-            # ✅ Устанавливаем gos_number
-            elif key == "gos_number":
-                setattr(task, key, val)
-            # ✅ Пропускаем draft_id и equipment, work_types, они обрабатываются отдельно
-            elif key not in ("draft_id", "equipment", "work_types"):
-                if val is not None:
-                    setattr(task, key, val)
-        task.is_draft = False
-        task.client_price = client_price
-        task.montajnik_reward = montajnik_reward
+        # Обновляем поля, кроме связей и рассчитанных цен (цены пересчитаем ниже)
+        for key, value in data.items():
+            if key in {"draft_id", "equipment", "work_types", "client_price", "montajnik_reward"}:
+                continue # Пропускаем специальные поля
+            if value is not None:
+                setattr(task, key, value)
 
-        # --- Очистка и вставка equipment/work_types ---
-        await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
-        await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-        
-        # ✅ Обработка equipment (новая логика)
-        for eq_item in (data.get("equipment") or []):
-            # eq_item - это словарь TaskEquipmentItem
-            equipment_id = eq_item.get("equipment_id")
-            serial_number = eq_item.get("serial_number")
-            quantity = eq_item.get("quantity", 1) # Дефолтное значение 1
-            
-            res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
-            if not res.scalars().first():
-                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
-            # ✅ Создаем TaskEquipment с serial_number и quantity
-            db.add(TaskEquipment(
-                task_id=task.id, 
-                equipment_id=equipment_id, 
-                serial_number=serial_number,
-                quantity=quantity
-            ))
+        # --- НОВАЯ РАСЧЁТНАЯ ЛОГИКА ЦЕН ДЛЯ ПУБЛИКАЦИИ ИЗ ЧЕРНОВИКА ---
+        # Загружаем текущие связи из черновика для пересчёта
+        current_wt_res = await db.execute(
+            select(TaskWork).where(TaskWork.task_id == task.id)
+        )
+        current_work_items = current_wt_res.scalars().all()
 
-        # ✅ Обработка work_types с учетом quantity (новая логика)
-        # work_type_counts уже подсчитан выше
-        for wt_id, count in work_type_counts.items():
-            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-            if not res.scalars().first():
-                 # Это уже проверено выше, но на всякий случай
-                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            # ✅ Создаем TaskWork с quantity=count
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+        current_eq_res = await db.execute(
+            select(TaskEquipment).where(TaskEquipment.task_id == task.id)
+        )
+        current_equipment_items = current_eq_res.scalars().all()
 
-        
+        # --- Пересчёт Work Types ---
+        work_types_ids_for_calc = []
+        for tw in current_work_items:
+            work_types_ids_for_calc.extend([tw.work_type_id] * tw.quantity) # Воссоздаём плоский список
+
+        work_type_counts = Counter(work_types_ids_for_calc)
+        work_types_ids_unique = list(work_type_counts.keys())
+
+        calculated_works_cost_for_client = Decimal('0')
+        if work_types_ids_unique:
+            wt_res = await db.execute(
+                select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
+            )
+            work_types_from_db = wt_res.scalars().all()
+            if len(work_types_from_db) != len(work_types_ids_unique):
+                missing = set(work_types_ids_unique) - {wt.id for wt in work_types_from_db}
+                raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
+
+            for wt in work_types_from_db:
+                count = work_type_counts[wt.id]
+                calculated_works_cost_for_client += (wt.price or Decimal('0')) * count
+
+        # --- Пересчёт Equipment ---
+        equipment_quantities = {}
+        for te in current_equipment_items:
+            eq_id = te.equipment_id
+            qty = te.quantity
+            equipment_quantities[eq_id] = equipment_quantities.get(eq_id, 0) + qty
+
+        calculated_equipment_cost = Decimal('0')
+        if equipment_quantities:
+            eq_res = await db.execute(
+                select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
+            )
+            equipment_from_db = eq_res.scalars().all()
+            if len(equipment_from_db) != len(equipment_quantities):
+                missing = set(equipment_quantities.keys()) - {eq.id for eq in equipment_from_db}
+                raise HTTPException(status_code=400, detail=f"Оборудование не найдено: {list(missing)}")
+
+            for eq in equipment_from_db:
+                qty = equipment_quantities[eq.id]
+                calculated_equipment_cost += (eq.price or Decimal('0')) * qty
+
+        # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
+        task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
+        task.montajnik_reward = calculated_equipment_cost
+
+        task.is_draft = False # Меняем статус на опубликованную задачу
+
+        # Добавляем запись в историю
         db.add(TaskHistory(
             task_id=task.id,
             user_id=current_user.id,
-            action=TaskStatus.new,
+            action=task.status,
             event_type=TaskHistoryEventType.published,
             comment="Published from draft",
-            company_id=task.company_id,  
+            # ... (остальные поля задачи для истории) ...
+            company_id=task.company_id,
             contact_person_id=task.contact_person_id,
             contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
@@ -644,64 +652,133 @@ async def publish_task(
             assignment_type=task.assignment_type.value if task.assignment_type else None,
             gos_number = task.gos_number
         ))
-        await db.flush()
 
     else:
-        # --- Прямая публикация (без draft) ---
-        # ✅ Передаем gos_number в конструктор Task
+        # --- Прямая публикация (без черновика) ---
+        contact_person_id = data.get("contact_person_id")
+        gos_number = data.get("gos_number")
+
+        company_id = None
+        contact_person_phone = None
+        if contact_person_id:
+            cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
+            contact_person = cp_res.scalars().first()
+            if not contact_person:
+                raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
+            company_id = contact_person.company_id
+            contact_person_phone = contact_person.phone
+
+        work_types_ids_raw = data.get("work_types", [])
+        equipment_data_raw = data.get("equipment", [])
+
+        # --- Рассчёт цен для новой задачи ---
+        work_type_counts = Counter(work_types_ids_raw)
+        work_types_ids_unique = list(work_type_counts.keys())
+
+        calculated_works_cost_for_client = Decimal('0')
+        if work_types_ids_unique:
+            wt_res = await db.execute(
+                select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
+            )
+            work_types_from_db = wt_res.scalars().all()
+            if len(work_types_from_db) != len(work_types_ids_unique):
+                missing = set(work_types_ids_unique) - {wt.id for wt in work_types_from_db}
+                raise HTTPException(status_code=400, detail=f"Типы работ не найдены или неактивны: {list(missing)}")
+
+            for wt in work_types_from_db:
+                count = work_type_counts[wt.id]
+                calculated_works_cost_for_client += (wt.price or Decimal('0')) * count
+
+        equipment_quantities = {}
+        for eq_item in equipment_data_raw:
+            eq_id = eq_item.get("equipment_id")
+            qty = eq_item.get("quantity", 1)
+            equipment_quantities[eq_id] = equipment_quantities.get(eq_id, 0) + qty
+
+        calculated_equipment_cost = Decimal('0')
+        if equipment_quantities:
+            eq_res = await db.execute(
+                select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
+            )
+            equipment_from_db = eq_res.scalars().all()
+            if len(equipment_from_db) != len(equipment_quantities):
+                missing = set(equipment_quantities.keys()) - {eq.id for eq in equipment_from_db}
+                raise HTTPException(status_code=400, detail=f"Оборудование не найдено: {list(missing)}")
+
+            for eq in equipment_from_db:
+                qty = equipment_quantities[eq.id]
+                calculated_equipment_cost += (eq.price or Decimal('0')) * qty
+
+        # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
+        final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
+        final_montajnik_reward = calculated_equipment_cost
+
         task = Task(
             contact_person_id=contact_person_id,
+            company_id=company_id,
             contact_person_phone=contact_person_phone,
-            company_id=company_id, 
             vehicle_info=data.get("vehicle_info"),
             scheduled_at=_parse_datetime(data.get("scheduled_at")),
             location=data.get("location"),
             comment=data.get("comment"),
+            status=TaskStatus.new,
             assignment_type=_parse_assignment_type(data.get("assignment_type")),
             assigned_user_id=_normalize_assigned_user_id(data.get("assigned_user_id")),
-            client_price=client_price,
-            montajnik_reward=montajnik_reward,
-            is_draft=False,
-            created_by=current_user.id,
+            logist_contact_id=getattr(current_user, "telegram_id", None),
+
+            # ✅ Устанавливаем рассчитанные цены по НОВОЙ логике
+            client_price=final_client_price,
+            montajnik_reward=final_montajnik_reward,
+
+            is_draft=False, # Новая задача, не черновик
+            photo_required=data.get("photo_required", False),
+            created_by=int(current_user.id),
             gos_number=gos_number,
         )
-        db.add(task)
-        await db.flush()
 
-        # ✅ Обработка equipment (новая логика)
-        for eq_item in (data.get("equipment") or []):
-            # eq_item - это словарь TaskEquipmentItem
+        db.add(task)
+        await db.flush() # flush, чтобы получить task.id
+
+        # --- SAVE EQUIPMENT для новой задачи ---
+        for eq_item in equipment_data_raw:
             equipment_id = eq_item.get("equipment_id")
             serial_number = eq_item.get("serial_number")
-            quantity = eq_item.get("quantity", 1) # Дефолтное значение 1
-            
-            res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
-            if not res.scalars().first():
+            quantity = eq_item.get("quantity", 1)
+
+            eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+            equipment_obj = eq_res.scalars().first()
+            if not equipment_obj:
                 raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
-            # ✅ Создаем TaskEquipment с serial_number и quantity
+
             db.add(TaskEquipment(
-                task_id=task.id, 
-                equipment_id=equipment_id, 
+                task_id=task.id,
+                equipment_id=equipment_id,
                 serial_number=serial_number,
                 quantity=quantity
             ))
 
-        
+        # --- SAVE WORK TYPES для новой задачи ---
         for wt_id, count in work_type_counts.items():
-            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-            if not res.scalars().first():
-                 # Это уже проверено выше, но на всякий случай
-                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            # ✅ Создаем TaskWork с quantity=count
-            db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+            wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            wt = wt_res.scalars().first()
+            if not wt:
+                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
 
+            db.add(TaskWork(
+                task_id=task.id,
+                work_type_id=wt_id,
+                quantity=count # ✅ Учитываем количество
+            ))
+
+        # Добавляем запись в историю для новой задачи
         db.add(TaskHistory(
             task_id=task.id,
             user_id=current_user.id,
-            action=TaskStatus.new,
-            event_type=TaskHistoryEventType.published,
-            comment="Задача добавлена",
-            company_id=task.company_id,  
+            action=task.status,
+            event_type=TaskHistoryEventType.created, # или published
+            comment="Task created directly",
+            # ... (остальные поля задачи для истории) ...
+            company_id=task.company_id,
             contact_person_id=task.contact_person_id,
             contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
@@ -716,7 +793,6 @@ async def publish_task(
             assignment_type=task.assignment_type.value if task.assignment_type else None,
             gos_number = task.gos_number
         ))
-        await db.flush()
 
     await db.commit()
     await db.refresh(task)
@@ -734,8 +810,7 @@ async def edit_task(
     logger.info(f"edit_task вызван для задачи ID: {task_id}")
 
     # --- Проверки роли и существования задачи ---
-    if getattr(current_user, "role", None) not in (Role.logist, Role.admin):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    _ensure_logist_or_403(current_user)
 
     # Загружаем задачу и *старые* связи для истории
     result = await db.execute(
@@ -763,6 +838,8 @@ async def edit_task(
     old_contact_person_name = task.contact_person.name if task.contact_person else None
     old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     old_contact_person_phone = task.contact_person.phone if task.contact_person else None
+    old_client_price = task.client_price if task.client_price else None
+    old_montajnik_reward = task.montajnik_reward if task.montajnik_reward else None
     logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name},contact_person_phone = {old_contact_person_phone}, company={old_company_name}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
@@ -918,15 +995,48 @@ async def edit_task(
          logger.info("Типы работ помечены как изменённые")
 
 
+    # --- НОВАЯ ЛОГИКА РАСЧЁТА ЦЕН ---
+    calculated_client_price = Decimal('0')
+    calculated_montajnik_reward = Decimal('0')
+
+    # 1. Рассчитываем стоимость оборудования (для клиента и монтажника)
+    equipment_res = await db.execute(
+        select(TaskEquipment)
+        .options(selectinload(TaskEquipment.equipment)) # Загрузим оборудование для получения цены
+        .where(TaskEquipment.task_id == task.id)
+    )
+    task_equipment_list = equipment_res.scalars().all()
+    for te in task_equipment_list:
+        equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле
+        calculated_client_price += equipment_unit_price * te.quantity
+        calculated_montajnik_reward += equipment_unit_price * te.quantity # Монтажник получает за оборудование
+
+    # 2. Рассчитываем стоимость работ (только для клиента)
+    work_res = await db.execute(
+        select(TaskWork)
+        .options(selectinload(TaskWork.work_type)) # Загрузим тип работы для получения цены
+        .where(TaskWork.task_id == task.id)
+    )
+    task_work_list = work_res.scalars().all()
+    for tw in task_work_list:
+        work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле
+        calculated_client_price += work_unit_price * tw.quantity
+        # montajnik_reward НЕ увеличивается за работы
+
+    # 3. Устанавливаем рассчитанные цены в объект задачи
+    task.client_price = calculated_client_price
+    task.montajnik_reward = calculated_montajnik_reward
+    logger.info(f"Рассчитанные цены: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
+
     logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
     has_changes = bool(changed)
     logger.info(f"'has_changes' рассчитано как: {has_changes}")
 
-    if not has_changes:
-        logger.info("Нет изменений для сохранения, возвращаем 'Без изменений'")
+    if not has_changes and task.client_price == old_client_price and task.montajnik_reward == old_montajnik_reward: # <--- Добавлено сравнение цен
+        logger.info("Нет изменений (включая цены) для сохранения, возвращаем 'Без изменений'")
         return {"detail": "Без изменений"}
     else:
-        logger.info("Обнаружены изменения, продолжаем выполнение")
+        logger.info("Обнаружены изменения (или изменились цены), продолжаем выполнение")
 
     try:
         # --- Логируем изменения в историю ---
@@ -1033,8 +1143,8 @@ async def edit_task(
             comment_field=task.comment,
             status=task.status.value if task.status else None,
             assigned_user_id=task.assigned_user_id,
-            client_price=str(task.client_price) if task.client_price is not None else None,
-            montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+            client_price=str(task.client_price), # <--- Сохраняем новую рассчитанную цену
+            montajnik_reward=str(task.montajnik_reward), # <--- Сохраняем новую рассчитанную награду
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
             gos_number = task.gos_number
@@ -1074,6 +1184,7 @@ async def edit_task(
             background_tasks.add_task("back.utils.notify.notify_user", task.assigned_user_id, f"Задача #{task.id} обновлена", task.id)
 
     return {"detail": "Updated"}
+
 
 
 
@@ -1299,7 +1410,7 @@ async def logist_history(db: AsyncSession = Depends(get_db), current_user=Depend
     out = [
         {
             "id": t.id,
-            "client": t.client,
+            "client": t.contact_person_id,
             "completed_at": str(t.completed_at),
         }
         for t in tasks
