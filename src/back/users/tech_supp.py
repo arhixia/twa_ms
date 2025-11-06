@@ -127,13 +127,22 @@ async def tech_history(db: AsyncSession = Depends(get_db), current_user: User = 
 
 @router.post("/tasks/{task_id}/reports/{report_id}/review", dependencies=[Depends(require_roles(Role.tech_supp))])
 async def review_report(
+    background_tasks: BackgroundTasks,
     task_id: int,
     report_id: int,
     payload: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    background_tasks: BackgroundTasks = None,
+    current_user=Depends(get_current_user),
 ):
+    """
+    Ревью отчёта тех.специалистом.
+    payload: {"approval": "approved" | "rejected", "comment": "optional text", "photos": ["storage_key1", ...]}
+    Правила:
+    - только роль tech_supp
+    - устанавливаем approval_tech и review_comment, reviewed_at
+    - если оба approval (логист + тех) == approved -> задача считается completed, фиксируем completed_at и history
+    - если отклонено -> оставляем задачу в inspection, ревью можно отправлять повторно; уведомляем автора отчёта
+    """
     _ensure_tech_or_403(current_user)
 
     approval = payload.get("approval")
@@ -148,11 +157,15 @@ async def review_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # load task with contact_person and company
+    # load task WITH equipment and work_types for snapshot
     t_res = await db.execute(
         select(Task)
         .where(Task.id == task_id)
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company))  # ✅ Загружаем контактное лицо и компанию
+        .options(
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # <--- ЗАГРУЖАЕМ оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type)              # <--- ЗАГРУЖАЕМ виды работ
+        )
     )
     task = t_res.scalars().first()
     if not task:
@@ -162,14 +175,27 @@ async def review_report(
     old_approval = report.approval_tech
     report.approval_tech = ReportApproval.approved if approval == "approved" else ReportApproval.rejected
     report.review_comment = comment
-    report.reviewed_at = _now_utc()
+    report.reviewed_at = datetime.now(timezone.utc) # _now_utc() ?
 
     try:
         # if both approved -> finalize task
         if report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
-            task.completed_at = _now_utc()
-            # Создаём запись в истории с *всеми* полями задачи
+            task.completed_at = datetime.now(timezone.utc) # _now_utc() ?
+
+            # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (завершение задачи) ---
+            # Так как связи уже загружены через options в t_res, мы можем их использовать
+            equipment_snapshot_for_history = [
+                {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+                for te in task.equipment_links
+            ]
+
+            work_types_snapshot_for_history = [
+                {"name": tw.work_type.name, "quantity": tw.quantity}
+                for tw in task.works
+            ]
+
+            # Создаём запись в истории с *всеми* полями задачи и снимками
             hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
@@ -179,9 +205,9 @@ async def review_report(
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,  # ✅ Заменено
                 contact_person_id=task.contact_person_id,  # ✅ Заменено
-                contact_person_phone = task.contact_person_phone,
-                gos_number = task.gos_number,
+                contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
+                gos_number = task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
@@ -197,6 +223,9 @@ async def review_report(
                 new_value=TaskStatus.completed.value, # Новое значение
                 related_entity_id=report.id,
                 related_entity_type="report",
+                # --- НОВЫЕ ПОЛЯ: Снимки ---
+                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
             )
             db.add(hist)
         else:
@@ -205,7 +234,20 @@ async def review_report(
             hist_comment = f"Tech review: {approval}"
             if comment:
                 hist_comment += f". Comment: {comment}"
-            # Создаём запись в истории с *всеми* полями задачи
+
+            # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта тех.специалистом) ---
+            # Так как связи уже загружены через options в t_res, мы можем их использовать
+            equipment_snapshot_for_history = [
+                {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+                for te in task.equipment_links
+            ]
+
+            work_types_snapshot_for_history = [
+                {"name": tw.work_type.name, "quantity": tw.quantity}
+                for tw in task.works
+            ]
+
+            # Создаём запись в истории с *всеми* полями задачи и снимками
             hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
@@ -215,7 +257,7 @@ async def review_report(
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,  # ✅ Заменено
                 contact_person_id=task.contact_person_id,  # ✅ Заменено
-                contact_person_phone = task.contact_person_phone,
+                contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
                 gos_number = task.gos_number,
                 scheduled_at=task.scheduled_at,
@@ -233,38 +275,13 @@ async def review_report(
                 new_value=report.approval_tech.value, # Новое значение статуса отчёта тех.специалиста
                 related_entity_id=report.id,
                 related_entity_type="report",
+                # --- НОВЫЕ ПОЛЯ: Снимки ---
+                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
             )
             db.add(hist)
 
         await db.flush()
-
-        # ✅ Логируем ревью отчёта (структурированная запись с полным снимком)
-        hist_comment_for_history = f"Report #{report.id} reviewed by tech: {approval}. Comment: {comment or ''}"
-        hist = TaskHistory(
-            task_id=task.id,
-            user_id=getattr(current_user, "id", None),
-            action=task.status, # action - текущий статус задачи
-            event_type=TaskHistoryEventType.report_status_changed, # Новый тип
-            comment=hist_comment_for_history,
-            related_entity_id=report.id,
-            related_entity_type="report",
-            # --- Сохраняем все основные поля задачи ---
-            company_id=task.company_id,  # ✅ Заменено
-            contact_person_id=task.contact_person_id,  # ✅ Заменено
-            contact_person_phone = task.contact_person_phone,
-            gos_number = task.gos_number,
-            vehicle_info=task.vehicle_info,
-            scheduled_at=task.scheduled_at,
-            location=task.location,
-            comment_field=task.comment,
-            status=task.status.value if task.status else None,
-            assigned_user_id=task.assigned_user_id,
-            client_price=str(task.client_price) if task.client_price is not None else None,
-            montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
-            photo_required=task.photo_required,
-            assignment_type=task.assignment_type.value if task.assignment_type else None,
-        )
-        db.add(hist)
         await db.commit()
     except Exception as e:
         logger.exception("Failed to perform tech review: %s", e)
@@ -276,7 +293,12 @@ async def review_report(
 
     # Notify report author about result
     if report.author_id:
-        background_tasks.add_task(notify_user, report.author_id, f"Report #{report.id} reviewed by tech: {approval}. Comment: {comment or ''}", task_id)
+        background_tasks.add_task(
+            "back.utils.notify.notify_user", # Убедитесь, что notify_user создаёт свою сессию
+            report.author_id,
+            f"Report #{report.id} reviewed by tech: {approval}. Comment: {comment or ''}",
+            task_id
+        )
 
     return {"detail": "Reviewed", "approval": approval}
 

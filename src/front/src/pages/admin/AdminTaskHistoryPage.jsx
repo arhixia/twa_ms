@@ -215,23 +215,20 @@ export default function AdminTaskHistoryPage() {
                     <div style={{ gridColumn: '1 / -1' }}> {/* Занимает всю ширину */}
                       <b>Оборудование:</b> {" "}
                       {h.equipment_snapshot && h.equipment_snapshot.length > 0 ? (
-                        h.equipment_snapshot.map((e, idx) => {
-                          // Предполагаем, что в equipment_snapshot есть equipment_id, quantity, serial_number
-                          const eqName = /* ... нужно получить имя оборудования по equipment_id ... */ `ID ${e.equipment_id}`;
-                          const serial = e.serial_number ? ` (SN: ${e.serial_number})` : '';
-                          return `${eqName}${serial} x${e.quantity}`;
-                        }).join(", ")
+                        h.equipment_snapshot.map((e, idx) => (
+                           // e - это объект { name, serial_number, quantity }
+                          `${e.name}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`
+                        )).join(", ")
                       ) : "—"}
                     </div>
-                    {/* ===== Виды работ (отображение) ===== */}
+                    {/* ===== Виды работ (из снимка) ===== */}
                     <div style={{ gridColumn: '1 / -1' }}> {/* Занимает всю ширину */}
                       <b>Виды работ:</b> {" "}
                       {h.work_types_snapshot && h.work_types_snapshot.length > 0 ? (
-                        h.work_types_snapshot.map((wt) => {
-                          // Предполагаем, что в work_types_snapshot есть work_type_id, quantity
-                          const wtName = /* ... нужно получить имя типа работы по work_type_id ... */ `ID ${wt.work_type_id}`;
-                          return `${wtName} x${wt.quantity}`;
-                        }).join(", ")
+                         h.work_types_snapshot.map((wt) => (
+                            // wt - это объект { name, quantity }
+                            `${wt.name} x${wt.quantity}`
+                        )).join(", ")
                       ) : "—"}
                     </div>
                   </div>

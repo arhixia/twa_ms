@@ -379,10 +379,10 @@ async def mont_get_task_full_history(
 
 @router.post("/tasks/{task_id}/accept", dependencies=[Depends(require_roles(Role.montajnik))])
 async def accept_task(
+    background_tasks: BackgroundTasks,
     task_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    background_tasks: BackgroundTasks = None
+    current_user=Depends(get_current_user),
 ):
     """
     Монтажник принимает задачу (transition -> accepted).
@@ -390,46 +390,59 @@ async def accept_task(
     Для broadcast — создаём запись BroadcastResponse.
     """
     _ensure_montajnik_or_403(current_user)
-    # Загружаем задачу с контактным лицом и компанией для истории
+
+    # Загружаем задачу с контактным лицом, компанией, оборудованием и видами работ для истории
     res = await db.execute(
         select(Task)
         .where(Task.id == task_id, Task.is_draft == False)
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем для истории
+        .options(
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
+        )
     )
     task = res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
-    # If assignment is individual, ensure assigned_user_id == current_user.id
-    if task.assignment_type == AssignmentType.individual: # ✅ Используем Enum
-        if task.assigned_user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Задача не назначена вам")
+    if task.assignment_type == AssignmentType.individual and task.assigned_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Задача не назначена вам")
 
-    # For broadcast: record response (first responder may be considered later)
-    if task.assignment_type == AssignmentType.broadcast: # ✅ Используем Enum
-        # create BroadcastResponse if not exists for this user
+    if task.assignment_type == AssignmentType.broadcast:
         exist = await db.execute(select(BroadcastResponse).where(BroadcastResponse.task_id == task.id, BroadcastResponse.user_id == current_user.id))
         if not exist.scalars().first():
             br = BroadcastResponse(task_id=task.id, user_id=current_user.id, is_first=False)
             db.add(br)
 
-    # set status accepted and write history
     task.assigned_user_id = current_user.id
-    old_status = task.status # Сохраняем старый статус
+    old_status = task.status
     task.status = TaskStatus.accepted
-    
-    # Создаём запись в истории с *всеми* полями задачи
+
+    # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ ---
+    # Формируем снимки *до* commit
+    equipment_snapshot_for_history = [
+        {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+        for te in task.equipment_links
+    ]
+
+    work_types_snapshot_for_history = [
+        {"name": tw.work_type.name, "quantity": tw.quantity}
+        for tw in task.works
+    ]
+
+    # Создаём запись в истории с *всеми* полями задачи и снимками
     hist = TaskHistory(
         task_id=task.id,
         user_id=getattr(current_user, "id", None),
         action=TaskStatus.accepted, # action - новый статус
         event_type=TaskHistoryEventType.status_changed, # ✅ Новый тип события
-        comment="Accepted by montajnik",
-        company_id=task.company_id,  # ✅ Заменено на ID
-        contact_person_id=task.contact_person_id,  # ✅ Заменено на ID
-        contact_person_phone = task.contact_person_phone,
-        gos_number = task.gos_number,
+        comment="Принято монтажником",
+        # --- Сохраняем все основные поля задачи ---
+        company_id=task.company_id,  # ✅ Заменено
+        contact_person_id=task.contact_person_id,  # ✅ Заменено
+        contact_person_phone=task.contact_person_phone,
         vehicle_info=task.vehicle_info,
+        gos_number = task.gos_number,
         scheduled_at=task.scheduled_at,
         location=task.location,
         comment_field=task.comment, # ✅ Используем comment_field
@@ -442,6 +455,9 @@ async def accept_task(
         field_name="status", # Поле, которое изменилось
         old_value=old_status.value if old_status else None, # Старое значение статуса
         new_value=TaskStatus.accepted.value, # Новое значение
+        # --- НОВЫЕ ПОЛЯ: Снимки ---
+        equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+        work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
     )
     db.add(hist)
     try:
@@ -455,10 +471,9 @@ async def accept_task(
             logger.exception("rollback failed")
         raise HTTPException(status_code=500, detail="Ошибка при принятии задачи")
 
-    # notify logist (creator) about acceptance
     if task.created_by:
         background_tasks.add_task(
-            notify_user,
+            "back.utils.notify.notify_user", # Предполагаем, что notify_user в отдельном модуле и создаёт свою сессию
             task.created_by,
             f"Задача #{task.id} принята монтажником {current_user.name} {current_user.lastname}",
             task.id
@@ -469,11 +484,11 @@ async def accept_task(
 
 @router.post("/tasks/{task_id}/status")
 async def change_status(
+    background_tasks: BackgroundTasks,
     task_id: int,
     status: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    background_tasks: BackgroundTasks = None,
+    current_user=Depends(get_current_user),
 ):
     """
     Поменять статус задачи: expected body {"status": "on_the_road" | "on_site" | "started" | "completed"}.
@@ -481,21 +496,23 @@ async def change_status(
     """
     _ensure_montajnik_or_403(current_user)
     new_status_str = status.get("status")
-    # ✅ Обновлён список разрешенных статусов
     if new_status_str not in ("accepted", "on_the_road", "on_site", "started", "completed"):
         raise HTTPException(status_code=400, detail="Неверный статус")
 
     try:
-        # Преобразуем строку в Enum
         new_status_enum = TaskStatus(new_status_str)
     except ValueError:
         raise HTTPException(status_code=400, detail="Неверный статус")
 
-    # Загружаем задачу с контактным лицом и компанией для истории
+    # Загружаем задачу с контактным лицом, компанией, оборудованием и видами работ для истории
     res = await db.execute(
         select(Task)
         .where(Task.id == task_id)
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем для истории
+        .options(
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
+        )
     )
     task = res.scalars().first()
     if not task:
@@ -503,8 +520,6 @@ async def change_status(
     if task.is_draft:
         raise HTTPException(status_code=400, detail="Нельзя менять статус черновика")
 
-    # Ensure the current montajnik is allowed to change this task
-    # (логика проверки остается прежней)
     if task.assigned_user_id and task.assigned_user_id != current_user.id:
         hist_res = await db.execute(select(TaskHistory).where(
             TaskHistory.task_id == task.id,
@@ -517,43 +532,47 @@ async def change_status(
     try:
         old_status = task.status
         timestamp_field_to_set = None
-        now_time = datetime.now(timezone.utc) # _now_utc() ?
+        now_time = datetime.now(timezone.utc)
 
-        # ✅ Определяем, нужно ли устанавливать started_at и какой timestamp
         if new_status_enum in (TaskStatus.on_the_road, TaskStatus.on_site, TaskStatus.started) and not task.started_at:
-             # Устанавливаем started_at при первом переходе в активный статус
              timestamp_field_to_set = "started_at"
              setattr(task, "started_at", now_time)
         elif new_status_enum == TaskStatus.completed and not task.completed_at:
              timestamp_field_to_set = "completed_at"
              setattr(task, "completed_at", now_time)
-             # При переходе в completed задача фактически завершена, но отчет отправляется на проверку -> inspection
-             # task.status = TaskStatus.completed # Не меняем task.status напрямую, оставляем логику ниже
 
-        # ✅ Устанавливаем сам статус задачи
-        # Логика: completed переводит в inspection (ожидание проверки отчета)
         if new_status_enum == TaskStatus.completed:
             task.status = TaskStatus.inspection
         else:
-            # ✅ ВАЖНО: Присваиваем объект TaskStatus enum, а не строку
             task.status = new_status_enum
 
-        # ✅ Логируем изменение статуса
+        # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ ---
+        # Формируем снимки *до* flush/commit
+        equipment_snapshot_for_history = [
+            {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+            for te in task.equipment_links
+        ]
+
+        work_types_snapshot_for_history = [
+            {"name": tw.work_type.name, "quantity": tw.quantity}
+            for tw in task.works
+        ]
+
         hist = TaskHistory(
             task_id=task.id,
             user_id=getattr(current_user, "id", None),
-            action=task.status, # action - статус задачи *после* изменения (например, inspection)
+            action=task.status, # action - статус задачи *после* изменения
             event_type=TaskHistoryEventType.status_changed, # ✅ Новый тип
-            comment=f"Status changed from {old_status.value if old_status else 'None'} to {new_status_enum.value}",
+            comment=f"Статус изменён с {old_status.value if old_status else 'None'} на {new_status_enum.value}",
             field_name="status", # Поле, которое изменилось
             old_value=old_status.value if old_status else None, # Старое значение статуса
             new_value=new_status_enum.value, # Новое значение (запрашиваемое)
             # --- Сохраняем все основные поля задачи ---
             company_id=task.company_id,  # ✅ Заменено
             contact_person_id=task.contact_person_id,  # ✅ Заменено
-            contact_person_phone = task.contact_person_phone,
-            gos_number = task.gos_number,
+            contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
+            gos_number = task.gos_number,
             scheduled_at=task.scheduled_at,
             location=task.location,
             comment_field=task.comment, # ✅ Используем comment_field
@@ -563,15 +582,18 @@ async def change_status(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
+            # --- НОВЫЕ ПОЛЯ: Снимки ---
+            equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+            work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
         )
         db.add(hist)
         await db.flush()
+
         await db.commit()
 
-        # ✅ Уведомление логиста о смене статуса
         if task.created_by:
             background_tasks.add_task(
-                notify_user,
+                "back.utils.notify.notify_user", # Убедитесь, что notify_user создаёт свою сессию
                 task.created_by,
                 f"Монтажник {current_user.name} {current_user.lastname} изменил статус задачи #{task.id} -> {new_status_enum.value}",
                 task.id
@@ -595,22 +617,27 @@ async def create_report(
     task_id: int,
     payload: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """
     Создать черновой отчёт монтажника (text, photos list). Возвращает report_id.
     payload: {"text": "...", "photos": ["storage_key1", ...]}
     """
     _ensure_montajnik_or_403(current_user)
-    # Загружаем задачу с контактным лицом и компанией для истории
+
+    # Загружаем задачу с контактным лицом, компанией, оборудованием и видами работ для истории
     res = await db.execute(
         select(Task)
         .where(Task.id == task_id)
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем для истории
+        .options(
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
+        )
     )
     task = res.scalars().first()
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="Задача не найдена")
     if task.is_draft:
         raise HTTPException(status_code=400, detail="Нельзя добавлять отчёт к черновику")
     if task.assigned_user_id and task.assigned_user_id != current_user.id:
@@ -623,7 +650,6 @@ async def create_report(
     db.add(report)
     await db.flush()
 
-    # Привязка фото к отчёту
     for sk in photos:
         att = TaskAttachment(
             task_id=task.id,
@@ -636,23 +662,35 @@ async def create_report(
         )
         db.add(att)
         await db.flush()
-        background_tasks.add_task(validate_and_process_attachment, att.id)
+        # Убедитесь, что validate_and_process_attachment создаёт свою сессию
+        background_tasks.add_task("back.utils.processing.validate_and_process_attachment", att.id)
 
-    #  Логируем создание отчёта
+    # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (создание отчёта) ---
+    # Формируем снимки *до* commit
+    equipment_snapshot_for_history = [
+        {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+        for te in task.equipment_links
+    ]
+
+    work_types_snapshot_for_history = [
+        {"name": tw.work_type.name, "quantity": tw.quantity}
+        for tw in task.works
+    ]
+
     hist = TaskHistory(
         task_id=task.id,
         user_id=getattr(current_user, "id", None),
         action=task.status,
-        comment=f"Report #{report.id} created by montajnik",
+        comment=f"Отчёт #{report.id} создан монтажником",
         event_type=TaskHistoryEventType.report_submitted, # Новый тип
         related_entity_id=report.id,
         related_entity_type="report",
         # --- Сохраняем все основные поля задачи ---
         company_id=task.company_id,  # ✅ Заменено
         contact_person_id=task.contact_person_id,  # ✅ Заменено
-        contact_person_phone = task.contact_person_phone,
-        gos_number = task.gos_number,
+        contact_person_phone=task.contact_person_phone,
         vehicle_info=task.vehicle_info,
+        gos_number = task.gos_number,
         scheduled_at=task.scheduled_at,
         location=task.location,
         comment_field=task.comment, # ✅ Используем comment_field
@@ -662,6 +700,9 @@ async def create_report(
         montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
         photo_required=task.photo_required,
         assignment_type=task.assignment_type.value if task.assignment_type else None,
+        # --- НОВЫЕ ПОЛЯ: Снимки ---
+        equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+        work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
     )
     db.add(hist)
     await db.commit()
@@ -670,11 +711,11 @@ async def create_report(
 
 @router.post("/tasks/{task_id}/report/{report_id}/submit", dependencies=[Depends(require_roles(Role.montajnik))])
 async def submit_report_for_review(
+    background_tasks: BackgroundTasks,
     task_id: int,
     report_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-    background_tasks: BackgroundTasks = None,
+    current_user=Depends(get_current_user),
 ):
     """
     Отправить отчёт на проверку. Логика:
@@ -686,50 +727,62 @@ async def submit_report_for_review(
     r_res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
     report = r_res.scalars().first()
     if not report:
-        raise HTTPException(status_code=404, detail="Report not found")
+        raise HTTPException(status_code=404, detail="Отчёт не найден")
 
-    # Only author can submit their report
     if report.author_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not report author")
+        raise HTTPException(status_code=403, detail="Не автор отчёта")
 
-    # Determine who rejected last (by approvals)
     notify_logist = True
     notify_tech = True
 
     if report.approval_logist == ReportApproval.rejected and report.approval_tech != ReportApproval.rejected:
-        # Only logist rejected earlier, so notify logist
         notify_tech = False
         report.approval_logist = ReportApproval.waiting
     elif report.approval_tech == ReportApproval.rejected and report.approval_logist != ReportApproval.rejected:
         notify_logist = False
         report.approval_tech = ReportApproval.waiting
     else:
-        # reset both to waiting for fresh review
         report.approval_logist = ReportApproval.waiting
         report.approval_tech = ReportApproval.waiting
 
-    report.reviewed_at = None  # reset reviewed time
+    report.reviewed_at = None  # сброс reviewed time
+
     try:
         # change task status to inspection
-        # Загружаем задачу с контактным лицом и компанией для истории
+        # Загружаем задачу с контактным лицом, компанией, оборудованием и видами работ для истории
         t_res = await db.execute(
             select(Task)
             .where(Task.id == task_id)
-            .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем для истории
+            .options(
+                selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
+                selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
+                selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
+            )
         )
         task = t_res.scalars().first()
         if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+            raise HTTPException(status_code=404, detail="Задача не найдена")
 
         task.status = TaskStatus.inspection
         await db.flush()
 
-        # ✅ Логируем отправку отчёта на проверку (структурированная запись с полным снимком)
+        # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (отправка отчёта на проверку) ---
+        # Формируем снимки *до* commit
+        equipment_snapshot_for_history = [
+            {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+            for te in task.equipment_links
+        ]
+
+        work_types_snapshot_for_history = [
+            {"name": tw.work_type.name, "quantity": tw.quantity}
+            for tw in task.works
+        ]
+
         hist = TaskHistory(
             task_id=task.id,
             user_id=getattr(current_user, "id", None),
             action=task.status, # action - новый статус задачи (inspection)
-            comment=f"Report #{report.id} submitted for review by montajnik",
+            comment=f"Отчёт #{report.id} отправлен на проверку монтажником",
             event_type=TaskHistoryEventType.report_status_changed, # Новый тип
             field_name="status", # Поле, которое изменилось
             old_value=task.status.value if task.status else None, # Старое значение статуса (до смены на inspection)
@@ -739,7 +792,7 @@ async def submit_report_for_review(
             # --- Сохраняем все основные поля задачи ---
             company_id=task.company_id,  # ✅ Заменено
             contact_person_id=task.contact_person_id,  # ✅ Заменено
-            contact_person_phone = task.contact_person_phone,
+            contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
             gos_number = task.gos_number,
             scheduled_at=task.scheduled_at,
@@ -751,6 +804,9 @@ async def submit_report_for_review(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
+            # --- НОВЫЕ ПОЛЯ: Снимки ---
+            equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+            work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
         )
         db.add(hist)
         await db.commit()
@@ -762,18 +818,15 @@ async def submit_report_for_review(
             logger.exception("rollback failed")
         raise HTTPException(status_code=500, detail="Ошибка при отправке отчёта на проверку")
 
-    # Notifications:
     if notify_logist and task.created_by:
-        background_tasks.add_task(notify_user, task.created_by, f"По задаче #{task.id} отправлен отчёт на проверку", task.id)
+        background_tasks.add_task("back.utils.notify.notify_user", task.created_by, f"По задаче #{task.id} отправлен отчёт на проверку", task.id)
     if notify_tech:
-        # notify all tech_supp users
         tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True))
         techs = tech_q.scalars().all()
         for tuser in techs:
-            background_tasks.add_task(notify_user, tuser.id, f"По задаче #{task.id} отправлен отчёт на проверку (тех.спец)", task.id)
+            background_tasks.add_task("back.utils.notify.notify_user", tuser.id, f"По задаче #{task.id} отправлен отчёт на проверку (тех.спец)", task.id)
 
-    return {"detail": "submitted"}
-
+    return {"detail": "sent for review"}
 
 
 @router.get("/me")

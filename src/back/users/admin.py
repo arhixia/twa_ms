@@ -149,7 +149,7 @@ async def admin_update_task(
 ):
     logger.info(f"admin_update_task вызван для задачи ID: {task_id}")
 
-    # Загружаем задачу с контактным лицом и компанией
+    # Загружаем задачу с контактным лицом, компанией, оборудованием и видами работ для истории
     result = await db.execute(
         select(Task)
         .where(Task.id == task_id)
@@ -347,7 +347,7 @@ async def admin_update_task(
     )
     task_equipment_list = equipment_res.scalars().all()
     for te in task_equipment_list:
-        equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле
+        equipment_unit_price = te.equipment.price or Decimal('0') # <--- Используем новое поле unit_price
         calculated_client_price += equipment_unit_price * te.quantity
         calculated_montajnik_reward += equipment_unit_price * te.quantity # Монтажник получает за оборудование
 
@@ -359,7 +359,7 @@ async def admin_update_task(
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле
+        work_unit_price = tw.work_type.price or Decimal('0') # <--- Используем новое поле unit_price
         calculated_client_price += work_unit_price * tw.quantity
         # montajnik_reward НЕ увеличивается за работы
 
@@ -483,6 +483,19 @@ async def admin_update_task(
         # Создаём комментарий с *всеми* изменениями
         comment = json.dumps(all_changes, ensure_ascii=False)
         logger.info(f"Комментарий для истории (JSON): {comment}")
+
+        # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ ---
+        # Формируем снимки *после* обновления связей, но *до* commit
+        equipment_snapshot_for_history = [
+            {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+            for te in full_equip_list
+        ]
+
+        work_types_snapshot_for_history = [
+            {"name": tw.work_type.name, "quantity": tw.quantity}
+            for tw in full_works_list
+        ]
+
         hist = TaskHistory(
             task_id=task.id,
             user_id=getattr(admin_user, "id", None),
@@ -503,7 +516,10 @@ async def admin_update_task(
             montajnik_reward=str(task.montajnik_reward), # <--- Сохраняем новую рассчитанную награду
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
-            gos_number = task.gos_number
+            gos_number = task.gos_number,
+            # --- НОВЫЕ ПОЛЯ: Снимки ---
+            equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+            work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
         )
         db.add(hist)
         await db.flush()

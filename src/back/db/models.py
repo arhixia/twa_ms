@@ -7,6 +7,8 @@ from back.db.database import Base
 from datetime import datetime
 import enum
 from zoneinfo import ZoneInfo
+from sqlalchemy.dialects.postgresql import JSONB
+
 
 UTC_PLUS_5 = ZoneInfo("Asia/Yekaterinburg")
 
@@ -271,7 +273,8 @@ class TaskHistory(AsyncAttrs, Base):
     photo_required = Column(Boolean, default=False)
     assignment_type = Column(Enum(AssignmentType), nullable=True)
     gos_number = Column(String,nullable=True)
-    
+    equipment_snapshot = Column(JSONB, nullable=True) 
+    work_types_snapshot = Column(JSONB, nullable=True)
 
     
 

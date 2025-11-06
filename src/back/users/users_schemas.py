@@ -168,6 +168,8 @@ class TaskHistoryItem(BaseModel):
     montajnik_reward: Optional[Money] = None
     photo_required: Optional[bool] = None
     assignment_type: Optional[str] = None
+    equipment_snapshot: Optional[List[Dict[str, Any]]] = None # <--- Новое поле
+    work_types_snapshot: Optional[List[Dict[str, Any]]]
 
     model_config = ConfigDict(from_attributes=True)
 

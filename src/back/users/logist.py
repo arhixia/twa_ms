@@ -569,14 +569,18 @@ async def publish_task(
                 setattr(task, key, value)
 
         # --- НОВАЯ РАСЧЁТНАЯ ЛОГИКА ЦЕН ДЛЯ ПУБЛИКАЦИИ ИЗ ЧЕРНОВИКА ---
-        # Загружаем текущие связи из черновика для пересчёта
+        # Загружаем текущие связи из черновика для пересчёта и снимков
         current_wt_res = await db.execute(
-            select(TaskWork).where(TaskWork.task_id == task.id)
+            select(TaskWork)
+            .options(selectinload(TaskWork.work_type)) # <--- ЗАГРУЖАЕМ work_type
+            .where(TaskWork.task_id == task.id)
         )
         current_work_items = current_wt_res.scalars().all()
 
         current_eq_res = await db.execute(
-            select(TaskEquipment).where(TaskEquipment.task_id == task.id)
+            select(TaskEquipment)
+            .options(selectinload(TaskEquipment.equipment)) # <--- ЗАГРУЖАЕМ equipment
+            .where(TaskEquipment.task_id == task.id)
         )
         current_equipment_items = current_eq_res.scalars().all()
 
@@ -624,10 +628,23 @@ async def publish_task(
                 calculated_equipment_cost += (eq.price or Decimal('0')) * qty
 
         # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
+        # Клиент платит за работы + за оборудование
         task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
+        # Монтажник получает только за оборудование
         task.montajnik_reward = calculated_equipment_cost
 
         task.is_draft = False # Меняем статус на опубликованную задачу
+
+        # --- СОЗДАНИЕ СНИМКОВ ОБОРУДОВАНИЯ И ВИДОВ РАБОТ ДЛЯ ИСТОРИИ (на основе current_work_items и current_equipment_items) ---
+        equipment_snapshot_for_history = [
+            {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+            for te in current_equipment_items
+        ]
+
+        work_types_snapshot_for_history = [
+            {"name": tw.work_type.name, "quantity": tw.quantity}
+            for tw in current_work_items
+        ]
 
         # Добавляем запись в историю
         db.add(TaskHistory(
@@ -650,7 +667,10 @@ async def publish_task(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
-            gos_number = task.gos_number
+            gos_number = task.gos_number,
+            # --- НОВЫЕ ПОЛЯ ---
+            equipment_snapshot=equipment_snapshot_for_history,
+            work_types_snapshot=work_types_snapshot_for_history,
         ))
 
     else:
@@ -740,6 +760,7 @@ async def publish_task(
         await db.flush() # flush, чтобы получить task.id
 
         # --- SAVE EQUIPMENT для новой задачи ---
+        equipment_snapshot_for_history = [] # <--- Собираем снимок
         for eq_item in equipment_data_raw:
             equipment_id = eq_item.get("equipment_id")
             serial_number = eq_item.get("serial_number")
@@ -750,6 +771,13 @@ async def publish_task(
             if not equipment_obj:
                 raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
 
+            # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
+            equipment_snapshot_for_history.append({
+                "name": equipment_obj.name,
+                "serial_number": serial_number,
+                "quantity": quantity
+            })
+
             db.add(TaskEquipment(
                 task_id=task.id,
                 equipment_id=equipment_id,
@@ -758,16 +786,23 @@ async def publish_task(
             ))
 
         # --- SAVE WORK TYPES для новой задачи ---
+        work_types_snapshot_for_history = [] # <--- Собираем снимок
         for wt_id, count in work_type_counts.items():
             wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
             wt = wt_res.scalars().first()
             if not wt:
                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
 
+            # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
+            work_types_snapshot_for_history.append({
+                "name": wt.name,
+                "quantity": count
+            })
+
             db.add(TaskWork(
                 task_id=task.id,
                 work_type_id=wt_id,
-                quantity=count # ✅ Учитываем количество
+                quantity=count
             ))
 
         # Добавляем запись в историю для новой задачи
@@ -777,7 +812,6 @@ async def publish_task(
             action=task.status,
             event_type=TaskHistoryEventType.created, # или published
             comment="Task created directly",
-            # ... (остальные поля задачи для истории) ...
             company_id=task.company_id,
             contact_person_id=task.contact_person_id,
             contact_person_phone=task.contact_person_phone,
@@ -791,7 +825,10 @@ async def publish_task(
             montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
-            gos_number = task.gos_number
+            gos_number = task.gos_number,
+            # --- НОВЫЕ ПОЛЯ ---
+            equipment_snapshot=equipment_snapshot_for_history,
+            work_types_snapshot=work_types_snapshot_for_history,
         ))
 
     await db.commit()
@@ -829,17 +866,16 @@ async def edit_task(
         raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
 
     # Сохраняем *старые* значения связей для истории
-    # ✅ Обновляем получение старых данных с учетом quantity
+    # ✅ Обновляем получение старых данных с учетом quantity и serial_number
     old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
-    # ✅ Обновляем получение старых данных оборудования с serial_number и quantity
     old_equipment_with_sn_qty = [
         (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
     ]
     old_contact_person_name = task.contact_person.name if task.contact_person else None
     old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     old_contact_person_phone = task.contact_person.phone if task.contact_person else None
-    old_client_price = task.client_price if task.client_price else None
-    old_montajnik_reward = task.montajnik_reward if task.montajnik_reward else None
+    old_client_price = task.client_price
+    old_montajnik_reward = task.montajnik_reward
     logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name},contact_person_phone = {old_contact_person_phone}, company={old_company_name}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
@@ -876,7 +912,7 @@ async def edit_task(
             changed.append((field, old, value))
             logger.info(f"Поле '{field}' помечено как изменённое: {old_cmp} -> {new_cmp}")
 
-    # --- Обновление contact_person_id и company_id ---
+    # --- Обновление contact_person_id, company_id и contact_person_phone ---
     contact_person_id = incoming.get("contact_person_id")
     if contact_person_id is not None:
         if contact_person_id:
@@ -1007,7 +1043,7 @@ async def edit_task(
     )
     task_equipment_list = equipment_res.scalars().all()
     for te in task_equipment_list:
-        equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле
+        equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле unit_price
         calculated_client_price += equipment_unit_price * te.quantity
         calculated_montajnik_reward += equipment_unit_price * te.quantity # Монтажник получает за оборудование
 
@@ -1019,7 +1055,7 @@ async def edit_task(
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле
+        work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле unit_price
         calculated_client_price += work_unit_price * tw.quantity
         # montajnik_reward НЕ увеличивается за работы
 
@@ -1030,22 +1066,16 @@ async def edit_task(
 
     logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
     has_changes = bool(changed)
-    logger.info(f"'has_changes' рассчитано как: {has_changes}")
+    prices_changed = (task.client_price != old_client_price) or (task.montajnik_reward != old_montajnik_reward) # <--- Проверяем изменение цен
+    logger.info(f"'has_changes' рассчитано как: {has_changes}, 'prices_changed' как: {prices_changed}")
 
-    if not has_changes and task.client_price == old_client_price and task.montajnik_reward == old_montajnik_reward: # <--- Добавлено сравнение цен
+    if not has_changes and not prices_changed: # <--- Изменено условие
         logger.info("Нет изменений (включая цены) для сохранения, возвращаем 'Без изменений'")
         return {"detail": "Без изменений"}
     else:
         logger.info("Обнаружены изменения (или изменились цены), продолжаем выполнение")
 
     try:
-        # --- Логируем изменения в историю ---
-        # Обновляем *основные* поля задачи и связи, которые были изменены напрямую
-        # refresh после обновления связей, но до получения новых значений для истории
-        # await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person']) # <- Это может быть недостаточно
-
-        # Вместо refresh, выполним явные запросы для получения полных данных связей
-        # 1. Получить полные данные по работам (включая work_type.name)
         res_works = await db.execute(
             select(TaskWork)
             .options(selectinload(TaskWork.work_type)) # Загрузить work_type для каждой TaskWork
@@ -1065,11 +1095,6 @@ async def edit_task(
             (te.equipment.name, te.serial_number, te.quantity) for te in full_equip_list # <- Теперь .name доступно синхронно
         ]
 
-        # 3. Получить обновленные данные по контактному лицу и компании
-        # Так как contact_person_id и company_id были установлены вручную,
-        # и, возможно, task.contact_person и task.company обновлены в сессии,
-        # мы можем получить их напрямую, но если связь lazy, это снова вызовет ошибку.
-        # Лучше получить через отдельный запрос, используя новое task.contact_person_id
         new_contact_person_name = None
         new_company_name = None
         if task.contact_person_id: # Если контактное лицо установлено
@@ -1123,10 +1148,36 @@ async def edit_task(
         if cp_phone_change:
             all_changes.append({"field": "contact_person_phone", "old": str(cp_phone_change[1]), "new": str(cp_phone_change[2])})
 
+        # ✅ Добавляем изменения цен в историю, если они произошли
+        if prices_changed:
+            all_changes.append({
+                "field": "client_price",
+                "old": str(old_client_price),
+                "new": str(task.client_price)
+            })
+            all_changes.append({
+                "field": "montajnik_reward",
+                "old": str(old_montajnik_reward),
+                "new": str(task.montajnik_reward)
+            })
+
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
         # Создаём комментарий с *всеми* изменениями
         comment = json.dumps(all_changes, ensure_ascii=False)
         logger.info(f"Комментарий для истории (JSON): {comment}")
+
+        # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ ---
+        # Формируем снимки *после* обновления связей, но *до* commit
+        equipment_snapshot_for_history = [
+            {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+            for te in full_equip_list
+        ]
+
+        work_types_snapshot_for_history = [
+            {"name": tw.work_type.name, "quantity": tw.quantity}
+            for tw in full_works_list
+        ]
+
         hist = TaskHistory(
             task_id=task.id,
             user_id=getattr(current_user, "id", None),
@@ -1147,7 +1198,10 @@ async def edit_task(
             montajnik_reward=str(task.montajnik_reward), # <--- Сохраняем новую рассчитанную награду
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
-            gos_number = task.gos_number
+            gos_number = task.gos_number,
+            # --- НОВЫЕ ПОЛЯ: Снимки ---
+            equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+            work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
         )
         db.add(hist)
         await db.flush() # flush после добавления истории
@@ -1189,7 +1243,6 @@ async def edit_task(
 
 
 
-
 @router.post("/tasks/{task_id}/reports/{report_id}/review", dependencies=[Depends(require_roles(Role.logist, Role.tech_supp))])
 async def review_report(
     background_tasks: BackgroundTasks,
@@ -1214,7 +1267,6 @@ async def review_report(
     approval = payload.approval
     comment = payload.comment
 
-
     if approval not in ("approved", "rejected"):
         raise HTTPException(status_code=400, detail="approval must be 'approved' or 'rejected'")
 
@@ -1225,10 +1277,15 @@ async def review_report(
         raise HTTPException(status_code=404, detail="Report not found")
 
     # load task
+    # Загружаем задачу с её связями для снимка
     t_res = await db.execute(
         select(Task)
         .where(Task.id == task_id)
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company))  # ✅ Загружаем компанию
+        .options(
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
+            selectinload(Task.works).selectinload(TaskWork.work_type), # <--- Загрузим работы
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment) # <--- Загрузим оборудование
+        )
     )
     task = t_res.scalars().first()
     if not task:
@@ -1251,7 +1308,20 @@ async def review_report(
         if report.approval_logist == ReportApproval.approved and report.approval_tech == ReportApproval.approved:
             task.status = TaskStatus.completed
             task.completed_at = datetime.now(timezone.utc)
-            # Создаём запись в истории с *всеми* полями задачи
+
+            # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (завершение задачи) ---
+            # Так как связи уже загружены через options в t_res, мы можем их использовать
+            equipment_snapshot_for_history = [
+                {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+                for te in task.equipment_links
+            ]
+
+            work_types_snapshot_for_history = [
+                {"name": tw.work_type.name, "quantity": tw.quantity}
+                for tw in task.works
+            ]
+
+            # Создаём запись в истории с *всеми* полями задачи и снимками
             h = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
@@ -1279,7 +1349,9 @@ async def review_report(
                 new_value=TaskStatus.completed.value, # Новое значение
                 related_entity_id=report.id,
                 related_entity_type="report",
-
+                # --- НОВЫЕ ПОЛЯ: Снимки ---
+                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
             )
             db.add(h)
         else:
@@ -1287,7 +1359,17 @@ async def review_report(
             hist_comment = f"Report #{report.id} reviewed by {current_user.role.value}: {approval}"
             if comment:
                 hist_comment += f". Comment: {comment}"
-            
+
+            equipment_snapshot_for_history = [
+                {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+                for te in task.equipment_links
+            ]
+
+            work_types_snapshot_for_history = [
+                {"name": tw.work_type.name, "quantity": tw.quantity}
+                for tw in task.works
+            ]
+
             h = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
@@ -1308,17 +1390,18 @@ async def review_report(
                 montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
                 photo_required=task.photo_required,
                 assignment_type=task.assignment_type.value if task.assignment_type else None,
-            
                 field_name="report_approval", # Поле, связанное с отчётом
                 old_value=f"logist:{old_approval_logist.value if old_approval_logist else 'None'}, tech:{old_approval_tech.value if old_approval_tech else 'None'}", # Старые статусы отчёта
                 new_value=f"logist:{report.approval_logist.value}, tech:{report.approval_tech.value}", # Новые статусы отчёта
                 related_entity_id=report.id,
                 related_entity_type="report",
+                # --- НОВЫЕ ПОЛЯ: Снимки ---
+                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
+                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
             )
             db.add(h)
 
         await db.flush()
-
 
         await db.commit()
     except Exception as e:
