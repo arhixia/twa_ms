@@ -203,7 +203,23 @@ export default function TaskHistoryPage() {
                     {/* ===== НОВОЕ ПОЛЕ: Гос. номер ===== */}
                     <div><b>Гос. номер:</b> {h.gos_number || "—"}</div>
                     <div><b>Дата:</b> {h.scheduled_at ? new Date(h.scheduled_at).toLocaleString() : "—"}</div>
-                    <div><b>Место:</b> {h.location || "—"}</div>
+                    <p>
+                <b>Место/Адрес:</b>{" "}
+                {h.location ? (
+                  <a
+                    href={`https://2gis.ru/search/${encodeURIComponent(h.location)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {h.location}
+                  </a>
+                ) : "—"}
+              </p>
                     <div><b>Статус:</b> {h.status || "—"}</div>
                     <div><b>Монтажник:</b> {h.assigned_user_id || "—"}</div>
                     <div><b>Комментарий:</b> {h.comment_field || "—"}</div>

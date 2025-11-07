@@ -160,7 +160,23 @@ export default function AvailableTaskDetailPage() {
             </p>
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
-            <p><b>Место:</b> {task.location || "—"}</p>
+            <p>
+                <b>Место/Адрес:</b>{" "}
+                {task.location ? (
+                  <a
+                    href={`https://2gis.ru/search/${encodeURIComponent(task.location)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {task.location}
+                  </a>
+                ) : "—"}
+              </p>
             <p><b>Статус:</b> {task.status || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>

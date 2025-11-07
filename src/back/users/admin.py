@@ -359,7 +359,7 @@ async def admin_update_task(
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0') # <--- Используем новое поле unit_price
+        work_unit_price = tw.work_type.price or Decimal('0') # 
         calculated_client_price += work_unit_price * tw.quantity
         # montajnik_reward НЕ увеличивается за работы
 
@@ -382,13 +382,6 @@ async def admin_update_task(
         logger.info("Обнаружены изменения (или изменились цены), продолжаем выполнение")
 
     try:
-        # --- Логируем изменения в историю ---
-        # Обновляем *основные* поля задачи и связи, которые были изменены напрямую
-        # refresh после обновления связей, но до получения новых значений для истории
-        # await db.refresh(task, attribute_names=['works', 'equipment_links', 'contact_person']) # <- Это может быть недостаточно
-
-        # Вместо refresh, выполним явные запросы для получения полных данных связей
-        # 1. Получить полные данные по работам (включая work_type.name)
         res_works = await db.execute(
             select(TaskWork)
             .options(selectinload(TaskWork.work_type)) # Загрузить work_type для каждой TaskWork
@@ -408,11 +401,6 @@ async def admin_update_task(
             (te.equipment.name, te.serial_number, te.quantity) for te in full_equip_list # <- Теперь .name доступно синхронно
         ]
 
-        # 3. Получить обновленные данные по контактному лицу и компании
-        # Так как contact_person_id и company_id были установлены вручную,
-        # и, возможно, task.contact_person и task.company обновлены в сессии,
-        # мы можем получить их напрямую, но если связь lazy, это снова вызовет ошибку.
-        # Лучше получить через отдельный запрос, используя новое task.contact_person_id
         new_contact_person_name = None
         new_company_name = None
         if task.contact_person_id: # Если контактное лицо установлено

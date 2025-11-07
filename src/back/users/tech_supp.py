@@ -373,6 +373,7 @@ async def tech_task_detail(
         "company_name": company_name,  # ✅ Новое
         "contact_person_name": contact_person_name,  # ✅ Новое
         "contact_person_phone": task.contact_person_phone,
+        "gos_number" : task.gos_number,
         "vehicle_info": task.vehicle_info or None,
         "location" : task.location or None,
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,

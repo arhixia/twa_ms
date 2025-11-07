@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['itunes-sponsor-sufficient-planners.trycloudflare.com']
+    allowedHosts: ['creations-somebody-telecom-surveys.trycloudflare.com']
   },
 })
 

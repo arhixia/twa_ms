@@ -50,6 +50,246 @@ export default function DraftDetailPage() {
     }
   }
 
+
+  function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredEquipment, setFilteredEquipment] = useState(availableEquipment);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      // Показываем всё оборудование, если поле пустое
+      setFilteredEquipment(availableEquipment);
+    } else {
+      const termLower = searchTerm.toLowerCase();
+      setFilteredEquipment(
+        availableEquipment.filter(eq =>
+          eq.name.toLowerCase().includes(termLower)
+        )
+      );
+    }
+  }, [searchTerm, availableEquipment]);
+
+  const handleInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    setIsOpen(true);
+  };
+
+  const handleItemClick = (equipment) => {
+    onSelect(equipment.id);
+    setSearchTerm("");
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder="🔍 Поиск оборудования..."
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          backgroundColor: '#1a1a1a',
+          color: '#e0e0e0',
+          fontSize: '14px',
+        }}
+      />
+      {isOpen && filteredEquipment.length > 0 && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          {filteredEquipment.map((eq) => (
+            <li
+              key={eq.id}
+              onClick={() => handleItemClick(eq)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                color: '#e0e0e0',
+                backgroundColor: '#2a2a2a',
+                borderBottom: '1px solid #3a3a3a',
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {eq.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredEquipment.length === 0 && searchTerm.trim() !== '' && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+
+// --- КОМПОНЕНТ: Умный поиск для видов работ ---
+function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTypeIds }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredWorkTypes, setFilteredWorkTypes] = useState(availableWorkTypes);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      // Показываем все виды работ, если поле пустое
+      setFilteredWorkTypes(availableWorkTypes);
+    } else {
+      const termLower = searchTerm.toLowerCase();
+      setFilteredWorkTypes(
+        availableWorkTypes.filter(wt =>
+          wt.name.toLowerCase().includes(termLower)
+        )
+      );
+    }
+  }, [searchTerm, availableWorkTypes]);
+
+  const handleInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    setIsOpen(true);
+  };
+
+  const handleItemClick = (workType) => {
+    onSelect(workType.id);
+    setSearchTerm("");
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder="🔍 Поиск вида работ..."
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          backgroundColor: '#1a1a1a',
+          color: '#e0e0e0',
+          fontSize: '14px',
+        }}
+      />
+      {isOpen && filteredWorkTypes.length > 0 && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          {filteredWorkTypes.map((wt) => (
+            <li
+              key={wt.id}
+              onClick={() => handleItemClick(wt)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                color: '#e0e0e0',
+                backgroundColor: '#2a2a2a',
+                borderBottom: '1px solid #3a3a3a',
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {wt.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredWorkTypes.length === 0 && searchTerm.trim() !== '' && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+
   async function loadDraft() {
     setLoading(true);
     try {
@@ -313,6 +553,14 @@ export default function DraftDetailPage() {
                   setField("contact_person_phone", null); // <--- Добавлено
                 }
               }}
+               style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}
             >
               <option value="">Выберите компанию</option>
               {companies.map(c => (
@@ -329,11 +577,21 @@ export default function DraftDetailPage() {
               // ✅ Используем новую функцию
               onChange={(e) => handleContactPersonChangeForForm(e.target.value)} // <--- Изменено
               disabled={!form.company_id} // доступно только если выбрана компания
+               style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}
             >
               <option value="">Выберите контактное лицо</option>
               {contactPersons.map(cp => (
                 <option key={cp.id} value={cp.id}>{cp.name}</option>
               ))}
+
+              
             </select>
             {/* ✅ Индикатор загрузки телефона */}
             {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>} {/* <--- Добавлено */}
@@ -349,25 +607,26 @@ export default function DraftDetailPage() {
               readOnly // <--- Изменено с disabled на readOnly
               placeholder="Выберите контактное лицо"
               style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #ccc",
-                backgroundColor: "#e0e0e0", // Светло-серый фон для readonly
-                color: "#333",
-                cursor: "not-allowed", // Курсор "запрещено"
-              }}
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                    cursor: "not-allowed",
+                  }}
             />
             {/* ✅ Ссылка для вызова, если телефон есть */}
             {form.contact_person_phone && ( // <--- Добавлено
               <a
                 href={`tel:${form.contact_person_phone}`}
-                style={{
-                  display: 'inline-block',
-                  marginTop: '4px',
-                  fontSize: '0.9em',
-                  color: '#1e88e5', // Синий цвет
-                  textDecoration: 'none',
+                style={{  
+                   display: 'inline-block',
+                      marginLeft: '8px',
+                      fontSize: '0.9em',
+                      color: '#bb86fc',
+                      textDecoration: 'none',
+                    
                 }}
                 onClick={(e) => {
                   // Предотвращаем отправку формы, если это внутри label
@@ -382,22 +641,62 @@ export default function DraftDetailPage() {
 
           <label>
             ТС
-            <input value={form.vehicle_info || ""} onChange={(e) => setField("vehicle_info", e.target.value)} />
+            <input value={form.vehicle_info || ""} onChange={(e) => setField("vehicle_info", e.target.value)}  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }} />
           </label>
 
           {/* ===== НОВОЕ ПОЛЕ: ГОС. НОМЕР ===== */}
           <label>
             Гос. номер
-            <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)} />
+            <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)}  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}/>
           </label>
 
           <label>
             Дата и время
-            <input type="datetime-local" value={form.scheduled_at || ""} onChange={(e) => setField("scheduled_at", e.target.value)} />
+            <input type="datetime-local" value={form.scheduled_at || ""} onChange={(e) => setField("scheduled_at", e.target.value)}  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}/>
           </label>
           <label className="full-row">
             Место {/* ✅ Исправлено: было "Место", теперь соответствует полю 'location' */}
-            <textarea value={form.location || ""} onChange={(e) => setField("location", e.target.value)} />
+            <textarea value={form.location || ""} onChange={(e) => setField("location", e.target.value)}  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}/>
+          </label>
+
+          <label className="full-row">
+            Комментарий
+            <textarea value={form.comment || ""} onChange={(e) => setField("comment", e.target.value)}  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}/>
           </label>
 
           {/* ===== Оборудование (редактирование) ===== */}
@@ -426,7 +725,7 @@ export default function DraftDetailPage() {
                   <button
                     type="button"
                     onClick={() => removeEquipmentItemFromForm(index)}
-                    style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    style={{ padding: '8px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                   >
                     ×
                   </button>
@@ -435,24 +734,11 @@ export default function DraftDetailPage() {
             })}
           </div>
           {/* --- Выбор нового оборудования из списка --- */}
-          <select
-            size={5}
-            value=""
-            onChange={(e) => {
-              const val = Number(e.target.value);
-              if (!isNaN(val) && val > 0) {
-                addEquipmentItemToForm(val);
-              }
-              e.target.value = ""; // Сброс для возможности повторного выбора
-            }}
-            style={{ width: "100%" }}
-          >
-            {equipment.map((eq) => (
-              <option key={eq.id} value={eq.id}>
-                {eq.name}
-              </option>
-            ))}
-          </select>
+          <SearchableEquipmentSelect
+            availableEquipment={equipment}
+            onSelect={addEquipmentItemToForm}
+            selectedItems={form.equipment} // Не используется в фильтрации, т.к. разрешено дублирование
+          />
 
           {/* ===== Виды работ (редактирование) ===== */}
           <label>Виды работ</label>
@@ -475,15 +761,15 @@ export default function DraftDetailPage() {
                   <div
                     key={id}
                     style={{
-                      padding: "4px 8px",
-                      border: "1px solid #ccc",
-                      borderRadius: 12,
-                      backgroundColor: "#2196f3",
-                      color: "#fff",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 4,
-                    }}
+                          padding: "4px 8px",
+                          border: "1px solid #444",
+                          borderRadius: 12,
+                          backgroundColor: "#bb86fc", // Цвет для работы
+                          color: "#000", // Темный текст на светлом фоне
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
                   >
                     {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
                     <span
@@ -498,34 +784,34 @@ export default function DraftDetailPage() {
             })()}
           </div>
           {/* --- Выбор нового вида работ из списка --- */}
-          <select
-            size={5}
-            value=""
-            onChange={(e) => {
-              const val = Number(e.target.value);
-              if (!isNaN(val) && val > 0) {
-                addWorkTypeItemToForm(val);
-              }
-              e.target.value = ""; // Сброс
-            }}
-            style={{ width: "100%" }}
-          >
-            {workTypes.map((wt) => (
-              <option key={wt.id} value={wt.id}>
-                {wt.name}
-              </option>
-            ))}
-          </select>
-
-          <label className="full-row">
-            Комментарий
-            <textarea value={form.comment || ""} onChange={(e) => setField("comment", e.target.value)} />
-          </label>
-
+          <SearchableWorkTypeSelect
+            availableWorkTypes={workTypes}
+            onSelect={addWorkTypeItemToForm}
+            selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, т.к. разрешено дублирование
+          />
+          
+  
           <label>
             Монтажник (ID)
-            <input value={form.assigned_user_id || ""} onChange={(e) => setField("assigned_user_id", e.target.value)} />
+            <input value={form.assigned_user_id || ""} onChange={(e) => setField("assigned_user_id", e.target.value)} style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }} />
           </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}> {/* <--- Стиль для чекбокса */}
+        <input
+          type="checkbox"
+          checked={form.photo_required || false}
+          onChange={(e) => setField("photo_required", e.target.checked)}
+        />{" "}
+        Фото обязательно
+      </label>
+
 
         </div>
       ) : (
@@ -566,11 +852,26 @@ export default function DraftDetailPage() {
             <b>Дата:</b> {draft.scheduled_at ? new Date(draft.scheduled_at).toLocaleString() : "—"}
           </p>
           <p>
-            <b>Место:</b> {draft.location || "—"} {/* ✅ Исправлено: было "Место", теперь соответствует полю 'location' */}
-          </p>
+                <b>Место/Адрес:</b>{" "}
+                {draft.location ? (
+                  <a
+                    href={`https://2gis.ru/search/${encodeURIComponent(draft.location)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {draft.location}
+                  </a>
+                ) : "—"}
+              </p>
           <p>
             <b>Комментарий:</b> {draft.comment || "—"}
           </p>
+          <p><b>Фото обязательно:</b> {draft.photo_required ? "Да" : "Нет"}</p>
           {/* ✅ Оставляем отображение цен */}
           <p>
             <b>Цена клиента:</b> {draft.client_price || "—"}
@@ -578,6 +879,7 @@ export default function DraftDetailPage() {
           <p>
             <b>Награда монтажнику:</b> {draft.montajnik_reward || "—"}
           </p>
+          <p><b>Монтажник:</b> {draft.assigned_user_id || "—"}</p>
           {/* ===== Оборудование (отображение) ===== */}
           <p>
             <b>Оборудование:</b>{" "}

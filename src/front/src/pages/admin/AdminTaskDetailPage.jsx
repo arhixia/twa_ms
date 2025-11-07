@@ -55,6 +55,243 @@ export default function AdminTaskDetailPage() {
     }
   }
 
+  function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredEquipment, setFilteredEquipment] = useState(availableEquipment);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      // Показываем всё оборудование (разрешено дублирование)
+      setFilteredEquipment(availableEquipment);
+    } else {
+      const termLower = searchTerm.toLowerCase();
+      setFilteredEquipment(
+        availableEquipment.filter(eq =>
+          eq.name.toLowerCase().includes(termLower) // Ищем в любом месте названия
+        )
+      );
+    }
+  }, [searchTerm, availableEquipment]);
+
+  const handleInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    setIsOpen(true);
+  };
+
+  const handleItemClick = (equipment) => {
+    onSelect(equipment.id);
+    setSearchTerm("");
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder="🔍 Поиск оборудования..."
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          backgroundColor: '#1a1a1a',
+          color: '#e0e0e0',
+          fontSize: '14px',
+        }}
+      />
+      {isOpen && filteredEquipment.length > 0 && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          {filteredEquipment.map((eq) => (
+            <li
+              key={eq.id}
+              onClick={() => handleItemClick(eq)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                color: '#e0e0e0',
+                backgroundColor: '#2a2a2a',
+                borderBottom: '1px solid #3a3a3a',
+              }}
+              onMouseDown={(e) => e.preventDefault()} // Предотвращает потерю фокуса у input
+            >
+              {eq.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredEquipment.length === 0 && searchTerm.trim() !== '' && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// --- КОМПОНЕНТ: Умный поиск для видов работ (из TaskDetailPage) ---
+function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTypeIds }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredWorkTypes, setFilteredWorkTypes] = useState(availableWorkTypes);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      // Показываем все виды работ (разрешено дублирование)
+      setFilteredWorkTypes(availableWorkTypes);
+    } else {
+      const termLower = searchTerm.toLowerCase();
+      setFilteredWorkTypes(
+        availableWorkTypes.filter(wt =>
+          wt.name.toLowerCase().includes(termLower) // Ищем в любом месте названия
+        )
+      );
+    }
+  }, [searchTerm, availableWorkTypes]);
+
+  const handleInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    setIsOpen(true);
+  };
+
+  const handleItemClick = (workType) => {
+    onSelect(workType.id);
+    setSearchTerm("");
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder="🔍 Поиск вида работ..."
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          backgroundColor: '#1a1a1a',
+          color: '#e0e0e0',
+          fontSize: '14px',
+        }}
+      />
+      {isOpen && filteredWorkTypes.length > 0 && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          {filteredWorkTypes.map((wt) => (
+            <li
+              key={wt.id}
+              onClick={() => handleItemClick(wt)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                color: '#e0e0e0',
+                backgroundColor: '#2a2a2a',
+                borderBottom: '1px solid #3a3a3a',
+              }}
+              onMouseDown={(e) => e.preventDefault()} // Предотвращает потерю фокуса у input
+            >
+              {wt.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredWorkTypes.length === 0 && searchTerm.trim() !== '' && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
+          }}
+        >
+          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
   async function loadTask() {
     if (isNaN(taskId)) return;
     setLoading(true);
@@ -377,6 +614,14 @@ export default function AdminTaskDetailPage() {
                     setField("contact_person_phone", null);
                   }
                 }}
+                style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}
               >
                 <option value="">Выберите компанию</option>
                 {companies.map(c => (
@@ -392,6 +637,14 @@ export default function AdminTaskDetailPage() {
                 value={form.contact_person_id || ""}
                 onChange={(e) => handleContactPersonChangeForForm(e.target.value)}
                 disabled={!form.company_id}
+                style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}
               >
                 <option value="">Выберите контактное лицо</option>
                 {contactPersons.map(cp => (
@@ -410,14 +663,14 @@ export default function AdminTaskDetailPage() {
                 readOnly
                 placeholder="Выберите контактное лицо"
                 style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #ccc",
-                  backgroundColor: "#e0e0e0",
-                  color: "#333",
-                  cursor: "not-allowed",
-                }}
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                    cursor: "not-allowed",
+                  }}
               />
               {form.contact_person_phone && (
                 <a
@@ -437,13 +690,27 @@ export default function AdminTaskDetailPage() {
 
             <label>
               ТС (марка, гос.номер)
-              <input value={form.vehicle_info || ""} onChange={(e) => setField("vehicle_info", e.target.value)} />
+              <input value={form.vehicle_info || ""} onChange={(e) => setField("vehicle_info", e.target.value)} style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }} />
             </label>
 
             {/* ===== ГОС. НОМЕР ===== */}
             <label>
               Гос. номер
-              <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)} />
+              <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)} style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}/>
             </label>
 
             <label>
@@ -452,151 +719,168 @@ export default function AdminTaskDetailPage() {
                 type="datetime-local"
                 value={form.scheduled_at ? new Date(form.scheduled_at).toISOString().slice(0, 16) : ""}
                 onChange={(e) => setField("scheduled_at", e.target.value)}
+                style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}
               />
             </label>
             <label>
               Место/адрес
-              <textarea value={form.location || ""} onChange={(e) => setField("location", e.target.value)} rows="3" />
+              <textarea value={form.location || ""} onChange={(e) => setField("location", e.target.value)} rows="3" style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}/>
             </label>
             <label>
               Комментарий
-              <textarea value={form.comment || ""} onChange={(e) => setField("comment", e.target.value)} rows="3" />
+              <textarea value={form.comment || ""} onChange={(e) => setField("comment", e.target.value)} rows="3" style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}/>
             </label>
+            
             <label>
-              Монтажник (ID)
-              <input
-                type="number"
-                value={form.assigned_user_id || ""}
-                onChange={(e) => setField("assigned_user_id", e.target.value ? parseInt(e.target.value) : null)}
-              />
-            </label>
+  Монтажник (ID)
+  <input
+    value={form.assigned_user_id || ""}
+    onChange={(e) => {
+      const val = e.target.value ? parseInt(e.target.value, 10) : null;
+      setField("assigned_user_id", val);
+    }}
+    style={{
+      width: "100%",
+      padding: "8px",
+      borderRadius: "4px",
+      border: "1px solid #444",
+      backgroundColor: "#1a1a1a",
+      color: "#e0e0e0",
+    }}
+  />
+</label>
+
             {/* Цены — не редактируются */}
-            <label>
-              Цена клиента (авто)
-              <input value="" disabled placeholder="Рассчитывается автоматически" />
-            </label>
-            <label>
-              Награда монтажнику (авто)
-              <input value="" disabled placeholder="Рассчитывается автоматически" />
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={form.photo_required || false}
-                onChange={(e) => setField("photo_required", e.target.checked)}
-              />{" "}
-              Фото обязательно
-            </label>
+
+
+        
 
             {/* ===== Оборудование (редактирование) ===== */}
-            <label>Оборудование</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
-              {(form.equipment || []).map((item, index) => {
-                const eq = equipment.find((e) => e.id === item.equipment_id);
-                return (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#e0e0e0' }}>
-                      {eq?.name || `ID ${item.equipment_id}`}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <input
-                        type="text"
-                        placeholder="Серийный номер"
-                        value={item.serial_number || ""}
-                        onChange={(e) => updateEquipmentItemInForm(index, "serial_number", e.target.value)}
-                        style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeEquipmentItemFromForm(index)}
-                      style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
+            <label>
+        Оборудование
+      </label>
+      {/* --- Список выбранных элементов (название - поле серийного номера) --- */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+        {(form.equipment || []).map((item, index) => {
+          const eq = equipment.find((e) => e.id === item.equipment_id); // <--- Используем equipment из state
+          return (
+            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {/* Название оборудования */}
+              <div style={{ flex: 1, padding: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                {eq?.name || `ID ${item.equipment_id}`}
+              </div>
+              {/* Поле ввода серийного номера */}
+              <div style={{ flex: 1 }}>
+                <input
+                  type="text"
+                  placeholder="Серийный номер"
+                  value={item.serial_number || ""}
+                  onChange={(e) => updateEquipmentItemInForm(index, "serial_number", e.target.value)}
+                  style={{ width: '100%', padding: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#1a1a1a', color: '#e0e0e0' }}
+                />
+              </div>
+              {/* Кнопка удаления (удаляет конкретную строку/единицу) */}
+              <button
+                type="button"
+                onClick={() => removeEquipmentItemFromForm(index)}
+                style={{ padding: '8px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                ×
+              </button>
             </div>
-            <select
-              size={5}
-              value=""
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (!isNaN(val) && val > 0) {
-                  addEquipmentItemToForm(val);
-                }
-                e.target.value = "";
-              }}
-              style={{ width: "100%" }}
-            >
-              {equipment.map((eq) => (
-                <option key={eq.id} value={eq.id}>
-                  {eq.name}
-                </option>
-              ))}
-            </select>
+          );
+        })}
+      </div>
+      {/* --- Выбор нового оборудования через SearchableSelect --- */}
+      <SearchableEquipmentSelect
+        availableEquipment={equipment} // <--- Передаём весь список оборудования
+        onSelect={addEquipmentItemToForm} // <--- Передаём функцию добавления
+        selectedItems={form.equipment} // <--- Передаём уже выбранные элементы (не используется в фильтрации, т.к. разрешено дублирование)
+      />
 
-            {/* ===== Виды работ (редактирование) ===== */}
-            <label>Виды работ</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-              {(() => {
-                const counts = {};
-                (form.work_types_ids || []).forEach(id => {
-                  counts[id] = (counts[id] || 0) + 1;
-                });
-                const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
-                  id: parseInt(id, 10),
-                  count,
-                }));
+      {/* ===== Виды работ (редактирование с умным поиском) ===== */}
+      <label>
+        Виды работ
+      </label>
+      {/* --- Отображение выбранных типов работ с количеством --- */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+        {(() => {
+          const counts = {};
+          (form.work_types_ids || []).forEach(id => {
+            counts[id] = (counts[id] || 0) + 1;
+          });
+          const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+            id: parseInt(id, 10),
+            count,
+          }));
 
-                return uniqueWorkTypesWithCounts.map(({ id, count }) => {
-                  const wt = workTypes.find((w) => w.id === id);
-                  if (!wt) return null;
-                  return (
-                    <div
-                      key={id}
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid #ccc",
-                        borderRadius: 12,
-                        backgroundColor: "#2196f3",
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {wt.name} (x{count})
-                      <span
-                        style={{ cursor: "pointer" }}
-                        onClick={() => removeWorkTypeItemFromForm(id)}
-                      >
-                        ×
-                      </span>
-                    </div>
-                  );
-                });
-              })()}
-            </div>
-            <select
-              size={5}
-              value=""
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                if (!isNaN(val) && val > 0) {
-                  addWorkTypeItemToForm(val);
-                }
-                e.target.value = "";
-              }}
-              style={{ width: "100%" }}
-            >
-              {workTypes.map((wt) => (
-                <option key={wt.id} value={wt.id}>
-                  {wt.name}
-                </option>
-              ))}
-            </select>
+          return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+            const wt = workTypes.find((w) => w.id === id); // <--- Используем workTypes из state
+            if (!wt) return null;
+            return (
+              <div
+                key={id}
+                style={{
+                  padding: "4px 8px",
+                  border: "1px solid #444",
+                  borderRadius: 12,
+                  backgroundColor: "#bb86fc", // Цвет для работы
+                  color: "#000", // Темный текст на светлом фоне
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
+                <span
+                  style={{ cursor: "pointer", fontWeight: 'bold' }}
+                  onClick={() => removeWorkTypeItemFromForm(id)}
+                >
+                  ×
+                </span>
+              </div>
+            );
+          });
+        })()}
+
+        
+      </div>
+      {/* --- Выбор нового типа работы через SearchableSelect --- */}
+      <SearchableWorkTypeSelect
+        availableWorkTypes={workTypes} // <--- Передаём весь список видов работ
+        onSelect={addWorkTypeItemToForm} // <--- Передаём функцию добавления
+        selectedWorkTypeIds={form.work_types_ids} // <--- Передаём уже выбранные ID (не используется в фильтрации, т.к. разрешено дублирование)
+      />
+
+       <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={form.photo_required || false}
+                  onChange={(e) => setField("photo_required", e.target.checked)}
+                />{" "}
+                Фото обязательно
+              </label>
           </div>
         ) : (
           <div className="task-view">
@@ -627,6 +911,23 @@ export default function AdminTaskDetailPage() {
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
             <p><b>Статус:</b> {task.status || "—"}</p>
             <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
+            <p>
+                <b>Место/Адрес:</b>{" "}
+                {task.location ? (
+                  <a
+                    href={`https://2gis.ru/search/${encodeURIComponent(task.location)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {task.location}
+                  </a>
+                ) : "—"}
+              </p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
             <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>
@@ -657,7 +958,8 @@ export default function AdminTaskDetailPage() {
             </p>
           </div>
         )}
-
+        {!edit && (
+          <>
          <div className="section">
           <h3>История</h3>
           {/* Кнопка "Подробнее" теперь ведёт на отдельную страницу истории */}
@@ -682,6 +984,8 @@ export default function AdminTaskDetailPage() {
             <div className="empty">Отчётов пока нет</div>
           )}
         </div>
+         </>
+          )}
       </div>
     </div>
   );

@@ -12,12 +12,9 @@ import {
 } from "../../api";
 
 export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraft = false }) {
-
-  // ✅ Изменяем структуру form для хранения equipment как массив объектов
   const [form, setForm] = useState({
     company_id: null,
     contact_person_id: null,
-    // ✅ Новое поле для телефона контактного лица
     contact_person_phone: null, // <--- Добавлено
     vehicle_info: "",
     scheduled_at: "", // ✅ Оставляем пустую строку
@@ -26,39 +23,40 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     assignment_type: "broadcast",
     assigned_user_id: null,
     photo_required: false,
-    // ❌ Убираем equipment_ids
-    // equipment_ids: [],
-    // ✅ Добавляем новое поле gos_number
     gos_number: "",
-    // ✅ Добавляем equipment как массив объектов
+    // ✅ equipment как массив объектов { equipment_id, serial_number }
     equipment: [],
-    work_types_ids: [], // Оставляем как список ID для простоты подсчета quantity
+    // ✅ work_types_ids как плоский массив ID
+    work_types_ids: [],
   });
 
-  const [equipment, setEquipment] = useState([]); // Список всех доступных Equipment
-  const [workTypes, setWorkTypes] = useState([]);
+  const [equipmentList, setEquipmentList] = useState([]); // Список всех Equipment
+  const [workTypesList, setWorkTypesList] = useState([]); // Список всех WorkType
   const [companies, setCompanies] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
   const [saving, setSaving] = useState(false);
   const [taskId, setTaskId] = useState(null);
-  // ✅ Состояние для загрузки телефона
-  const [loadingPhone, setLoadingPhone] = useState(false); // <--- Добавлено
+  const [loadingPhone, setLoadingPhone] = useState(false); // <--- Для загрузки телефона
 
   useEffect(() => {
-    loadRefs();
-    if (!open) {
+    if (open) {
+      loadRefs();
+    } else {
       setTaskId(null);
     }
   }, [open]);
 
   async function loadRefs() {
     try {
-      const eqRes = await getEquipmentList();
-      const wtRes = await getWorkTypes();
-      const compRes = await getCompaniesList();
-      setEquipment(eqRes || []);
-      setWorkTypes(wtRes || []);
-      setCompanies(compRes || []);
+      const [eqRes, wtRes, compRes] = await Promise.allSettled([
+        getEquipmentList(),
+        getWorkTypes(),
+        getCompaniesList(),
+      ]);
+
+      setEquipmentList(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
+      setWorkTypesList(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
+      setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
@@ -73,43 +71,40 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     if (!companyId) {
       setContactPersons([]);
       setField("contact_person_id", null);
-      // ✅ Сбрасываем телефон при смене компании
-      setField("contact_person_phone", null); // <--- Добавлено
+      setField("contact_person_phone", null);
       return;
     }
     try {
       const contacts = await getContactPersonsByCompany(companyId);
       setContactPersons(contacts || []);
       setField("contact_person_id", null); // Сброс при смене компании
-      // ✅ Сбрасываем телефон при смене компании
-      setField("contact_person_phone", null); // <--- Добавлено
+      setField("contact_person_phone", null);
     } catch (e) {
       console.error("Ошибка загрузки контактных лиц:", e);
       setContactPersons([]);
       setField("contact_person_id", null);
-      // ✅ Сбрасываем телефон при ошибке
-      setField("contact_person_phone", null); // <--- Добавлено
+      setField("contact_person_phone", null);
     }
   }
 
   // ✅ Новая функция для загрузки телефона контактного лица
-  async function handleContactPersonChange(contactPersonId) { // <--- Добавлено
+  async function handleContactPersonChange(contactPersonId) {
     const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
     setField("contact_person_id", val);
 
     if (val) {
-      setLoadingPhone(true); // <--- Добавлено
+      setLoadingPhone(true);
       try {
-        const { phone } = await getContactPersonPhone(val); // <--- Добавлено
-        setField("contact_person_phone", phone); // <--- Добавлено
+        const { phone } = await getContactPersonPhone(val);
+        setField("contact_person_phone", phone);
       } catch (e) {
         console.error("Ошибка загрузки телефона контактного лица:", e);
-        setField("contact_person_phone", null); // <--- Добавлено
+        setField("contact_person_phone", null);
       } finally {
-        setLoadingPhone(false); // <--- Добавлено
+        setLoadingPhone(false);
       }
     } else {
-      setField("contact_person_phone", null); // <--- Добавлено
+      setField("contact_person_phone", null);
     }
   }
 
@@ -117,23 +112,16 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     if (saving) return;
     setSaving(true);
     try {
-      // ✅ Формируем payload в новом формате
       const payload = {
         ...form,
-        // ❌ Убираем старое поле equipment_ids
-        // equipment: (form.equipment_ids || []).map((id) => ({ equipment_id: id, quantity: 1 })),
-        // ✅ Добавляем новое поле equipment как массив объектов
         equipment: form.equipment || [],
-        work_types: form.work_types_ids || [], // Передаем список ID, сервер подсчитает quantity
-        // ✅ scheduled_at передаём как есть (строку из datetime-local)
+        work_types: form.work_types_ids || [],
         scheduled_at: form.scheduled_at || null,
         assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
         photo_required: Boolean(form.photo_required),
         assignment_type: form.assignment_type || "broadcast",
-        // ✅ gos_number передаётся как есть
         gos_number: form.gos_number || null,
-        // ❌ contact_person_phone не передаём, сервер сам его возьмёт по contact_person_id
-        contact_person_phone: undefined, // <--- Добавлено для ясности
+        contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
       };
 
       let result;
@@ -158,7 +146,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       }
 
       setTaskId(newId);
-
       onSaved && onSaved(newId);
       onClose();
     } catch (e) {
@@ -170,19 +157,15 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   }
 
   // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ ---
-
-  // ✅ Функция для добавления нового экземпляра оборудования в список
   function addEquipmentItem(equipmentId) {
     if (!equipmentId) return;
-    const eq = equipment.find(e => e.id === equipmentId);
+    const eq = equipmentList.find(e => e.id === equipmentId);
     if (!eq) return;
 
     const newItem = {
-      // id: null, // ID будет присвоен бэкендом при сохранении
       equipment_id: equipmentId,
-      equipment_name: eq.name, // Для удобства отображения
-      serial_number: "", // Начальное пустое значение
-      // quantity: 1, // ❌ Убираем quantity, так как каждый элемент - это одна единица
+      equipment_name: eq.name, // Для отображения
+      serial_number: "",
     };
     setForm((prevForm) => ({
       ...prevForm,
@@ -190,22 +173,18 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     }));
   }
 
-  // ✅ Функция для обновления поля конкретного экземпляра оборудования
   function updateEquipmentItem(index, field, value) {
     setForm((prevForm) => {
       const updatedEquipment = [...prevForm.equipment];
-      // Проверяем, существует ли элемент по индексу
       if (updatedEquipment[index]) {
         updatedEquipment[index] = { ...updatedEquipment[index], [field]: value };
         return { ...prevForm, equipment: updatedEquipment };
       }
-      // Если индекс не существует, возвращаем предыдущее состояние
       return prevForm;
     });
   }
 
-  // ✅ Функция для удаления экземпляра оборудования из списка (полностью)
- function removeEquipmentItem(index) {
+  function removeEquipmentItem(index) {
     setForm((prevForm) => ({
       ...prevForm,
       equipment: prevForm.equipment.filter((_, i) => i !== index),
@@ -213,8 +192,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   }
 
   // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ ---
-
-  // ✅ Функция для добавления типа работы в список (увеличивает счётчик)
   function addWorkType(workTypeId) {
     if (!workTypeId) return;
     setForm((prevForm) => ({
@@ -223,27 +200,258 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     }));
   }
 
-  // ✅ Функция для удаления типа работы из списка (уменьшает счётчик)
   function removeWorkType(workTypeId) {
     setForm((prevForm) => {
       const indexToRemove = prevForm.work_types_ids.indexOf(workTypeId);
       if (indexToRemove !== -1) {
         const updatedWorkTypes = [...prevForm.work_types_ids];
-        updatedWorkTypes.splice(indexToRemove, 1); // Удаляем только одно вхождение
+        updatedWorkTypes.splice(indexToRemove, 1);
         return { ...prevForm, work_types_ids: updatedWorkTypes };
       }
       return prevForm;
     });
   }
 
-  // --- ЛОГИКА ДЛЯ ВЫБОРА ТИПОВ РАБОТ ОСТАЁТСЯ ПРОСТОЙ ---
-  // work_types_ids - это список ID. Если ID встречается дважды, сервер подсчитает quantity=2.
+  // --- КОМПОНЕНТ: Умный поиск для оборудования ---
+  function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filteredEquipment, setFilteredEquipment] = useState(availableEquipment);
+    const [isOpen, setIsOpen] = useState(false);
 
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredEquipment(availableEquipment);
+      } else {
+        const termLower = searchTerm.toLowerCase();
+        setFilteredEquipment(
+          availableEquipment.filter(eq =>
+            eq.name.toLowerCase().includes(termLower)
+          )
+        );
+      }
+    }, [searchTerm, availableEquipment]);
+
+    const handleInputChange = (e) => {
+      setSearchTerm(e.target.value);
+      setIsOpen(true);
+    };
+
+    const handleItemClick = (equipment) => {
+      onSelect(equipment.id);
+      setSearchTerm("");
+    };
+
+    const handleInputFocus = () => setIsOpen(true);
+    const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+    return (
+      <div style={{ position: 'relative', width: '100%' }}>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          placeholder="🔍 Поиск оборудования..."
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            border: '1px solid #444',
+            borderRadius: '4px',
+            backgroundColor: '#1a1a1a',
+            color: '#e0e0e0',
+            fontSize: '14px',
+          }}
+        />
+        {isOpen && filteredEquipment.length > 0 && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {filteredEquipment.map((eq) => (
+              <li
+                key={eq.id}
+                onClick={() => handleItemClick(eq)}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  color: '#e0e0e0',
+                  backgroundColor: '#2a2a2a',
+                  borderBottom: '1px solid #3a3a3a',
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {eq.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {isOpen && filteredEquipment.length === 0 && searchTerm.trim() !== '' && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+              Ничего не найдено
+            </li>
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+  // --- КОМПОНЕНТ: Умный поиск для видов работ ---
+  function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTypeIds }) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filteredWorkTypes, setFilteredWorkTypes] = useState(availableWorkTypes);
+    const [isOpen, setIsOpen] = useState(false);
+
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredWorkTypes(availableWorkTypes);
+      } else {
+        const termLower = searchTerm.toLowerCase();
+        setFilteredWorkTypes(
+          availableWorkTypes.filter(wt =>
+            wt.name.toLowerCase().includes(termLower)
+          )
+        );
+      }
+    }, [searchTerm, availableWorkTypes]);
+
+    const handleInputChange = (e) => {
+      setSearchTerm(e.target.value);
+      setIsOpen(true);
+    };
+
+    const handleItemClick = (workType) => {
+      onSelect(workType.id);
+      setSearchTerm("");
+    };
+
+    const handleInputFocus = () => setIsOpen(true);
+    const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+    return (
+      <div style={{ position: 'relative', width: '100%' }}>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          placeholder="🔍 Поиск вида работ..."
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            border: '1px solid #444',
+            borderRadius: '4px',
+            backgroundColor: '#1a1a1a',
+            color: '#e0e0e0',
+            fontSize: '14px',
+          }}
+        />
+        {isOpen && filteredWorkTypes.length > 0 && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {filteredWorkTypes.map((wt) => (
+              <li
+                key={wt.id}
+                onClick={() => handleItemClick(wt)}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  color: '#e0e0e0',
+                  backgroundColor: '#2a2a2a',
+                  borderBottom: '1px solid #3a3a3a',
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {wt.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {isOpen && filteredWorkTypes.length === 0 && searchTerm.trim() !== '' && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+              Ничего не найдено
+            </li>
+          </ul>
+        )}
+      </div>
+    );
+  }
 
   return (
     <Modal open={open} onClose={onClose} title="Добавить задачу">
       <div className="form-grid">
-        {/* ===== Компания ===== */}
+        {/* Компания */}
         <label>
           Компания
           <select
@@ -256,17 +464,16 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               } else {
                 setContactPersons([]);
                 setField("contact_person_id", null);
-                // ✅ Сбрасываем телефон
-                setField("contact_person_phone", null); // <--- Добавлено
+                setField("contact_person_phone", null);
               }
             }}
             style={{
               width: "100%",
               padding: "8px",
               borderRadius: "4px",
-              border: "1px solid #ccc",
-              backgroundColor: "#f9f9f9", // ✅ Светлый фон
-              color: "#333", // ✅ Темный текст
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
             }}
           >
             <option value="">Выберите компанию</option>
@@ -276,21 +483,20 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </select>
         </label>
 
-        {/* ===== Контактное лицо ===== */}
+        {/* Контактное лицо */}
         <label>
           Контактное лицо
           <select
             value={form.contact_person_id || ""}
-            // ✅ Используем новую функцию
-            onChange={(e) => handleContactPersonChange(e.target.value)} // <--- Изменено
-            disabled={!form.company_id} // доступно только если выбрана компания
+            onChange={(e) => handleContactPersonChange(e.target.value)}
+            disabled={!form.company_id}
             style={{
               width: "100%",
               padding: "8px",
               borderRadius: "4px",
-              border: "1px solid #ccc",
-              backgroundColor: "#f9f9f9", // ✅ Светлый фон
-              color: "#333", // ✅ Темный текст
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
             }}
           >
             <option value="">Выберите контактное лицо</option>
@@ -298,42 +504,38 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               <option key={cp.id} value={cp.id}>{cp.name}</option>
             ))}
           </select>
-          {/* ✅ Индикатор загрузки телефона */}
-          {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>} {/* <--- Добавлено */}
+          {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
         </label>
 
-        {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА (только для чтения) ===== */}
+        {/* Телефон контактного лица */}
         <label>
           Телефон контактного лица
           <input
             type="text"
             value={form.contact_person_phone || ""}
-            // ✅ Поле только для чтения, заполняется автоматически
-            readOnly // <--- Изменено с disabled на readOnly
+            readOnly
             placeholder="Выберите контактное лицо"
             style={{
               width: "100%",
               padding: "8px",
               borderRadius: "4px",
-              border: "1px solid #ccc",
-              backgroundColor: "#e0e0e0", // Светло-серый фон для readonly
-              color: "#333",
-              cursor: "not-allowed", // Курсор "запрещено"
+              border: "1px solid #444",
+              backgroundColor: "#2a2a2a",
+              color: "#b0b0b0",
+              cursor: "not-allowed",
             }}
           />
-          {/* ✅ Ссылка для вызова, если телефон есть */}
-          {form.contact_person_phone && ( // <--- Добавлено
+          {form.contact_person_phone && (
             <a
               href={`tel:${form.contact_person_phone}`}
               style={{
                 display: 'inline-block',
                 marginTop: '4px',
                 fontSize: '0.9em',
-                color: '#1e88e5', // Синий цвет
+                color: '#bb86fc',
                 textDecoration: 'none',
               }}
               onClick={(e) => {
-                // Предотвращаем отправку формы, если это внутри label
                 e.preventDefault();
                 window.location.href = `tel:${form.contact_person_phone}`;
               }}
@@ -345,65 +547,134 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
 
         <label>
           ТС (марка, гос.номер)
-          <input value={form.vehicle_info} onChange={(e) => setField("vehicle_info", e.target.value)} />
+          <input
+            value={form.vehicle_info}
+            onChange={(e) => setField("vehicle_info", e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
+          />
         </label>
 
-        {/* ===== НОВОЕ ПОЛЕ: ГОС. НОМЕР ===== */}
         <label>
           Гос. номер
-          <input value={form.gos_number || ""} onChange={(e) => setField("gos_number", e.target.value)} />
+          <input
+            value={form.gos_number || ""}
+            onChange={(e) => setField("gos_number", e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
+          />
         </label>
 
-        {/* ===== ДАТА И ВРЕМЯ ===== */}
         <label>
           Дата и время
           <input
             type="datetime-local"
             value={form.scheduled_at}
-            onChange={(e) => setField("scheduled_at", e.target.value)} // ✅ Передаём строку как есть
+            onChange={(e) => setField("scheduled_at", e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
           />
         </label>
 
         <label>
           Место/адрес
-          <textarea value={form.location} onChange={(e) => setField("location", e.target.value)} />
+          <textarea
+            value={form.location}
+            onChange={(e) => setField("location", e.target.value)}
+            rows="3"
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
+          />
         </label>
+
         <label>
           Комментарий
-          <textarea value={form.comment} onChange={(e) => setField("comment", e.target.value)} />
+          <textarea
+            value={form.comment}
+            onChange={(e) => setField("comment", e.target.value)}
+            rows="3"
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
+          />
         </label>
 
-        {/* ===== Оборудование (новая логика) ===== */}
-         <label>Оборудование</label>
-
-        {/* --- Список выбранных элементов (название - поле серийного номера) --- */}
+        {/* Оборудование */}
+        <label>Оборудование</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
-          {/* ✅ Итерируемся по массиву form.equipment и используем index */}
-          {form.equipment.map((item, index) => { 
-            const eq = equipment.find((e) => e.id === item.equipment_id);
+          {form.equipment.map((item, index) => {
+            const eq = equipmentList.find((e) => e.id === item.equipment_id);
             return (
-              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}> {/* ✅ Ключ - index */}
-                {/* Название оборудования */}
-                <div style={{ flex: 1, padding: '8px', border: '1px solid #ccc', borderRadius: '4px', backgroundColor: '#e0e0e0' }}>
+              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  flex: 1,
+                  padding: '8px',
+                  border: '1px solid #444',
+                  borderRadius: '4px',
+                  backgroundColor: '#2a2a2a',
+                  color: '#e0e0e0',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
                   {eq?.name || `ID ${item.equipment_id}`}
                 </div>
-                {/* Поле ввода серийного номера */}
                 <div style={{ flex: 1 }}>
                   <input
                     type="text"
                     placeholder="Серийный номер"
                     value={item.serial_number || ""}
-            
-                    onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)} 
-                    style={{ width: '100%', padding: '8px', border: '1px solid #ccc', borderRadius: '4px' }}
+                    onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #444',
+                      borderRadius: '4px',
+                      backgroundColor: '#1a1a1a',
+                      color: '#e0e0e0',
+                    }}
                   />
                 </div>
-                {/* Кнопка удаления (удаляет конкретную строку/единицу) */}
                 <button
                   type="button"
-               
-                  onClick={() => removeEquipmentItem(index)} 
-                  style={{ padding: '8px', backgroundColor: 'red', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  onClick={() => removeEquipmentItem(index)}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: '#cf6679',
+                    color: '#000',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                  }}
                 >
                   ×
                 </button>
@@ -411,71 +682,46 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
             );
           })}
         </div>
+        <SearchableEquipmentSelect
+          availableEquipment={equipmentList}
+          onSelect={addEquipmentItem}
+          selectedItems={form.equipment} // Не используется в фильтрации, так как разрешено дублирование
+        />
 
-        {/* --- Выбор нового оборудования из списка --- */}
-        <select
-          size={5}
-          value=""
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (!isNaN(val) && val > 0) {
-              {/* ✅ Добавляем по equipment_id, без проверки на дубликаты */}
-              addEquipmentItem(val); 
-            }
-            e.target.value = ""; // Сброс для возможности повторного выбора
-          }}
-          style={{ width: "100%" }}
-        >
-          {/* ❌ УБИРАЕМ фильтрацию по уже выбранным equipment_id */}
-          {/* {equipment
-            .filter(eq => !form.equipment.some(item => item.equipment_id === eq.id))
-            .map((eq) => ( */}
-          {/* ✅ ОТОБРАЖАЕМ ВЕСЬ СПИСОК ОБОРУДОВАНИЯ */}
-          {equipment.map((eq) => (
-            <option key={eq.id} value={eq.id}>
-              {eq.name}
-            </option>
-          ))}
-        </select>
-
-        {/* ===== Виды работ (остаётся прежним) ===== */}
-        {/* ===== Виды работ (обновлённая логика) ===== */}
-         <label>Виды работ</label>
-        {/* --- Отображение выбранных типов работ с количеством --- */}
+        {/* Виды работ */}
+        <label>Виды работ</label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-          {/* ✅ Используем useMemo или вычисляем counts прямо здесь для отображения */}
           {(() => {
             const counts = {};
             form.work_types_ids.forEach(id => {
               counts[id] = (counts[id] || 0) + 1;
             });
-            // Преобразуем в массив уникальных ID с количествами
             const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
               id: parseInt(id, 10),
               count,
             }));
 
             return uniqueWorkTypesWithCounts.map(({ id, count }) => {
-              const wt = workTypes.find((w) => w.id === id);
+              const wt = workTypesList.find((w) => w.id === id);
               if (!wt) return null;
               return (
                 <div
-                  key={id} 
+                  key={id}
                   style={{
                     padding: "4px 8px",
-                    border: "1px solid #ccc",
+                    border: "1px solid #444",
                     borderRadius: 12,
-                    backgroundColor: "#2196f3",
-                    color: "#fff",
+                    backgroundColor: "#bb86fc", // Цвет для работы
+                    color: "#000", // Темный текст на светлом фоне
                     display: "flex",
                     alignItems: "center",
                     gap: 4,
                   }}
                 >
-                  {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
+                  {wt.name} (x{count})
                   <span
-                    style={{ cursor: "pointer" }}
-                    onClick={() => removeWorkType(id)} 
+                    style={{ cursor: "pointer", fontWeight: 'bold' }}
+                    onClick={() => removeWorkType(id)}
                   >
                     ×
                   </span>
@@ -484,62 +730,91 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
             });
           })()}
         </div>
-        {/* --- Выбор нового типа работы из списка --- */}
-        <select
-          size={5}
-          value=""
-          onChange={(e) => {
-            const val = Number(e.target.value);
-            if (!isNaN(val) && val > 0) {
-              addWorkType(val); {/* ✅ Добавляем по work_type_id */}
-            }
-            e.target.value = ""; // Сброс
-          }}
-          style={{ width: "100%" }}
-        >
-          {/* ❌ УБИРАЕМ фильтрацию по уже выбранным work_type_id */}
-          {/* {workTypes
-            .filter(wt => !form.work_types_ids.includes(wt.id))
-            .map((wt) => ( */}
-          {/* ✅ ОТОБРАЖАЕМ ВЕСЬ СПИСОК ТИПОВ РАБОТ */}
-          {workTypes.map((wt) => (
-            <option key={wt.id} value={wt.id}>
-              {wt.name}
-            </option>
-          ))}
-        </select>
-
+        <SearchableWorkTypeSelect
+          availableWorkTypes={workTypesList}
+          onSelect={addWorkType}
+          selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, так как разрешено дублирование
+        />
 
         <label>
           Тип назначения
-          <select value={form.assignment_type} onChange={(e) => setField("assignment_type", e.target.value)}>
+          <select
+            value={form.assignment_type}
+            onChange={(e) => setField("assignment_type", e.target.value)}
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
+          >
             <option value="broadcast">broadcast</option>
             <option value="individual">assigned</option>
           </select>
         </label>
+
         <label>
           Назначить монтажника (id)
           <input
+            type="number"
             value={form.assigned_user_id || ""}
-            onChange={(e) => setField("assigned_user_id", e.target.value)}
+            onChange={(e) => setField("assigned_user_id", e.target.value ? parseInt(e.target.value) : null)}
             placeholder="ID монтажника"
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
           />
         </label>
-        {/* Цены — не редактируются, рассчитываются автоматически */}
+
         <label>
           Цена клиента (авто)
-          <input value="" disabled placeholder="Рассчитывается автоматически" />
+          <input
+            value=""
+            disabled
+            placeholder="Рассчитывается автоматически"
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#2a2a2a",
+              color: "#b0b0b0",
+              cursor: "not-allowed",
+            }}
+          />
         </label>
+
         <label>
           Вознаграждение монтажнику (авто)
-          <input value="" disabled placeholder="Рассчитывается автоматически" />
+          <input
+            value=""
+            disabled
+            placeholder="Рассчитывается автоматически"
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#2a2a2a",
+              color: "#b0b0b0",
+              cursor: "not-allowed",
+            }}
+          />
         </label>
-        <label>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <input
             type="checkbox"
             checked={form.photo_required}
             onChange={(e) => setField("photo_required", e.target.checked)}
-          />{" "}
+          />
           Фото обязательно
         </label>
       </div>

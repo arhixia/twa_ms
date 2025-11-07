@@ -182,8 +182,25 @@ export default function TechTaskDetailPage() {
               )}
             </p>
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
+            <p><b>Гос. номер</b> {task.gos_number || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
-            <p><b>Место:</b> {task.location || "—"}</p>
+            <p>
+                <b>Место/Адрес:</b>{" "}
+                {task.location ? (
+                  <a
+                    href={`https://2gis.ru/search/${encodeURIComponent(task.location)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {task.location}
+                  </a>
+                ) : "—"}
+              </p>
             <p><b>Статус:</b> {task.status || "—"}</p>
             <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
