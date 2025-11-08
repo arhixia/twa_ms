@@ -958,24 +958,38 @@ export default function TaskDetailPage() {
               <p><b>Компания:</b> {task.company_name || "—"}</p>
               <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
               {/* ===== ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
-              <p>
-                <b>Телефон контактного лица:</b>{" "}
-                {contactPersonPhone || task.contact_person_phone || "—"}
-                {(contactPersonPhone || task.contact_person_phone) && (
-                  <a
-                    href={`tel:${contactPersonPhone || task.contact_person_phone}`}
-                    style={{
-                      display: 'inline-block',
-                      marginLeft: '8px',
-                      fontSize: '0.9em',
-                      color: '#bb86fc',
-                      textDecoration: 'none',
-                    }}
-                  >
-                    📞 Позвонить
-                  </a>
-                )}
-              </p>
+             <p>
+  <b>Телефон контактного лица:</b>{" "}
+  {contactPersonPhone || task.contact_person_phone || "—"}
+  {(contactPersonPhone || task.contact_person_phone) && (
+    <button
+      onClick={() => {
+        const phone = contactPersonPhone || task.contact_person_phone;
+        const telUrl = `tel:${phone}`;
+
+        // Если внутри Telegram Mini App
+        if (window.Telegram?.WebApp) {
+          // Попробуем открыть в внешнем браузере
+          window.open(telUrl, "_blank");
+        } else {
+          // Обычный браузер
+          window.location.href = telUrl;
+        }
+      }}
+      style={{
+        marginLeft: '8px',
+        fontSize: '0.9em',
+        color: '#1e88e5',
+        background: 'none',
+        border: 'none',
+        textDecoration: 'none',
+        cursor: 'pointer',
+      }}
+    >
+      📞 Позвонить
+    </button>
+  )}
+</p>
               <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
               <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
               <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>

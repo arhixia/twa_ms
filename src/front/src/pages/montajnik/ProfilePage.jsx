@@ -48,7 +48,6 @@ export default function ProfilePage() {
             <h2>Информация</h2>
             <p><b>Имя:</b> {profile.name || "—"}</p>
             <p><b>Фамилия:</b> {profile.lastname || "—"}</p>
-            <p><b>Роль:</b> {profile.role || "—"}</p>
           </div>
 
           <div className="profile-card">

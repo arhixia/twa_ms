@@ -51,7 +51,6 @@ export default function TechSuppProfilePage() {
             <p><b>ID:</b> {profile.id || "—"}</p>
             <p><b>Имя:</b> {profile.name || "—"}</p>
             <p><b>Фамилия:</b> {profile.lastname || "—"}</p>
-            <p><b>Роль:</b> {profile.role || "—"}</p>
           </div>
 
           <div className="profile-card">

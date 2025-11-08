@@ -824,24 +824,38 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
             <b>Контактное лицо:</b> {draft.contact_person_name || "—"}
           </p>
           {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА (в режиме просмотра) ===== */}
-          <p>
-            <b>Телефон контактного лица:</b> {draft.contact_person_phone || "—"}
-            {/* ✅ Ссылка для вызова, если телефон есть */}
-            {draft.contact_person_phone && ( // <--- Добавлено
-              <a
-                href={`tel:${draft.contact_person_phone}`}
-                style={{
-                  display: 'inline-block',
-                  marginLeft: '8px',
-                  fontSize: '0.9em',
-                  color: '#1e88e5', // Синий цвет
-                  textDecoration: 'none',
-                }}
-              >
-                📞 Позвонить
-              </a>
-            )}
-          </p>
+         <p>
+  <b>Телефон контактного лица:</b>{" "}
+  {draft.contact_person_phone || "—"}
+  {draft.contact_person_phone && (
+    <button
+      onClick={() => {
+        const phone = draft.contact_person_phone;
+        const telUrl = `tel:${phone}`;
+
+        // Если внутри Telegram Mini App
+        if (window.Telegram?.WebApp) {
+          // Попробуем открыть во внешнем браузере
+          window.open(telUrl, "_blank");
+        } else {
+          // Обычный браузер
+          window.location.href = telUrl;
+        }
+      }}
+      style={{
+        marginLeft: '8px',
+        fontSize: '0.9em',
+        color: '#1e88e5',
+        background: 'none',
+        border: 'none',
+        textDecoration: 'none',
+        cursor: 'pointer',
+      }}
+    >
+      📞 Позвонить
+    </button>
+  )}
+</p>
 
           <p>
             <b>ТС:</b> {draft.vehicle_info || "—"}

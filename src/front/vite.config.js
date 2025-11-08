@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['creations-somebody-telecom-surveys.trycloudflare.com']
+    allowedHosts: ['indirect-promotional-vitamin-cornwall.trycloudflare.com']
   },
 })
 

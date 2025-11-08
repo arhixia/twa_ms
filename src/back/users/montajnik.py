@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func
 from sqlalchemy.orm import selectinload
@@ -1156,3 +1156,11 @@ async def get_mont_contact_person_phone(
     return {"phone": phone_number}
 
 
+from fastapi.responses import RedirectResponse
+
+@router.get("/call")
+def redirect_to_tel(phone: str = Query(..., description="Номер телефона")):
+    clean_phone = phone.strip().replace(" ", "")
+    if not clean_phone.startswith("+") and not clean_phone.isdigit():
+        return {"error": "Invalid phone number"}
+    return RedirectResponse(url=f"tel:{clean_phone}")

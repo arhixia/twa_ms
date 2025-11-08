@@ -405,3 +405,9 @@ export async function getMontContactPersonsByCompany(companyId) {
 export async function fetchMontCompletedTaskDetail(id) {
   return (await api.get(`/montajnik/completed-tasks/${id}`)).data;
 }
+
+
+export async function redirectToCall(phone) {
+  const encoded = encodeURIComponent(phone);
+  return `${API_BASE_URL}/montajnik/call?phone=${encoded}`;
+}

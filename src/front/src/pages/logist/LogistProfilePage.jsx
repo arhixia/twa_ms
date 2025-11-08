@@ -117,13 +117,11 @@ export default function LogistProfilePage() {
             <h2>Информация</h2>
             <p><b>Имя:</b> {profile.name || "—"}</p>
             <p><b>Фамилия:</b> {profile.lastname || "—"}</p>
-            <p><b>Роль:</b> {profile.role || "—"}</p>
           </div>
 
           <div className="profile-card">
             <h2>Статистика</h2>
             <p><b>Выполнено задач:</b> {profile.completed_count || 0}</p>
-            <p><b>Общая стоимость выполненных задач:</b> {profile.total_earned ? `${profile.total_earned} руб.` : "0 руб."}</p>
           </div>
         </div>
 
