@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['indirect-promotional-vitamin-cornwall.trycloudflare.com']
+    allowedHosts: ['pointing-spyware-manga-repeated.trycloudflare.com']
   },
 })
 

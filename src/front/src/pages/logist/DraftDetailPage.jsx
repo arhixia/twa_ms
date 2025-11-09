@@ -12,6 +12,7 @@ import {
   getCompaniesList,
   getContactPersonsByCompany,
   getContactPersonPhone, // <--- Новый импорт
+  getActiveMontajniks
 } from "../../api";
 import "../../styles/LogistPage.css";
 
@@ -30,6 +31,7 @@ export default function DraftDetailPage() {
   const [loadingRefs, setLoadingRefs] = useState(false); // Для загрузки справочников при редактировании
   // ✅ Состояние для загрузки телефона в режиме редактирования
   const [loadingPhone, setLoadingPhone] = useState(false); // <--- Добавлено
+  const [montajniks, setMontajniks] = useState([]); // <--- Список монтажников
 
   useEffect(() => {
     loadRefs();
@@ -39,17 +41,141 @@ export default function DraftDetailPage() {
   // ✅ Загружаем компании
   async function loadRefs() {
     try {
-      const eq = await getEquipmentList();
-      const wt = await getWorkTypes();
-      const comps = await getCompaniesList(); // ✅ Загружаем компании
-      setEquipment(eq || []);
-      setWorkTypes(wt || []);
-      setCompanies(comps || []);
+      const [eqRes, wtRes, compRes, montRes] = await Promise.allSettled([
+        getEquipmentList(),
+        getWorkTypes(),
+        getCompaniesList(),
+        getActiveMontajniks(), // <--- Загружаем монтажников
+      ]);
+
+      setEquipment(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
+      setWorkTypes(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
+      setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
+      // ✅ Сохраняем список монтажников
+      setMontajniks(montRes.status === 'fulfilled' ? montRes.value || [] : []); // <--- Добавлено
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
   }
 
+  function SearchableMontajnikSelect({ availableMontajniks, onSelect, selectedUserId }) {
+      const [searchTerm, setSearchTerm] = useState("");
+      const [filteredMontajniks, setFilteredMontajniks] = useState(availableMontajniks);
+      const [isOpen, setIsOpen] = useState(false);
+  
+      useEffect(() => {
+        if (!searchTerm.trim()) {
+          setFilteredMontajniks(availableMontajniks);
+        } else {
+          const termLower = searchTerm.toLowerCase();
+          setFilteredMontajniks(
+            availableMontajniks.filter(m =>
+              (m.name && m.name.toLowerCase().includes(termLower)) ||
+              (m.lastname && m.lastname.toLowerCase().includes(termLower)) ||
+              (m.id && m.id.toString().includes(termLower))
+            )
+          );
+        }
+      }, [searchTerm, availableMontajniks]);
+  
+      const handleInputChange = (e) => {
+        setSearchTerm(e.target.value);
+        setIsOpen(true);
+      };
+  
+      const handleItemClick = (montajnik) => {
+        onSelect(montajnik.id);
+        setSearchTerm("");
+      };
+  
+      const handleInputFocus = () => setIsOpen(true);
+      const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+  
+      return (
+        <div style={{ position: 'relative', width: '100%' }}>
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={handleInputChange}
+            onFocus={handleInputFocus}
+            onBlur={handleInputBlur}
+            placeholder="🔍 Поиск монтажника (имя, фамилия, ID)..."
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #444',
+              borderRadius: '4px',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
+              fontSize: '14px',
+            }}
+          />
+          {isOpen && filteredMontajniks.length > 0 && (
+            <ul
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                zIndex: 100,
+                maxHeight: '200px',
+                overflowY: 'auto',
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                backgroundColor: '#1a1a1a',
+                border: '1px solid #444',
+                borderTop: 'none',
+                borderRadius: '0 0 4px 4px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+              }}
+            >
+              {filteredMontajniks.map((m) => (
+                <li
+                  key={m.id}
+                  onClick={() => handleItemClick(m)}
+                  style={{
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    color: '#e0e0e0',
+                    backgroundColor: '#2a2a2a',
+                    borderBottom: '1px solid #3a3a3a',
+                  }}
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {m.name} {m.lastname} (ID: {m.id})
+                </li>
+              ))}
+            </ul>
+          )}
+          {isOpen && filteredMontajniks.length === 0 && searchTerm.trim() !== '' && (
+            <ul
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                zIndex: 100,
+                maxHeight: '200px',
+                overflowY: 'auto',
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                backgroundColor: '#1a1a1a',
+                border: '1px solid #444',
+                borderTop: 'none',
+                borderRadius: '0 0 4px 4px',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+              }}
+            >
+              <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+                Ничего не найдено
+              </li>
+            </ul>
+          )}
+        </div>
+      );
+    }
 
   function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -337,6 +463,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         work_types_ids: formWorkTypesIds, // плоский массив ID, например, [3, 3, 5]
         // ✅ Инициализируем contact_person_phone в форме
         contact_person_phone: d.contact_person_phone || null, // <--- Добавлено
+
       };
 
       setDraft(processedDraftForView); // Для отображения в task-view
@@ -364,6 +491,11 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
 
   function setField(k, v) {
     setForm((f) => ({ ...f, [k]: v }));
+  }
+
+  function clearAssignedUserAndSetBroadcast() {
+    setField("assigned_user_id", null);
+    setField("assignment_type", "broadcast");
   }
 
   // ✅ Загрузка контактных лиц при выборе компании в форме
@@ -792,16 +924,61 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
           
   
           <label>
-            Монтажник (ID)
-            <input value={form.assigned_user_id || ""} onChange={(e) => setField("assigned_user_id", e.target.value)} style={{
+                Тип назначения
+                <select
+                  value={form.assignment_type || ""}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    setField("assignment_type", newType);
+                    // Если тип меняется на broadcast, сбрасываем назначенного монтажника
+                    if (newType === "broadcast") {
+                      // ✅ Используем новую функцию, если она определена, или просто сброс
+                      setField("assigned_user_id", null);
+                    }
+                  }}
+                  style={{
                     width: "100%",
                     padding: "8px",
                     borderRadius: "4px",
                     border: "1px solid #444",
                     backgroundColor: "#1a1a1a",
                     color: "#e0e0e0",
-                  }} />
-          </label>
+                  }}
+                >
+                  <option value="broadcast">broadcast</option>
+                  <option value="individual">assigned</option>
+                </select>
+              </label>
+
+              {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
+              {/* Поле "Назначить монтажника" отображается только если тип "assigned" */}
+              {form.assignment_type === "individual" && (
+                <div>
+                  <label>
+                    Назначить монтажника
+                  </label>
+                  {/* --- Отображение выбранного монтажника --- */}
+                  {form.assigned_user_id && (
+                    <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                      {/* ✅ Отображаем имя и фамилию монтажника */}
+                      Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || 'ID:'} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || form.assigned_user_id}
+                      <button
+                        type="button"
+                        onClick={() => setField("assigned_user_id", null)}
+                        style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                  {/* --- Выбор нового монтажника через SearchableSelect --- */}
+                  <SearchableMontajnikSelect
+                    availableMontajniks={montajniks} // <--- Передаём список монтажников
+                    onSelect={(userId) => setField("assigned_user_id", userId)}
+                    selectedUserId={form.assigned_user_id}
+                  />
+                </div>
+              )}
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}> {/* <--- Стиль для чекбокса */}
         <input
@@ -847,7 +1024,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         fontSize: '0.9em',
         color: '#1e88e5',
         background: 'none',
-        border: 'none',
+        border: 'none', 
         textDecoration: 'none',
         cursor: 'pointer',
       }}
@@ -893,7 +1070,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
           <p>
             <b>Награда монтажнику:</b> {draft.montajnik_reward || "—"}
           </p>
-          <p><b>Монтажник:</b> {draft.assigned_user_id || "—"}</p>
+          <p><b>Монтажник:</b> {draft.assigned_user_name || draft.assigned_user_id || "—"}</p>
           {/* ===== Оборудование (отображение) ===== */}
           <p>
             <b>Оборудование:</b>{" "}
@@ -939,3 +1116,6 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
     </div>
   );
 }
+
+
+//исправить черновик монтажник

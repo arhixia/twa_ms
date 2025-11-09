@@ -463,7 +463,7 @@ export default function MontajnikTaskDetailPage() {
                   </a>
                 ) : "—"}
               </p>
-            <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
+            <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
             <p><b>Награда за работу:</b> {task.montajnik_reward || "—"}</p>
@@ -636,4 +636,3 @@ export default function MontajnikTaskDetailPage() {
 }
 
 
-//личный кабинет монтажника

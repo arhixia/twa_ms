@@ -147,6 +147,28 @@ export async function addContactPerson(companyId, payload) {
   return (await api.post(`/logist/companies/${companyId}/contacts`, payload)).data;
 }
 
+export async function getActiveMontajniks() {
+  return (await api.get(`/logist/montajniks`)).data; // <--- Новый эндпоинт
+}
+
+export async function archiveTask(taskId) {
+  return (await api.patch(`/logist/tasks/${taskId}/archive`)).data;
+}
+
+// Удалить архивную задачу (для логиста)
+export async function deleteArchivedTask(taskId) {
+  return (await api.delete(`/logist/tasks/${taskId}/archive`)).data;
+}
+
+// Получить список архивных задач (для логиста)
+export async function fetchLogistArchivedTasks() {
+  return (await api.get("/logist/archived-tasks/")).data;
+}
+
+// Получить детали архивной задачи (для логиста)
+export async function fetchLogistArchivedTaskDetail(taskId) {
+  return (await api.get(`/logist/archived-tasks/${taskId}`)).data;
+}
 
 
 // ---------- REPORTS ----------
@@ -210,6 +232,25 @@ export async function adminChangeUserRole(userId, role) {
 
 export async function adminfetchTaskFullHistory(taskId) {
   return (await api.get(`/admin/tasks/${taskId}/history`)).data;
+}
+
+export async function adminAddEquipment(payload) {
+  return (await api.post("/admin/equipment", payload)).data;
+}
+
+// Добавить тип работы (админ)
+export async function adminAddWorkType(payload) {
+  return (await api.post("/admin/work-types", payload)).data;
+}
+
+// Получить список оборудования (админ/логист)
+export async function getAdminEquipmentList() { 
+  return (await api.get("/admin/equipment")).data;
+}
+
+// Получить список видов работ (админ/логист)
+export async function getAdminWorkTypesList() { 
+  return (await api.get("/admin/work-types")).data;
 }
 
 

@@ -10,6 +10,7 @@ import {
   getAdminCompaniesList,
   getAdminContactPersonsByCompany,
   getAdminContactPersonPhone,
+  getActiveMontajniks,
 } from '../../api'; // Убедитесь, что путь к API корректен
 import "../../styles/LogistPage.css"; // Предполагаем, что стили подходят
 
@@ -28,6 +29,7 @@ export default function AdminTaskDetailPage() {
   const [contactPersons, setContactPersons] = useState([]); // Состояние для списка контактных лиц
   const [contactPersonPhone, setContactPersonPhone] = useState(null);
   const [loadingPhone, setLoadingPhone] = useState(false);
+  const [montajniks, setMontajniks] = useState([]);
 
   useEffect(() => {
     if (isNaN(taskId)) {
@@ -41,19 +43,145 @@ export default function AdminTaskDetailPage() {
 
   async function loadRefs() {
     try {
-      const [eqRes, wtRes, compRes] = await Promise.allSettled([
+      const [eqRes, wtRes, compRes,montRes] = await Promise.allSettled([
         getEquipmentList(),
         getWorkTypes(),
         getAdminCompaniesList(),
+        getActiveMontajniks(),
       ]);
 
       setEquipment(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
       setWorkTypes(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
       setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
+      setMontajniks(montRes.status === 'fulfilled' ? montRes.value || [] : []);
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
   }
+
+  function clearAssignedUserAndSetBroadcast() { // <--- Добавлено
+    setField("assigned_user_id", null);
+    setField("assignment_type", "broadcast");
+  }
+
+  function SearchableMontajnikSelect({ availableMontajniks, onSelect, selectedUserId }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredMontajniks, setFilteredMontajniks] = useState(availableMontajniks);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredMontajniks(availableMontajniks);
+    } else {
+      const termLower = searchTerm.toLowerCase();
+      setFilteredMontajniks(
+        availableMontajniks.filter(m =>
+          (m.name && m.name.toLowerCase().includes(termLower)) ||
+          (m.lastname && m.lastname.toLowerCase().includes(termLower)) ||
+          (m.id && m.id.toString().includes(termLower))
+        )
+      );
+    }
+  }, [searchTerm, availableMontajniks]);
+
+  const handleInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    setIsOpen(true);
+  };
+
+  const handleItemClick = (montajnik) => {
+    onSelect(montajnik.id);
+    setSearchTerm("");
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder="🔍 Поиск монтажника (имя, фамилия, ID)..."
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          backgroundColor: '#1a1a1a',
+          color: '#e0e0e0',
+          fontSize: '14px',
+        }}
+      />
+      {isOpen && filteredMontajniks.length > 0 && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+          }}
+        >
+          {filteredMontajniks.map((m) => (
+            <li
+              key={m.id}
+              onClick={() => handleItemClick(m)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                color: '#e0e0e0',
+                backgroundColor: '#2a2a2a',
+                borderBottom: '1px solid #3a3a3a',
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {m.name} {m.lastname} (ID: {m.id})
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredMontajniks.length === 0 && searchTerm.trim() !== '' && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+          }}
+        >
+          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
 
   function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -340,6 +468,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         work_types_ids: formWorkTypesIds,
         gos_number: t.gos_number || "",
         contact_person_phone: t.contact_person_phone || null,
+        assigned_user_id: t.assigned_user_id || null,
       };
 
       setForm(initialForm); // <-- initialForm установлен
@@ -524,6 +653,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         montajnik_reward: undefined,
         gos_number: form.gos_number || null,
         contact_person_phone: undefined,
+        assigned_user_name: undefined,
       };
       await adminUpdateTask(taskId, payload);
       alert("✅ Изменения сохранены");
@@ -753,23 +883,60 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
             </label>
             
             <label>
-  Монтажник (ID)
-  <input
-    value={form.assigned_user_id || ""}
-    onChange={(e) => {
-      const val = e.target.value ? parseInt(e.target.value, 10) : null;
-      setField("assigned_user_id", val);
-    }}
-    style={{
-      width: "100%",
-      padding: "8px",
-      borderRadius: "4px",
-      border: "1px solid #444",
-      backgroundColor: "#1a1a1a",
-      color: "#e0e0e0",
-    }}
-  />
-</label>
+                Тип назначения
+                <select
+                  value={form.assignment_type || ""}
+                  onChange={(e) => {
+                    const newType = e.target.value;
+                    setField("assignment_type", newType);
+                    // Если тип меняется на broadcast, сбрасываем назначенного монтажника
+                    if (newType === "broadcast") {
+                      setField("assigned_user_id", null);
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    backgroundColor: "#1a1a1a",
+                    color: "#e0e0e0",
+                  }}
+                >
+                  <option value="broadcast">broadcast</option>
+                  <option value="individual">assigned</option>
+                </select>
+              </label>
+
+              {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
+              {/* Поле "Назначить монтажника" отображается только если тип "assigned" */}
+              {form.assignment_type === "individual" && (
+                <div>
+                  <label>
+                    Назначить монтажника
+                  </label>
+                  {/* --- Отображение выбранного монтажника --- */}
+                  {form.assigned_user_id && (
+                    <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                      {/* ✅ Отображаем имя и фамилию монтажника */}
+                      Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || 'ID:'} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || form.assigned_user_id}
+                      <button
+                        type="button"
+                        onClick={clearAssignedUserAndSetBroadcast} // <--- Используем новую функцию
+                        style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                  {/* --- Выбор нового монтажника через SearchableSelect --- */}
+                  <SearchableMontajnikSelect
+                    availableMontajniks={montajniks} // <--- Передаём список монтажников
+                    onSelect={(userId) => setField("assigned_user_id", userId)}
+                    selectedUserId={form.assigned_user_id}
+                  />
+                </div>
+              )}
 
             {/* Цены — не редактируются */}
 
@@ -919,12 +1086,13 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
     </button>
   )}
 </p>
+
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
             {/* ===== ГОС. НОМЕР ===== */}
             <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
             <p><b>Статус:</b> {task.status || "—"}</p>
-            <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
+            <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p>
                 <b>Место/Адрес:</b>{" "}
                 {task.location ? (

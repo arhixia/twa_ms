@@ -1,7 +1,14 @@
 // front/src/pages/logist/LogistProfilePage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchLogistProfile, addCompany, addContactPerson,getCompaniesList } from "../../api"; // Добавим новые API методы
+import {
+  fetchLogistProfile,
+  addCompany,
+  addContactPerson,
+  getCompaniesList,
+  // ✅ Новый импорт для перехода на страницу архива
+  fetchLogistArchivedTasks,
+} from "../../api";
 import "../../styles/LogistPage.css";
 
 export default function LogistProfilePage() {
@@ -41,7 +48,6 @@ export default function LogistProfilePage() {
   // Загружаем компании для модалки добавления контакта
   async function loadCompaniesForModal() {
     try {
-
       const data = await getCompaniesList(); // Убедитесь, что этот метод доступен и возвращает список
       setCompanies(data || []);
     } catch (e) {
@@ -51,7 +57,12 @@ export default function LogistProfilePage() {
     }
   }
 
-  // Функция для перехода к деталям завершенной задачи
+  // ✅ Функция для перехода на страницу архивных задач
+  const goToArchivedTasks = () => {
+    navigate("/logist/archived-tasks"); // Предполагаем, что маршрут будет таким
+  };
+
+  // Функция для перехода к деталям завершенной задачи (если используется в истории)
   const viewCompletedTask = (taskId) => {
     navigate(`/logist/completed-tasks/${taskId}`); // Новый маршрут
   };
@@ -109,6 +120,10 @@ export default function LogistProfilePage() {
           <div>
             <button className="add-btn" onClick={() => setShowAddCompanyModal(true)}>+ Добавить компанию</button>
             <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Добавить контакт</button>
+            {/* ✅ НОВАЯ КНОПКА: Архивные задачи */}
+            <button className="add-btn" onClick={goToArchivedTasks}>
+              🗃 Архивные задачи
+            </button>
           </div>
         </div>
 
@@ -228,4 +243,3 @@ export default function LogistProfilePage() {
     </div>
   );
 }
-

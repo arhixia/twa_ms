@@ -44,6 +44,7 @@ class TaskStatus(enum.Enum):
     completed = "completed"  # Завершена
     inspection = "inspection"  # На проверке логистом/тех поддержкой
     returned = "returned"  # Возвращена на доработку
+    archived = "archived"
 
 
 class ReportApproval(enum.Enum):

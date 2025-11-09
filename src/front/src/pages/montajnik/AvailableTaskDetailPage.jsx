@@ -172,6 +172,7 @@ export default function AvailableTaskDetailPage() {
   )}
 </p>
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
+            <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
             <p>
                 <b>Место/Адрес:</b>{" "}
@@ -192,7 +193,7 @@ export default function AvailableTaskDetailPage() {
               </p>
             <p><b>Статус:</b> {task.status || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
-            <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
+            <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Награда за работу:</b> {task.montajnik_reward || "—"}</p>
             
             <p>
@@ -227,27 +228,7 @@ export default function AvailableTaskDetailPage() {
               </button>
             </div>
 
-            <div className="section">
-              <h3>Отчёты</h3>
-              {(task.reports && task.reports.length > 0) ? (
-                task.reports.map(r => (
-                  <div key={r.id} className="report">
-                    <p>#{r.id}: {r.text || "—"} (Логист: {r.approval_logist || "—"}, Тех: {r.approval_tech || "—"})</p>
-                    {r.photos && r.photos.length > 0 && (
-                      <div className="attached-list">
-                        {r.photos.map((photoUrl, idx) => (
-                          <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={photoUrl} alt={`Report photo ${idx}`} style={{ maxHeight: 100 }} />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p>Отчётов пока нет</p>
-              )}
-            </div>
+        
           </div>
 
           {isTaskAcceptable && (

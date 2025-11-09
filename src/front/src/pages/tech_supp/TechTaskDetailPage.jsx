@@ -215,7 +215,7 @@ export default function TechTaskDetailPage() {
                 ) : "—"}
               </p>
             <p><b>Статус:</b> {task.status || "—"}</p>
-            <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
+            <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
             <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>

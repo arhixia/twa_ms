@@ -180,6 +180,8 @@ async def admin_update_task(
     # ✅ Сохраняем старые цены для проверки изменений
     old_client_price = task.client_price
     old_montajnik_reward = task.montajnik_reward
+    old_assigned_user_id = task.assigned_user_id # <--- Добавлено
+    old_assignment_type = task.assignment_type
     logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}, client_price={old_client_price}, montajnik_reward={old_montajnik_reward}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
@@ -194,19 +196,53 @@ async def admin_update_task(
     equipment_data: List[TaskEquipmentItem] = incoming.pop("equipment", None)
     # ✅ work_types_data - список ID
     work_types_data = incoming.pop("work_types", None)
+    assigned_user_id_from_payload = incoming.pop("assigned_user_id", None)
     logger.info(f"equipment_data: {equipment_data}, work_types_data: {work_types_data}")
 
+    assigned_user_id_changed = False
+    assignment_type_changed = False
+
+# Проверяем, пришло ли поле вообще
+    if "assigned_user_id" in patch.model_dump():
+        new_assigned_user_id = patch.assigned_user_id
+        old_assigned_user_id_in_task = task.assigned_user_id
+        old_assignment_type_in_task = task.assignment_type
+
+        if new_assigned_user_id is None:
+            # Сброс монтажника
+            setattr(task, "assigned_user_id", None)
+            assigned_user_id_changed = True
+            changed.append(("assigned_user_id", old_assigned_user_id_in_task, None))
+            logger.info(f"assigned_user_id сброшен: {old_assigned_user_id_in_task} -> None")
+
+            # Если тип назначения индивидуальный — меняем на broadcast
+            if task.assignment_type == AssignmentType.individual:
+                old_assignment_type_val = task.assignment_type
+                task.assignment_type = AssignmentType.broadcast
+                assignment_type_changed = True
+                changed.append(("assignment_type", old_assignment_type_val, task.assignment_type))
+                logger.info(f"assignment_type изменён с {old_assignment_type_val.value} на {task.assignment_type.value}")
+        else:
+            # Назначаем нового монтажника
+            setattr(task, "assigned_user_id", new_assigned_user_id)
+            assigned_user_id_changed = True
+            changed.append(("assigned_user_id", old_assigned_user_id_in_task, new_assigned_user_id))
+            logger.info(f"assigned_user_id изменён: {old_assigned_user_id_in_task} -> {new_assigned_user_id}")         
+    
+    assigned_user_id_changed = True # <--- Добавлено
+    changed.append(("assigned_user_id", old_assigned_user_id_in_task, new_assigned_user_id)) # <--- Добавлено в changed для истории
+    logger.info(f"assigned_user_id изменён: {old_assigned_user_id_in_task} -> {new_assigned_user_id}, assigned_user_id_changed={assigned_user_id_changed}")
+    
     # --- Обновление основных полей задачи ---
     for field, value in incoming.items():
-        # ✅ Пропускаем equipment и work_types, они обрабатываются отдельно
-        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
+        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types", "assigned_user_id"}: # <--- assigned_user_id добавлено в исключения
             continue
         old = getattr(task, field)
         old_cmp = old.value if hasattr(old, "value") else old
         new_cmp = value.value if hasattr(value, "value") else value
         logger.debug(f"Сравнение поля '{field}': DB={old_cmp}, Payload={new_cmp}")
         if str(old_cmp) != str(new_cmp):
-            # конвертация assignment_type из строки
+            # конвертация assignment_type из строки (если не было обработано выше)
             if field == "assignment_type" and isinstance(value, str):
                 try:
                     value = AssignmentType(value)
@@ -421,7 +457,7 @@ async def admin_update_task(
         all_changes = []
         for f, o, n in changed:
             # ✅ Обрабатываем equipment и work_types отдельно
-            if f not in ["equipment", "work_types", "contact_person_id", "company_id", "contact_person_phone"]:
+            if f not in ["equipment", "work_types", "contact_person_id", "company_id", "contact_person_phone","assigned_user_id","assignment_type"]:
                 all_changes.append({"field": f, "old": str(o), "new": str(n)})
 
         # ✅ Проверяем и добавляем изменения equipment
@@ -453,6 +489,21 @@ async def admin_update_task(
         cp_phone_change = next((item for item in changed if item[0] == "contact_person_phone"), None)
         if cp_phone_change:
             all_changes.append({"field": "contact_person_phone", "old": str(cp_phone_change[1]), "new": str(cp_phone_change[2])})
+
+        if assigned_user_id_changed: # <--- Добавлено
+            all_changes.append({
+                "field": "assigned_user_id",
+                "old": str(old_assigned_user_id), # Используем старое значение из начала функции
+                "new": str(task.assigned_user_id)
+            })
+        
+        # ✅ Проверяем и добавляем изменения assignment_type
+        if assignment_type_changed: # <--- Добавлено
+            all_changes.append({
+                "field": "assignment_type",
+                "old": old_assignment_type.value if old_assignment_type else None, # Используем старое значение из начала функции
+                "new": task.assignment_type.value if task.assignment_type else None
+            })
 
         # ✅ Добавляем изменения цен в историю, если они произошли
         if prices_changed:
@@ -555,7 +606,10 @@ async def admin_list_tasks(
     # Загружаем задачи с контактным лицом и компанией
     q = await db.execute(
         select(Task)
-        .where(Task.is_draft != True,Task.status != TaskStatus.completed)
+        .where(
+            Task.is_draft != True,
+            Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
+            )
         .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем контактное лицо и компанию
     )
     tasks = q.scalars().all()
@@ -656,6 +710,11 @@ async def admin_get_task_by_id(
     company_id = task.contact_person.company.id if task.contact_person and task.contact_person.company else None
     contact_person_id = task.contact_person.id if task.contact_person else None
 
+    assigned_user_name = task.assigned_user.name if task.assigned_user else None
+    assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
+    assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
+
+
     return {
         "id": task.id,
         "company_id" : company_id,
@@ -668,12 +727,8 @@ async def admin_get_task_by_id(
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
         "status": task.status.value if task.status else None,
         "assigned_user_id": task.assigned_user_id or None,
+        "assigned_user_name": assigned_user_full_name,
         "location": task.location or None,
-        "assigned_user": {
-            "id": task.assigned_user.id,
-            "name": task.assigned_user.name,
-            "lastname": task.assigned_user.lastname,
-        } if task.assigned_user else None,
         "comment": task.comment or None,
         "photo_required": task.photo_required,
         "client_price": str(task.client_price) if task.client_price else None,
@@ -798,4 +853,77 @@ async def admin_add_contact_person(company_id: int, payload: dict = Body(...), d
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
-    return {"id": contact.id, "name": contact.name, "phone": contact.phone} # 
+    return {"id": contact.id, "name": contact.name, "phone": contact.phone} 
+
+
+
+@router.get("/equipment", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_get_equipment_list(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(Equipment).order_by(Equipment.name)) 
+    equipment_list = res.scalars().all()
+    return [{"id": e.id, "name": e.name, "category": e.category, "price": str(e.price)} for e in equipment_list]
+
+
+@router.get("/work-types", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def admin_get_work_types_list(db: AsyncSession = Depends(get_db)):
+    res = await db.execute(select(WorkType).where(WorkType.is_active == True).order_by(WorkType.name)) 
+    work_types_list = res.scalars().all()
+    return [{"id": wt.id, "name": wt.name, "price": str(wt.price)} for wt in work_types_list] 
+
+
+@router.post("/work-types", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
+async def admin_add_work_type_no_schema(
+    payload: dict = Body(...),  # вместо схемы
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.role != Role.admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    name = payload.get("name")
+    price = payload.get("price")
+
+    if not name or price is None:
+        raise HTTPException(status_code=400, detail="Не все поля переданы")
+
+    work_type = WorkType(
+        name=name,
+        price=price
+    )
+    db.add(work_type)
+    await db.flush()
+    await db.commit()
+    await db.refresh(work_type)
+
+    return {"id": work_type.id, "name": work_type.name, "price": str(work_type.price)}
+
+
+@router.post("/equipment", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
+async def admin_add_equipment_no_schema(
+    payload: dict = Body(...),  # вместо схемы
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    # проверка роли
+    if current_user.role != Role.admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    name = payload.get("name")
+    category = payload.get("category")
+    price = payload.get("price")
+
+    if not name or not category or price is None:
+        raise HTTPException(status_code=400, detail="Не все поля переданы")
+
+    equipment = Equipment(
+        name=name,
+        category=category,
+        price=price
+    )
+    db.add(equipment)
+    await db.flush()  # чтобы получить id
+    await db.commit()
+    await db.refresh(equipment)
+
+    return {"id": equipment.id, "name": equipment.name, "category": equipment.category, "price": str(equipment.price)}
+

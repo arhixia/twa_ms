@@ -1,16 +1,17 @@
-// front/src/pages/logist/LogistCompletedTaskDetailPage.jsx
+// front/src/pages/logist/LogistArchivedTaskDetailPage.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { logistCompletedTaskDetail, getEquipmentList, getWorkTypes } from "../../api"; // Добавляем импорты справочников
+// ✅ Импортируем новый API метод для получения архивной задачи
+import { fetchLogistArchivedTaskDetail, getEquipmentList, getWorkTypes } from "../../api";
 import "../../styles/LogistPage.css";
 
-export default function LogistCompletedTaskDetailPage() {
+export default function LogistArchivedTaskDetailPage() {
   const { id } = useParams(); // ID задачи из URL
   const navigate = useNavigate();
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // --- НОВОЕ: Состояния для справочников ---
+  // --- Состояния для справочников ---
   const [equipmentList, setEquipmentList] = useState([]);
   const [workTypesList, setWorkTypesList] = useState([]);
 
@@ -19,7 +20,7 @@ export default function LogistCompletedTaskDetailPage() {
     loadTask();
   }, [id]);
 
-  // --- НОВАЯ ФУНКЦИЯ: Загрузка справочников ---
+  // --- Функция: Загрузка справочников ---
   async function loadRefs() {
     try {
       const [eqRes, wtRes] = await Promise.allSettled([
@@ -37,25 +38,26 @@ export default function LogistCompletedTaskDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await logistCompletedTaskDetail(id); // Вызываем новый API метод
+      // ✅ Вызываем новый API метод для получения архивной задачи
+      const data = await fetchLogistArchivedTaskDetail(id);
       setTask(data);
     } catch (err) {
-      console.error("Ошибка загрузки завершенной задачи логиста:", err);
+      console.error("Ошибка загрузки архивной задачи логиста:", err);
       setError(err.response?.data?.detail || err.message || "Ошибка загрузки задачи");
       if (err.response?.status === 403 || err.response?.status === 404) {
-        // Перенаправляем на профиль, если доступа нет или задача не найдена
-        navigate("/logist/profile");
+        // Перенаправляем на профиль или список архивных задач, если доступа нет или задача не найдена
+        navigate("/logist/profile"); // или navigate("/logist/tasks/archived");
       }
     } finally {
       setLoading(false);
     }
   }
 
-  if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
+  if (loading) return <div className="logist-main"><div className="empty">Загрузка архивной задачи #{id}...</div></div>;
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
   if (!task) return <div className="logist-main"><div className="empty">Задача не найдена</div></div>;
 
-  // --- ФУНКЦИИ ДЛЯ ОТОБРАЖЕНИЯ ИМЁН ---
+  // --- Функции для получения имён по ID ---
   const getEquipmentNameById = (eqId) => {
     const eq = equipmentList.find(e => e.id === eqId);
     return eq ? eq.name : `ID ${eqId}`;
@@ -70,7 +72,7 @@ export default function LogistCompletedTaskDetailPage() {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Завершённая задача #{task.id}</h1>
+          <h1>Архивная задача #{task.id}</h1>
           <button className="add-btn" onClick={() => navigate(-1)}> {/* Кнопка "Назад" */}
             ⬅️ Назад
           </button>
@@ -89,7 +91,7 @@ export default function LogistCompletedTaskDetailPage() {
                 <b>Место/Адрес:</b>{" "}
                 {task.location ? (
                   <a
-                    href={`https://2gis.ru/search/${encodeURIComponent(task.location)}`}
+                    href={`https://2gis.ru/search/  ${encodeURIComponent(task.location)}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -102,6 +104,7 @@ export default function LogistCompletedTaskDetailPage() {
                   </a>
                 ) : "—"}
               </p>
+            {/* ✅ Отображаем имя монтажника, если оно есть, иначе ID */}
             <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
@@ -113,17 +116,19 @@ export default function LogistCompletedTaskDetailPage() {
               {(task.equipment || [])
                 .map((e) => {
                   const eqName = getEquipmentNameById(e.equipment_id);
+                  // ✅ Отображаем serial_number и quantity
                   return `${eqName} x${e.quantity} (SN: ${e.serial_number || 'N/A'})`;
                 })
                 .join(", ") || "—"}
             </p>
 
-            {/* === Виды работ (с именами) === */}
+            {/* === Виды работ (с именами и количеством) === */}
             <p>
               <b>Виды работ:</b>{" "}
               {(task.work_types || [])
                 .map((wt) => {
                   const wtName = getWorkTypeNameById(wt.work_type_id);
+                  // ✅ Отображаем quantity из объекта work_type
                   return `${wtName} x${wt.quantity}`;
                 })
                 .join(", ") || "—"}

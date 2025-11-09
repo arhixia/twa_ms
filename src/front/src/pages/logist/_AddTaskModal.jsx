@@ -9,6 +9,8 @@ import {
   getCompaniesList,
   getContactPersonsByCompany,
   getContactPersonPhone, // <--- Новый импорт
+  getActiveMontajniks,
+  
 } from "../../api";
 
 export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraft = false }) {
@@ -33,6 +35,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   const [equipmentList, setEquipmentList] = useState([]); // Список всех Equipment
   const [workTypesList, setWorkTypesList] = useState([]); // Список всех WorkType
   const [companies, setCompanies] = useState([]);
+  const [montajniks, setMontajniks] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
   const [saving, setSaving] = useState(false);
   const [taskId, setTaskId] = useState(null);
@@ -48,15 +51,17 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
 
   async function loadRefs() {
     try {
-      const [eqRes, wtRes, compRes] = await Promise.allSettled([
+      const [eqRes, wtRes, compRes,montRes] = await Promise.allSettled([
         getEquipmentList(),
         getWorkTypes(),
         getCompaniesList(),
+        getActiveMontajniks(),
       ]);
 
       setEquipmentList(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
       setWorkTypesList(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
       setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
+      setMontajniks(montRes.status === 'fulfilled' ? montRes.value || [] : []);
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
@@ -65,6 +70,127 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   function setField(k, v) {
     setForm((f) => ({ ...f, [k]: v }));
   }
+
+
+  function SearchableMontajnikSelect({ availableMontajniks, onSelect, selectedUserId }) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filteredMontajniks, setFilteredMontajniks] = useState(availableMontajniks);
+    const [isOpen, setIsOpen] = useState(false);
+
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredMontajniks(availableMontajniks);
+      } else {
+        const termLower = searchTerm.toLowerCase();
+        setFilteredMontajniks(
+          availableMontajniks.filter(m =>
+            (m.name && m.name.toLowerCase().includes(termLower)) ||
+            (m.lastname && m.lastname.toLowerCase().includes(termLower)) ||
+            (m.id && m.id.toString().includes(termLower)) // Поиск по ID
+          )
+        );
+      }
+    }, [searchTerm, availableMontajniks]);
+
+    const handleInputChange = (e) => {
+      setSearchTerm(e.target.value);
+      setIsOpen(true);
+    };
+
+    const handleItemClick = (montajnik) => {
+      onSelect(montajnik.id);
+      setSearchTerm("");
+    };
+
+    const handleInputFocus = () => setIsOpen(true);
+    const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+    return (
+      <div style={{ position: 'relative', width: '100%' }}>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          placeholder="🔍 Поиск монтажника (имя, фамилия, ID)..."
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            border: '1px solid #444',
+            borderRadius: '4px',
+            backgroundColor: '#1a1a1a',
+            color: '#e0e0e0',
+            fontSize: '14px',
+          }}
+        />
+        {isOpen && filteredMontajniks.length > 0 && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {filteredMontajniks.map((m) => (
+              <li
+                key={m.id}
+                onClick={() => handleItemClick(m)}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  color: '#e0e0e0',
+                  backgroundColor: '#2a2a2a',
+                  borderBottom: '1px solid #3a3a3a',
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {m.name} {m.lastname} (ID: {m.id})
+              </li>
+            ))}
+          </ul>
+        )}
+        {isOpen && filteredMontajniks.length === 0 && searchTerm.trim() !== '' && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+              Ничего не найдено
+            </li>
+          </ul>
+        )}
+      </div>
+    );
+  }
+
 
   // ✅ Загрузка контактных лиц при выборе компании
   async function handleCompanyChange(companyId) {
@@ -736,7 +862,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, так как разрешено дублирование
         />
 
-        <label>
+       <label>
           Тип назначения
           <select
             value={form.assignment_type}
@@ -755,23 +881,35 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </select>
         </label>
 
-        <label>
-          Назначить монтажника (id)
-          <input
-            type="number"
-            value={form.assigned_user_id || ""}
-            onChange={(e) => setField("assigned_user_id", e.target.value ? parseInt(e.target.value) : null)}
-            placeholder="ID монтажника"
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#e0e0e0",
-            }}
-          />
-        </label>
+        {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
+        {/* ✅ Поле "Назначить монтажника" отображается только если тип назначения "assigned" */}
+        {form.assignment_type === "individual" && (
+          <div>
+            <label>
+              Назначить монтажника
+            </label>
+            {/* --- Отображение выбранного монтажника --- */}
+            {form.assigned_user_id && (
+              <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                {/* ✅ Отображаем только имя и фамилию, без ID */}
+                Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || ''} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || ''}
+                <button
+                  type="button"
+                  onClick={() => setField("assigned_user_id", null)}
+                  style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+            {/* --- Выбор нового монтажника через SearchableSelect --- */}
+            <SearchableMontajnikSelect
+              availableMontajniks={montajniks}
+              onSelect={(userId) => setField("assigned_user_id", userId)}
+              selectedUserId={form.assigned_user_id}
+            />
+          </div>
+        )}
 
         <label>
           Цена клиента (авто)

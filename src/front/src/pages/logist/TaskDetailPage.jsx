@@ -10,6 +10,8 @@ import {
   getCompaniesList,
   getContactPersonsByCompany,
   getContactPersonPhone, // <--- Импорт
+  getActiveMontajniks,
+  archiveTask,
 } from "../../api";
 import "../../styles/LogistPage.css";
 
@@ -66,6 +68,8 @@ function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
     </div>
   );
 }
+
+
 
 // --- КОМПОНЕНТ: Умный поиск для оборудования ---
 function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
@@ -318,23 +322,50 @@ export default function TaskDetailPage() {
   const [contactPersonPhone, setContactPersonPhone] = useState(null); // <--- Для просмотра
   const [loadingPhone, setLoadingPhone] = useState(false); // <--- Для редактирования
   const [rejectModal, setRejectModal] = useState({ open: false, taskId: null, reportId: null });
+  const [montajniks, setMontajniks] = useState([]); // <--- Список монтажников
 
   useEffect(() => {
     loadRefs();
     loadTask();
   }, [id]);
 
+
+  async function handleArchiveTask() {
+    if (!task || task.is_draft) {
+        alert("Нельзя архивировать черновик через эту кнопку.");
+        return;
+    }
+    // Также можно проверить, что статус не 'archived', чтобы не архивировать повторно
+    if (task.status === "archived") {
+        alert("Задача уже архивирована.");
+        return;
+    }
+    if (!window.confirm(`Вы уверены, что хотите архивировать задачу #${task.id}?`)) return;
+    try {
+      await archiveTask(task.id); // Вызываем API функцию
+      alert("✅ Задача архивирована");
+      loadTask(); // Перезагружаем данные задачи
+    } catch (err) {
+      console.error("Ошибка архивации задачи:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось архивировать задачу.";
+      alert(`Ошибка: ${errorMsg}`);
+    }
+  }
+
+
   async function loadRefs() {
     try {
-      const [eqRes, wtRes, compRes] = await Promise.allSettled([
+      const [eqRes, wtRes, compRes,montRes] = await Promise.allSettled([
         getEquipmentList(),
         getWorkTypes(),
         getCompaniesList(),
+        getActiveMontajniks(),
       ]);
 
       setEquipmentList(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
       setWorkTypesList(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
       setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
+      setMontajniks(montRes.status === 'fulfilled' ? montRes.value || [] : []);
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
@@ -385,6 +416,8 @@ export default function TaskDetailPage() {
         equipment: formEquipment,
         work_types_ids: formWorkTypesIds,
         contact_person_phone: t.contact_person_phone || null,
+        assignment_type: t.assignment_type,
+        assigned_user_id: t.assigned_user_id || null,
       };
 
       setForm(initialForm);
@@ -514,6 +547,130 @@ export default function TaskDetailPage() {
     }
   }
 
+
+   function setAssignedUser(userId) {
+    setField("assigned_user_id", userId);
+  }
+
+  function SearchableMontajnikSelect({ availableMontajniks, onSelect, selectedUserId }) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filteredMontajniks, setFilteredMontajniks] = useState(availableMontajniks);
+    const [isOpen, setIsOpen] = useState(false);
+
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredMontajniks(availableMontajniks);
+      } else {
+        const termLower = searchTerm.toLowerCase();
+        setFilteredMontajniks(
+          availableMontajniks.filter(m =>
+            (m.name && m.name.toLowerCase().includes(termLower)) ||
+            (m.lastname && m.lastname.toLowerCase().includes(termLower)) ||
+            (m.id && m.id.toString().includes(termLower))
+          )
+        );
+      }
+    }, [searchTerm, availableMontajniks]);
+
+    const handleInputChange = (e) => {
+      setSearchTerm(e.target.value);
+      setIsOpen(true);
+    };
+
+    const handleItemClick = (montajnik) => {
+      onSelect(montajnik.id);
+      setSearchTerm("");
+    };
+
+    const handleInputFocus = () => setIsOpen(true);
+    const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+    return (
+      <div style={{ position: 'relative', width: '100%' }}>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          placeholder="🔍 Поиск монтажника (имя, фамилия, ID)..."
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            border: '1px solid #444',
+            borderRadius: '4px',
+            backgroundColor: '#1a1a1a',
+            color: '#e0e0e0',
+            fontSize: '14px',
+          }}
+        />
+        {isOpen && filteredMontajniks.length > 0 && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {filteredMontajniks.map((m) => (
+              <li
+                key={m.id}
+                onClick={() => handleItemClick(m)}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  color: '#e0e0e0',
+                  backgroundColor: '#2a2a2a',
+                  borderBottom: '1px solid #3a3a3a',
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {m.name} {m.lastname} (ID: {m.id})
+              </li>
+            ))}
+          </ul>
+        )}
+        {isOpen && filteredMontajniks.length === 0 && searchTerm.trim() !== '' && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+              Ничего не найдено
+            </li>
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   // ✅ Новая функция для загрузки телефона контактного лица в форме редактирования
   async function handleContactPersonChangeForForm(contactPersonId) {
     const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
@@ -545,6 +702,7 @@ export default function TaskDetailPage() {
         montajnik_reward: undefined,
         gos_number: form.gos_number || null,
         contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
+        assigned_user_name: undefined,
       };
       await editTask(id, payload);
       alert("✅ Изменения сохранены");
@@ -580,6 +738,12 @@ export default function TaskDetailPage() {
 
   function handleRejectSuccess() {
     loadTask();
+  }
+
+  function clearAssignedUserAndSetBroadcast() {
+    setField("assigned_user_id", null);
+    // setField("assigned_user_name", null); // assigned_user_name нет в form
+    setField("assignment_type", "broadcast"); // <--- Меняем тип на broadcast
   }
 
   function renderAttachments(attachments) {
@@ -642,9 +806,16 @@ export default function TaskDetailPage() {
         <div className="page-header">
           <h1>Задача #{task.id}</h1>
           {!edit ? (
-            <button type="button" className="add-btn" onClick={() => setEdit(true)}>
-              ✏️ Редактировать
-            </button>
+            <>
+              <button className="add-btn" onClick={() => setEdit(true)}>
+                ✏️ Редактировать
+              </button>
+              {task.status !== "archived" && !task.is_draft && ( // <--- Условный рендер: не архивирована и не черновик
+                <button className="add-btn" style={{ backgroundColor: '#ff9800' }} onClick={handleArchiveTask}> {/* <--- Стиль и обработчик */}
+                  🗃 Архивировать
+                </button>
+              )}
+            </>
           ) : (
             <>
               <button type="button" className="add-btn" onClick={saveEdit}>
@@ -928,11 +1099,22 @@ export default function TaskDetailPage() {
                 selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, т.к. разрешено дублирование
               />
 
-              <label>
-            Монтажник (ID)
-            <input 
-                value={form.assigned_user_id || ""} onChange={(e) => setField("assigned_user_id", e.target.value)} 
-                 style={{
+               <label>
+                Тип назначения
+                <select
+                  value={form.assignment_type || ""}
+                  // ❌ Убираем onChange, чтобы не мешал сбросу из функции clearAssignedUserAndSetBroadcast
+                  // onChange={(e) => { ... }}
+                  onChange={(e) => {
+                     const newType = e.target.value;
+                     setField("assignment_type", newType);
+                     // Если тип меняется на broadcast, сбрасываем назначенного монтажника
+                     if (newType === "broadcast") {
+                        setField("assigned_user_id", null);
+                        // setField("assigned_user_name", null); // assigned_user_name нет в form
+                     }
+                  }}
+                  style={{
                     width: "100%",
                     padding: "8px",
                     borderRadius: "4px",
@@ -940,8 +1122,49 @@ export default function TaskDetailPage() {
                     backgroundColor: "#1a1a1a",
                     color: "#e0e0e0",
                   }}
-            />
-          </label>
+                >
+                  <option value="broadcast">broadcast</option>
+                  <option value="individual">assigned</option>
+                </select>
+              </label>
+
+              {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
+              {/* ✅ Поле "Назначить монтажника" отображается только если тип "assigned" */}
+              {form.assignment_type === "individual" && (
+                <div>
+                  <label>
+                    Назначить монтажника
+                  </label>
+                  {/* --- Отображение выбранного монтажника --- */}
+                  {form.assigned_user_id && (
+                    <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                      {/* ✅ Отображаем имя и фамилию монтажника */}
+                      Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || 'ID:'} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || form.assigned_user_id}
+                      <button
+                        type="button"
+                        // ✅ ИСПРАВЛЕНО: вызываем новую функцию
+                        onClick={clearAssignedUserAndSetBroadcast}
+                        style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                  {/* --- Выбор нового монтажника через SearchableSelect --- */}
+                  <SearchableMontajnikSelect
+                    availableMontajniks={montajniks}
+                    onSelect={(userId) => {
+                       setField("assigned_user_id", userId);
+                       // setField("assigned_user_name", ...); // assigned_user_name нет в form, сервер сам возьмёт
+                       // Убедимся, что тип назначения - individual, если был broadcast
+                       if (form.assignment_type !== "individual") {
+                          setField("assignment_type", "individual");
+                       }
+                    }}
+                    selectedUserId={form.assigned_user_id}
+                  />
+                </div>
+              )}
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <input
@@ -1011,7 +1234,7 @@ export default function TaskDetailPage() {
                   </a>
                 ) : "—"}
               </p>
-              <p><b>Монтажник:</b> {task.assigned_user_id || "—"}</p>
+              <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
               <p><b>Комментарий:</b> {task.comment || "—"}</p>
               <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
               <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>

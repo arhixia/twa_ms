@@ -68,7 +68,10 @@ async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user: Us
     """
     _ensure_tech_or_403(current_user)
     # Загружаем задачи с контактным лицом и компанией
-    q = select(Task).where(Task.status != TaskStatus.completed, Task.is_draft == False).options(
+    q = select(Task).where(
+        Task.is_draft == False,
+        Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
+        ).options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
     )
     res = await db.execute(q)
@@ -316,7 +319,8 @@ async def tech_task_detail(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history),
             selectinload(Task.reports),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.assigned_user)
         )
         .where(Task.id == task_id)
     )
@@ -368,6 +372,11 @@ async def tech_task_detail(
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
 
+    assigned_user_name = task.assigned_user.name if task.assigned_user else None
+    assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
+    assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
+
+
     return {
         "id": task.id,
         "company_name": company_name,  # ✅ Новое
@@ -379,6 +388,7 @@ async def tech_task_detail(
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
         "status": task.status.value if task.status else None,
         "assigned_user_id": task.assigned_user_id or None,
+        "assigned_user_name": assigned_user_full_name,
         "comment": task.comment or None,
         "photo_required": task.photo_required,
         "client_price": str(task.client_price) if task.client_price else None,
@@ -541,7 +551,8 @@ async def tech_supp_completed_task_detail(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history),
             selectinload(Task.reports), # Загружаем отчёты
-            selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.assigned_user)
         )
         .where(
             Task.id == task_id,
@@ -595,6 +606,10 @@ async def tech_supp_completed_task_detail(
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
 
+    assigned_user_name = task.assigned_user.name if task.assigned_user else None
+    assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
+    assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
+
     return {
         "id": task.id,
         "company_name": company_name,
@@ -606,6 +621,7 @@ async def tech_supp_completed_task_detail(
         "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
         "status": task.status.value if task.status else None,
         "assigned_user_id": task.assigned_user_id or None,
+        "assigned_user_name": assigned_user_full_name,
         "comment": task.comment or None,
         "photo_required": task.photo_required,
         "client_price": str(task.client_price) if task.client_price else None,
