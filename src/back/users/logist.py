@@ -1411,7 +1411,7 @@ async def review_report(
     background_tasks: BackgroundTasks,
     task_id: int,
     report_id: int,
-    payload: ReportReviewIn = Body(...),
+    payload: ReportReviewIn = Body(...), # Используем Pydantic схему, если она есть
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -1439,20 +1439,22 @@ async def review_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # load task
-    # Загружаем задачу с её связями для снимка
+    # load task WITH equipment, work_types and contact_person/company for snapshot and check for tech_supp_required
     t_res = await db.execute(
         select(Task)
         .where(Task.id == task_id)
         .options(
             selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
-            selectinload(Task.works).selectinload(TaskWork.work_type), # <--- Загрузим работы
-            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment) # <--- Загрузим оборудование
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
         )
     )
     task = t_res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    # Проверяем, требуется ли проверка тех.спеца для *этой задачи*
+    requires_tech_review = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
 
     # Сохраняем старые статусы отчёта до изменения
     old_approval_logist = report.approval_logist
@@ -1468,7 +1470,7 @@ async def review_report(
 
     try:
         # if both approved -> finalize task
-        if report.approval_logist == ReportApproval.approved and report.approval_tech == ReportApproval.approved:
+        if report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
             task.completed_at = datetime.now(timezone.utc)
 
@@ -1485,15 +1487,15 @@ async def review_report(
             ]
 
             # Создаём запись в истории с *всеми* полями задачи и снимками
-            h = TaskHistory(
+            hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
                 action=TaskStatus.completed, # action - новый статус
                 event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
                 comment="Both approvals -> completed",
                 # --- Сохраняем все основные поля задачи ---
-                company_id=task.company_id,  # ✅ Заменено
-                contact_person_id=task.contact_person_id,  # ✅ Заменено
+                company_id=task.company_id,
+                contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
                 gos_number = task.gos_number,
@@ -1513,16 +1515,18 @@ async def review_report(
                 related_entity_id=report.id,
                 related_entity_type="report",
                 # --- НОВЫЕ ПОЛЯ: Снимки ---
-                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
-                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
+                equipment_snapshot=equipment_snapshot_for_history,
+                work_types_snapshot=work_types_snapshot_for_history,
             )
-            db.add(h)
+            db.add(hist)
         else:
             action = TaskStatus.inspection # Статус задачи не изменился, но отчёт проверялся
             hist_comment = f"Report #{report.id} reviewed by {current_user.role.value}: {approval}"
             if comment:
                 hist_comment += f". Comment: {comment}"
 
+            # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта) ---
+            # Так как связи уже загружены через options в t_res, мы можем их использовать
             equipment_snapshot_for_history = [
                 {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
                 for te in task.equipment_links
@@ -1533,17 +1537,19 @@ async def review_report(
                 for tw in task.works
             ]
 
-            h = TaskHistory(
+            # Создаём запись в истории с *всеми* полями задачи и снимками
+            hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
                 action=action, # action - текущий статус задачи
                 event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
                 comment=hist_comment,
                 # --- Сохраняем все основные поля задачи ---
-                company_id=task.company_id,  # ✅ Заменено
-                contact_person_id=task.contact_person_id,  # ✅ Заменено
+                company_id=task.company_id,
+                contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
+                gos_number = task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
@@ -1554,15 +1560,15 @@ async def review_report(
                 photo_required=task.photo_required,
                 assignment_type=task.assignment_type.value if task.assignment_type else None,
                 field_name="report_approval", # Поле, связанное с отчётом
-                old_value=f"logist:{old_approval_logist.value if old_approval_logist else 'None'}, tech:{old_approval_tech.value if old_approval_tech else 'None'}", # Старые статусы отчёта
-                new_value=f"logist:{report.approval_logist.value}, tech:{report.approval_tech.value}", # Новые статусы отчёта
+                old_value=f"logist:{old_approval_logist.value if old_approval_logist else 'None'}, tech:{old_approval_tech.value if old_approval_tech else 'None'}",
+                new_value=f"logist:{report.approval_logist.value}, tech:{report.approval_tech.value}",
                 related_entity_id=report.id,
                 related_entity_type="report",
                 # --- НОВЫЕ ПОЛЯ: Снимки ---
-                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
-                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
+                equipment_snapshot=equipment_snapshot_for_history,
+                work_types_snapshot=work_types_snapshot_for_history,
             )
-            db.add(h)
+            db.add(hist)
 
         await db.flush()
 
@@ -1580,7 +1586,23 @@ async def review_report(
         msg = f"Report #{report.id} reviewed by {current_user.role.value}: {approval}"
         if comment:
             msg += f". Comment: {comment}"
-        background_tasks.add_task("back.utils.notify.notify_user", report.author_id, msg, task_id)
+        background_tasks.add_task(notify_user, report.author_id, msg, task_id)
+
+
+    if (
+        current_user.role == Role.logist
+        and report.approval_tech == ReportApproval.waiting
+        and requires_tech_review
+    ):
+        tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True))
+        techs = tech_q.scalars().all()
+        for tuser in techs:
+            background_tasks.add_task(
+                notify_user,
+                tuser.id,
+                f"Отчёт #{report.id} по задаче #{task.id} ожидает вашей проверки (требуется тех.проверка).",
+                task_id
+            )
 
     return {"detail": "Reviewed", "approval": approval}
 
@@ -1694,9 +1716,6 @@ async def get_task_full_history(
         out.append(TaskHistoryItem.model_validate(h)) # Pydantic сам преобразует поля
     return out
 
-# -------------------------
-# Task detail (restored)
-# -------------------------
 
 
 

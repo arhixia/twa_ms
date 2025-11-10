@@ -131,6 +131,7 @@ class WorkType(AsyncAttrs, Base):
     created_at = Column(DateTime(timezone=True), default=now_ekb)
     price = Column(Numeric(10, 2), nullable=False)
     is_active = Column(Boolean, default=True)                  # Активен ли тип работы
+    tech_supp_require = Column(Boolean,default=False)
 
     task_works = relationship("TaskWork", back_populates="work_type", cascade="all, delete-orphan")
 

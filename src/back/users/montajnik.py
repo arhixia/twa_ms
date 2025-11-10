@@ -735,7 +735,7 @@ async def submit_report_for_review(
     """
     Отправить отчёт на проверку. Логика:
     - Если ранее одна из сторон отклонила (approval == rejected), то уведомить только ту сторону и поставить её approval в waiting.
-    - Иначе поставить обе approval = waiting и уведомить обе стороны (логист и тех.спец).
+    - Иначе поставить обе approval = waiting и уведомить обе стороны (логист и тех.спец, если требуется).
     - Перевести задачу в status = inspection.
     """
     _ensure_montajnik_or_403(current_user)
@@ -747,11 +747,27 @@ async def submit_report_for_review(
     if report.author_id != current_user.id:
         raise HTTPException(status_code=403, detail="Не автор отчёта")
 
+    # --- НОВАЯ ЛОГИКА: Проверяем, требуется ли проверка тех.спеца для *этой задачи* ---
+    # Загружаем задачу с её видами работ
+    t_res = await db.execute(
+        select(Task)
+        .where(Task.id == task_id)
+        .options(selectinload(Task.works).selectinload(TaskWork.work_type)) # Загружаем работы и типы работ
+    )
+    task = t_res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    # Проверяем, есть ли среди видов работ для *этой задачи* хотя бы один с tech_supp_required=True
+    requires_tech_review = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
+    # --- КОНЕЦ НОВОЙ ЛОГИКИ ---
+
     notify_logist = True
-    notify_tech = True
+    # ✅ Уведомление тех.спеца теперь зависит от флага в работах задачи
+    notify_tech = requires_tech_review # <--- Изменено
 
     if report.approval_logist == ReportApproval.rejected and report.approval_tech != ReportApproval.rejected:
-        notify_tech = False
+        notify_tech = requires_tech_review # <--- Уведомляем теха, только если нужно
         report.approval_logist = ReportApproval.waiting
     elif report.approval_tech == ReportApproval.rejected and report.approval_logist != ReportApproval.rejected:
         notify_logist = False
@@ -759,13 +775,12 @@ async def submit_report_for_review(
     else:
         report.approval_logist = ReportApproval.waiting
         report.approval_tech = ReportApproval.waiting
+        # notify_tech уже установлен на requires_tech_review выше
 
     report.reviewed_at = None  # сброс reviewed time
 
     try:
-        # change task status to inspection
-        # Загружаем задачу с контактным лицом, компанией, оборудованием и видами работ для истории
-        t_res = await db.execute(
+        full_t_res = await db.execute(
             select(Task)
             .where(Task.id == task_id)
             .options(
@@ -774,7 +789,7 @@ async def submit_report_for_review(
                 selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
             )
         )
-        task = t_res.scalars().first()
+        task = full_t_res.scalars().first()
         if not task:
             raise HTTPException(status_code=404, detail="Задача не найдена")
 
@@ -805,14 +820,14 @@ async def submit_report_for_review(
             related_entity_id=report.id,
             related_entity_type="report",
             # --- Сохраняем все основные поля задачи ---
-            company_id=task.company_id,  # ✅ Заменено
-            contact_person_id=task.contact_person_id,  # ✅ Заменено
+            company_id=task.company_id,
+            contact_person_id=task.contact_person_id,
             contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
             gos_number = task.gos_number,
             scheduled_at=task.scheduled_at,
             location=task.location,
-            comment_field=task.comment, # ✅ Используем comment_field
+            comment_field=task.comment,
             status=task.status.value if task.status else None,
             assigned_user_id=task.assigned_user_id,
             client_price=str(task.client_price) if task.client_price is not None else None,
@@ -820,8 +835,8 @@ async def submit_report_for_review(
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
             # --- НОВЫЕ ПОЛЯ: Снимки ---
-            equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
-            work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
+            equipment_snapshot=equipment_snapshot_for_history,
+            work_types_snapshot=work_types_snapshot_for_history,
         )
         db.add(hist)
         await db.commit()
@@ -833,13 +848,17 @@ async def submit_report_for_review(
             logger.exception("rollback failed")
         raise HTTPException(status_code=500, detail="Ошибка при отправке отчёта на проверку")
 
+    # --- УВЕДОМЛЕНИЯ ---
+    # Уведомляем логиста (создателя задачи)
     if notify_logist and task.created_by:
-        background_tasks.add_task("back.utils.notify.notify_user", task.created_by, f"По задаче #{task.id} отправлен отчёт на проверку", task.id)
+        background_tasks.add_task(notify_user, task.created_by, f"По задаче #{task.id} отправлен отчёт на проверку", task.id)
+
+    # ✅ Уведомляем тех.спеца ТОЛЬКО если это требуется для задачи
     if notify_tech:
         tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True))
         techs = tech_q.scalars().all()
         for tuser in techs:
-            background_tasks.add_task("back.utils.notify.notify_user", tuser.id, f"По задаче #{task.id} отправлен отчёт на проверку (тех.спец)", task.id)
+            background_tasks.add_task(notify_user, tuser.id, f"По задаче #{task.id} отправлен отчёт на проверку (требуется тех.проверка)", task.id)
 
     return {"detail": "sent for review"}
 

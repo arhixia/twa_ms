@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['pointing-spyware-manga-repeated.trycloudflare.com']
+    allowedHosts: ['acknowledged-cool-thrown-ventures.trycloudflare.com']
   },
 })
 

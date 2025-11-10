@@ -24,6 +24,7 @@ import "../../styles/LogistPage.css";
 function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, taskWorkTypeIds, allWorkTypes }) {
   const [selectedStatus, setSelectedStatus] = useState("");
   const [changing, setChanging] = useState(false);
+  
 
   // Ограниченный список статусов
   const statusOptions = [
@@ -636,3 +637,4 @@ export default function MontajnikTaskDetailPage() {
 }
 
 
+//фронт доделать

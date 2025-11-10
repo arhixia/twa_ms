@@ -24,9 +24,10 @@ from back.db.models import (
     TaskWork,
     User,
     Role,
+    WorkType,
 )
 from back.utils.notify import notify_user
-from back.users.users_schemas import TaskHistoryItem, require_roles,Role
+from back.users.users_schemas import ReportReviewIn, TaskHistoryItem, require_roles,Role
 from back.utils.selectel import get_s3_client
 from back.files.handlers import validate_and_process_attachment
 router = APIRouter()
@@ -61,36 +62,45 @@ async def _add_history(db: AsyncSession, task: Task, user: User, action: TaskSta
 
 
 @router.get("/tasks/active", dependencies=[Depends(require_roles(Role.tech_supp))])
-async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     """
     Список активных задач для тех.специалиста.
-    Возвращаются задачи, которые не в состоянии completed и не являются черновиками.
+    Возвращаются задачи, которые не в состоянии completed или archived, не являются черновиками,
+    и имеют *назначенные* виды работ, требующие проверки тех.специалистом.
     """
     _ensure_tech_or_403(current_user)
-    # Загружаем задачи с контактным лицом и компанией
+
+    # Загружаем задачи, у которых есть связь TaskWork с WorkType, где tech_supp_required = True
+    # Также фильтруем по статусу и is_draft
     q = select(Task).where(
         Task.is_draft == False,
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
-        ).options(
-        selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+        # Фильтр: задача должна быть связана с TaskWork, у которого work_type.tech_supp_required = True
+        Task.id.in_(
+            select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
+        )
+    ).options(
+        # Загружаем контактное лицо и компанию для отображения в списке
+        selectinload(Task.contact_person).selectinload(ContactPerson.company)
     )
     res = await db.execute(q)
     tasks = res.scalars().all()
 
     out = []
     for t in tasks:
-        # Получаем имя контактного лица и компании
+        # Получаем имя контактного лица и компании (аналогично предыдущей версии)
         contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
         client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
 
         out.append({
             "id": t.id,
-            "client": client_display,  # ✅ Используем составное имя
+            "client": client_display,
             "status": t.status.value if t.status else None,
-            "scheduled_at": str(t.scheduled_at),
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
         })
+
+    logger.info(f"Тех.спец {current_user.id} получил {len(out)} активных задач, требующих его проверки.")
     return out
 
 
@@ -129,30 +139,30 @@ async def tech_history(db: AsyncSession = Depends(get_db), current_user: User = 
 
 
 @router.post("/tasks/{task_id}/reports/{report_id}/review", dependencies=[Depends(require_roles(Role.tech_supp))])
-async def review_report(
+async def tech_review_report(
     background_tasks: BackgroundTasks,
     task_id: int,
     report_id: int,
-    payload: Dict[str, Any] = Body(...),
+    payload: Dict[str, Any] = Body(...), # <--- Временное решение: принимаем dict, но проверяем только approval
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """
     Ревью отчёта тех.специалистом.
-    payload: {"approval": "approved" | "rejected", "comment": "optional text", "photos": ["storage_key1", ...]}
+    payload: {"approval": "approved"} # Только approve, больше ничего
     Правила:
     - только роль tech_supp
-    - устанавливаем approval_tech и review_comment, reviewed_at
+    - устанавливаем approval_tech, reviewed_at (comment и photos игнорируются)
     - если оба approval (логист + тех) == approved -> задача считается completed, фиксируем completed_at и history
-    - если отклонено -> оставляем задачу в inspection, ревью можно отправлять повторно; уведомляем автора отчёта
+    - если отклонено (не должно быть) -> оставляем задачу в inspection, ревью можно отправлять повторно; уведомляем автора отчёта
     """
     _ensure_tech_or_403(current_user)
 
     approval = payload.get("approval")
-    comment = payload.get("comment")
 
-    if approval not in ("approved", "rejected"):
-        raise HTTPException(status_code=400, detail="approval must be 'approved' or 'rejected'")
+    # ✅ УБИРАЕМ "rejected" из допустимых значений
+    if approval != "approved": # <--- Позволяем только "approved"
+        raise HTTPException(status_code=400, detail="Тех.спец может только принять отчёт. approval must be 'approved'")
 
     # load report
     r_res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
@@ -160,31 +170,31 @@ async def review_report(
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
 
-    # load task WITH equipment and work_types for snapshot
+    # load task WITH equipment, work_types and contact_person/company for snapshot
     t_res = await db.execute(
         select(Task)
         .where(Task.id == task_id)
         .options(
             selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
-            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # <--- ЗАГРУЖАЕМ оборудование
-            selectinload(Task.works).selectinload(TaskWork.work_type)              # <--- ЗАГРУЖАЕМ виды работ
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
         )
     )
     task = t_res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # set tech approval
+
     old_approval = report.approval_tech
-    report.approval_tech = ReportApproval.approved if approval == "approved" else ReportApproval.rejected
-    report.review_comment = comment
-    report.reviewed_at = datetime.now(timezone.utc) # _now_utc() ?
+    # ✅ УБИРАЕМ возможность установить rejected
+    report.approval_tech = ReportApproval.approved # <--- Всегда approved, если пришло "approved"
+    report.reviewed_at = datetime.now(timezone.utc)
 
     try:
         # if both approved -> finalize task
         if report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
-            task.completed_at = datetime.now(timezone.utc) # _now_utc() ?
+            task.completed_at = datetime.now(timezone.utc)
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (завершение задачи) ---
             # Так как связи уже загружены через options в t_res, мы можем их использовать
@@ -204,10 +214,11 @@ async def review_report(
                 user_id=getattr(current_user, "id", None),
                 action=TaskStatus.completed, # action - новый статус
                 event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
-                comment="Both approvals -> completed by tech",
+                # ✅ Комментарий для истории, когда оба одобрены
+                comment=f"Tech review: approved. Both approvals -> completed by tech.",
                 # --- Сохраняем все основные поля задачи ---
-                company_id=task.company_id,  # ✅ Заменено
-                contact_person_id=task.contact_person_id,  # ✅ Заменено
+                company_id=task.company_id,
+                contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
                 gos_number = task.gos_number,
@@ -227,16 +238,15 @@ async def review_report(
                 related_entity_id=report.id,
                 related_entity_type="report",
                 # --- НОВЫЕ ПОЛЯ: Снимки ---
-                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
-                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
+                equipment_snapshot=equipment_snapshot_for_history,
+                work_types_snapshot=work_types_snapshot_for_history,
             )
             db.add(hist)
         else:
-            # if rejected -> keep task in inspection state; add history entry for rejection or waiting
+            # if tech approved, but logist hasn't reviewed yet -> keep task in inspection state; add history entry for tech approval
             action = TaskStatus.inspection # Статус задачи не изменился, но отчёт проверялся
-            hist_comment = f"Tech review: {approval}"
-            if comment:
-                hist_comment += f". Comment: {comment}"
+            # ✅ Комментарий для истории, когда только тех.спец одобрил
+            hist_comment = f"Tech review: approved."
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта тех.специалистом) ---
             # Так как связи уже загружены через options в t_res, мы можем их использовать
@@ -258,8 +268,8 @@ async def review_report(
                 event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
                 comment=hist_comment,
                 # --- Сохраняем все основные поля задачи ---
-                company_id=task.company_id,  # ✅ Заменено
-                contact_person_id=task.contact_person_id,  # ✅ Заменено
+                company_id=task.company_id,
+                contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
                 gos_number = task.gos_number,
@@ -279,8 +289,8 @@ async def review_report(
                 related_entity_id=report.id,
                 related_entity_type="report",
                 # --- НОВЫЕ ПОЛЯ: Снимки ---
-                equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
-                work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
+                equipment_snapshot=equipment_snapshot_for_history,
+                work_types_snapshot=work_types_snapshot_for_history,
             )
             db.add(hist)
 
@@ -294,16 +304,28 @@ async def review_report(
             logger.exception("rollback failed")
         raise HTTPException(status_code=500, detail="Failed to review report")
 
-    # Notify report author about result
+
     if report.author_id:
+        # ✅ Сообщение для монтажника: тех.спец одобрил
+        msg = f"Report #{report.id} reviewed by tech: approved."
         background_tasks.add_task(
-            "back.utils.notify.notify_user", # Убедитесь, что notify_user создаёт свою сессию
+            notify_user, # Убедитесь, что notify_user создаёт свою сессию
             report.author_id,
-            f"Report #{report.id} reviewed by tech: {approval}. Comment: {comment or ''}",
+            msg,
             task_id
         )
 
-    return {"detail": "Reviewed", "approval": approval}
+  
+    if report.approval_logist == ReportApproval.waiting:
+        if task.created_by: # created_by - ID логиста, который создал задачу
+            background_tasks.add_task(
+                notify_user,
+                task.created_by,
+                f"Отчёт #{report.id} по задаче #{task.id} ожидает вашей проверки (проверено тех.специалистом).",
+                task_id
+            )
+
+    return {"detail": "Reviewed", "approval": "approved"} # <--- Всегда возвращаем approved
 
 
 @router.get("/tasks/{task_id}")

@@ -38,7 +38,7 @@ class TaskWorkItem(BaseModel):
     id: Optional[int] = None
     work_type_id: int
     work_type_name: Optional[str] = None
-    quantity: int = Field(default=1, ge=1) 
+    quantity: int = Field(default=1, ge=1)
 
     model_config = ConfigDict(from_attributes=True)
 
