@@ -272,19 +272,10 @@ export default function TechTaskDetailPage() {
                     </p>
                   )}
                   <div className="report-actions">
-                    {/* Кнопки "Принять" и "Отклонить" отображаются, если статус отчёта для ТЕХ.СПЕЦА == "waiting" */}
-                    {r.approval_tech === "waiting" ? (
-                      <>
+                      {r.approval_tech === "waiting" && (
                         <button onClick={() => handleTechApprove(task.id, r.id)}>✅ Принять (Тех)</button>
-                        <button
-                          style={{ backgroundColor: '#ef4444' }}
-                          onClick={() => handleRejectTechReport(task.id, r.id)}
-                        >
-                          ❌ Отклонить (Тех)
-                        </button>
-                      </>
-                    ) : null}
-                  </div>
+                      )}
+                    </div>
 
                   {r.photos && r.photos.length > 0 && (
                     <div className="attached-list">

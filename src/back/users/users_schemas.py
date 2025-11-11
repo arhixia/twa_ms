@@ -154,6 +154,7 @@ class TaskHistoryItem(BaseModel):
     related_entity_id: Optional[int] = None
     related_entity_type: Optional[str] = None
     gos_number: Optional[str] = None
+    user_name: Optional[str] = None
 
     company_id: Optional[int] = None  
     contact_person_id: Optional[int] = None
@@ -164,6 +165,7 @@ class TaskHistoryItem(BaseModel):
     comment_field: Optional[str] = None
     status: Optional[str] = None
     assigned_user_id: Optional[int] = None
+    assigned_user_name: Optional[str] = None
     client_price: Optional[Money] = None
     montajnik_reward: Optional[Money] = None
     photo_required: Optional[bool] = None

@@ -1275,38 +1275,73 @@ export default function TaskDetailPage() {
               </div>
 
               <div className="section">
-                <h3>Отчёты монтажников</h3>
-                {(task.reports || []).length ? (
-                  task.reports.map((r) => (
-                    <div key={r.id} className="report">
-                      <p>#{r.id}: {r.text || "—"}</p>
-                      <p>
-                        logist: <b>{r.approval_logist || "—"}</b> | tech: <b>{r.approval_tech || "—"}</b>
-                      </p>
-                      {(r.approval_tech !== "waiting" && r.approval_tech !== "rejected") && (
-                        <p style={{ color: r.approval_tech === "approved" ? "green" : r.approval_tech === "rejected" ? "red" : "orange" }}>
-                          <b>Тех.спец:</b> {r.approval_tech} {r.review_comment && r.approval_tech === "rejected" && ` - ${r.review_comment}`}
-                        </p>
-                      )}
-                      <div className="report-actions">
-                        {r.approval_logist === "waiting" ? (
-                          <>
-                            <button type="button" onClick={() => handleApproveReport(task.id, r.id)}>✅ Принять</button>
-                            <button type="button" onClick={() => handleRejectReport(task.id, r.id)}>❌ Отклонить</button>
-                          </>
-                        ) : null}
-                      </div>
-                      {r.photos && r.photos.length > 0 && (
-                        <div className="attached-list">
-                          {renderAttachments(r.photos)}
-                        </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <div className="empty">Отчётов пока нет</div>
-                )}
-              </div>
+  <h3>Отчёты монтажников</h3>
+
+  {(task.reports || []).length ? (
+    task.reports.map((r) => (
+      <div key={r.id} className="report">
+        <p>
+          #{r.id}: {r.text || "—"}
+        </p>
+
+        <p>
+          <b>Логист:</b> {r.approval_logist || "—"}
+          {task.requires_tech_supp === true && (
+            <>
+              {" "} | <b>Тех.спец:</b> {r.approval_tech || "—"}
+            </>
+          )}
+        </p>
+
+        {task.requires_tech_supp === true &&
+          (r.approval_tech !== "waiting" &&
+            r.approval_tech !== "rejected") && (
+            <p
+              style={{
+                color:
+                  r.approval_tech === "approved"
+                    ? "green"
+                    : r.approval_tech === "rejected"
+                    ? "red"
+                    : "orange",
+              }}
+            >
+              <b>Тех.спец:</b> {r.approval_tech}
+              {r.review_comment &&
+                r.approval_tech === "rejected" &&
+                ` - ${r.review_comment}`}
+            </p>
+          )}
+
+        <div className="report-actions">
+          {r.approval_logist === "waiting" ? (
+            <>
+              <button
+                type="button"
+                onClick={() => handleApproveReport(task.id, r.id)}
+              >
+                ✅ Принять
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRejectReport(task.id, r.id)}
+              >
+                ❌ Отклонить
+              </button>
+            </>
+          ) : null}
+        </div>
+
+        {r.photos && r.photos.length > 0 && (
+          <div className="attached-list">{renderAttachments(r.photos)}</div>
+        )}
+      </div>
+    ))
+  ) : (
+    <div className="empty">Отчётов пока нет</div>
+  )}
+</div>
+
             </>
           )}
         </div>

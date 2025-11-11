@@ -445,6 +445,7 @@ export default function MontajnikTaskDetailPage() {
 </p>
 
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
+            <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
             <p><b>Статус:</b> {task.status || "—"}</p>
             <p>
@@ -466,7 +467,6 @@ export default function MontajnikTaskDetailPage() {
               </p>
             <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
-            <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
             <p><b>Награда за работу:</b> {task.montajnik_reward || "—"}</p>
             
             {/* === Оборудование === */}
@@ -561,9 +561,22 @@ export default function MontajnikTaskDetailPage() {
                       <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
                         {r.approval_logist || "—"}
                       </span> | 
-                      <b>Тех.спец:</b> <span style={{ color: r.approval_tech === "approved" ? "green" : r.approval_tech === "rejected" ? "red" : "orange" }}>
-                        {r.approval_tech || "—"}
-                      </span>
+                      {task.requires_tech_supp === true && (
+  <>
+    {" "} | 
+    <b>Тех.спец:</b>{" "}
+    <span style={{
+      color: r.approval_tech === "approved"
+        ? "green"
+        : r.approval_tech === "rejected"
+        ? "red"
+        : "orange"
+    }}>
+      {r.approval_tech || "waiting"}
+    </span>
+  </>
+)}
+
                     </p>
                     {/* Отображаем комментарий отклонения, если есть */}
                     {r.review_comment && (

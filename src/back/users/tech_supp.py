@@ -372,6 +372,8 @@ async def tech_task_detail(
         for h in (task.history or [])
     ] or None
 
+    requires_tech_supp = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
+
     # --- reports с фото ---
     reports = []
     for r in (task.reports or []):
@@ -418,7 +420,8 @@ async def tech_task_detail(
         "equipment": equipment,
         "work_types": work_types,
         "history": history,
-        "reports": reports or None
+        "reports": reports or None,
+        "requires_tech_supp": requires_tech_supp
     }
 
 @router.get("/tasks/{task_id}/history", response_model=List[TaskHistoryItem], dependencies=[Depends(require_roles(Role.tech_supp))])
@@ -427,10 +430,7 @@ async def get_tech_task_full_history(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user) # Для проверки существования задачи и прав (упрощенно)
 ):
-    """
-    Получить полную историю изменений задачи.
-    """
-    # 1. Проверить существование задачи (можно добавить проверку прав)
+     # 1. Проверить существование задачи (можно добавить проверку прав)
     res = await db.execute(select(Task).where(Task.id == task_id))
     task = res.scalars().first()
     if not task:
@@ -441,14 +441,27 @@ async def get_tech_task_full_history(
         select(TaskHistory)
         .where(TaskHistory.task_id == task_id)
         .order_by(TaskHistory.timestamp.asc()) # От самых старых к новым
-        # .options(selectinload(TaskHistory.user)) # Если нужно имя пользователя
+        .options(
+            selectinload(TaskHistory.user),
+            selectinload(TaskHistory.assigned_user)) 
     )
     history_records = res.scalars().all()
 
-    # 3. Форматируем для ответа
+    # 3. Форматируем для ответач
     out = []
     for h in history_records:
-        out.append(TaskHistoryItem.model_validate(h)) # Pydantic сам преобразует поля
+        item = TaskHistoryItem.model_validate(h)
+
+        # имя пользователя, совершившего действие
+        if h.user:
+            item.user_name = f"{h.user.name or ''} {h.user.lastname or ''}".strip()
+
+        # имя монтажника, назначенного на задачу
+        if h.assigned_user:
+            item.assigned_user_name = f"{h.assigned_user.name or ''} {h.assigned_user.lastname or ''}".strip()
+
+        out.append(item)
+
     return out
 
 
@@ -596,6 +609,8 @@ async def tech_supp_completed_task_detail(
         for tw in (task.works or [])
     ] or None
 
+    requires_tech_supp = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
+
     # --- history ---
     history = [
         {
@@ -651,5 +666,6 @@ async def tech_supp_completed_task_detail(
         "equipment": equipment,
         "work_types": work_types,
         "history": history,
-        "reports": reports or None
+        "reports": reports or None,
+        "requires_tech_supp": requires_tech_supp
     }

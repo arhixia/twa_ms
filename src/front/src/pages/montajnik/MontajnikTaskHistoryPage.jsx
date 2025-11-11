@@ -111,7 +111,11 @@ export default function MontajnikTaskHistoryPage() {
             }
 
             // --- Безопасное извлечение пользователя ---
-            const userStr = h.user_id ? `Пользователь ${h.user_id}` : "Система";
+             const userStr = h.user_name
+              ? h.user_name
+              : h.user_id
+              ? `Пользователь ${h.user_id}`
+              : "Система";
 
             // --- Безопасное извлечение типа события ---
             const eventTypeStr = h.event_type || h.action || "—";
@@ -224,7 +228,7 @@ export default function MontajnikTaskHistoryPage() {
                 ) : "—"}
               </p>
                     <div><b>Статус:</b> {h.status || "—"}</div>
-                    <div><b>Монтажник:</b> {h.assigned_user_id || "—"}</div>
+                    <div><b>Монтажник:</b> {h.assigned_user_name || "—"}</div>
                     <div><b>Комментарий:</b> {h.comment_field || "—"}</div>
                     <div><b>Цена клиента:</b> {h.client_price || "—"}</div>
                     <div><b>Награда монтажнику:</b> {h.montajnik_reward || "—"}</div>

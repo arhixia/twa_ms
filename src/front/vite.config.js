@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['acknowledged-cool-thrown-ventures.trycloudflare.com']
+    allowedHosts: ['registrar-viewed-lloyd-wal.trycloudflare.com']
   },
 })
 

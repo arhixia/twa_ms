@@ -281,6 +281,7 @@ class TaskHistory(AsyncAttrs, Base):
     
 
     # --- Отношения ---
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])
     company = relationship("ClientCompany")
     contact_person = relationship("ContactPerson")
     task = relationship("Task", back_populates="history")

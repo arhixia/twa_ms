@@ -1470,53 +1470,84 @@ async def review_report(
 
     try:
         # if both approved -> finalize task
-        if report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
+        if not requires_tech_review and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
             task.completed_at = datetime.now(timezone.utc)
 
-            # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (завершение задачи) ---
-            # Так как связи уже загружены через options в t_res, мы можем их использовать
-            equipment_snapshot_for_history = [
-                {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
-                for te in task.equipment_links
-            ]
-
-            work_types_snapshot_for_history = [
-                {"name": tw.work_type.name, "quantity": tw.quantity}
-                for tw in task.works
-            ]
-
-            # Создаём запись в истории с *всеми* полями задачи и снимками
             hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
-                action=TaskStatus.completed, # action - новый статус
-                event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
-                comment="Both approvals -> completed",
-                # --- Сохраняем все основные поля задачи ---
+                action=TaskStatus.completed,
+                event_type=TaskHistoryEventType.report_status_changed,
+                comment="Logist approved (no tech review required) -> completed",
                 company_id=task.company_id,
                 contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
-                gos_number = task.gos_number,
+                gos_number=task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
-                status=task.status.value if task.status else None, # status - новый статус
+                status=task.status.value if task.status else None,
                 assigned_user_id=task.assigned_user_id,
                 client_price=str(task.client_price) if task.client_price is not None else None,
                 montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
                 photo_required=task.photo_required,
                 assignment_type=task.assignment_type.value if task.assignment_type else None,
-                # --- Поля для структурированной истории (опционально для этого события) ---
-                field_name="status", # Поле, которое изменилось
-                old_value=task.status.value if task.status else None, # Старое значение статуса перед завершением
-                new_value=TaskStatus.completed.value, # Новое значение
+                field_name="status",
+                old_value=task.status.value if task.status else None,
+                new_value=TaskStatus.completed.value,
                 related_entity_id=report.id,
                 related_entity_type="report",
-                # --- НОВЫЕ ПОЛЯ: Снимки ---
-                equipment_snapshot=equipment_snapshot_for_history,
-                work_types_snapshot=work_types_snapshot_for_history,
+                equipment_snapshot=[
+                    {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+                    for te in task.equipment_links
+                ],
+                work_types_snapshot=[
+                    {"name": tw.work_type.name, "quantity": tw.quantity}
+                    for tw in task.works
+                ],
+            )
+            db.add(hist)
+
+# --- если техпроверка требуется, и оба одобрили ---
+        elif requires_tech_review and report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
+            task.status = TaskStatus.completed
+            task.completed_at = datetime.now(timezone.utc)
+
+            hist = TaskHistory(
+                task_id=task.id,
+                user_id=getattr(current_user, "id", None),
+                action=TaskStatus.completed,
+                event_type=TaskHistoryEventType.report_status_changed,
+                comment="Both approvals -> completed",
+                company_id=task.company_id,
+                contact_person_id=task.contact_person_id,
+                contact_person_phone=task.contact_person_phone,
+                vehicle_info=task.vehicle_info,
+                gos_number=task.gos_number,
+                scheduled_at=task.scheduled_at,
+                location=task.location,
+                comment_field=task.comment,
+                status=task.status.value if task.status else None,
+                assigned_user_id=task.assigned_user_id,
+                client_price=str(task.client_price) if task.client_price is not None else None,
+                montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+                photo_required=task.photo_required,
+                assignment_type=task.assignment_type.value if task.assignment_type else None,
+                field_name="status",
+                old_value=task.status.value if task.status else None,
+                new_value=TaskStatus.completed.value,
+                related_entity_id=report.id,
+                related_entity_type="report",
+                equipment_snapshot=[
+                    {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+                    for te in task.equipment_links
+                ],
+                work_types_snapshot=[
+                    {"name": tw.work_type.name, "quantity": tw.quantity}
+                    for tw in task.works
+                ],
             )
             db.add(hist)
         else:
@@ -1706,14 +1737,27 @@ async def get_task_full_history(
         select(TaskHistory)
         .where(TaskHistory.task_id == task_id)
         .order_by(TaskHistory.timestamp.asc()) # От самых старых к новым
-        # .options(selectinload(TaskHistory.user)) # Если нужно имя пользователя
+        .options(
+            selectinload(TaskHistory.user),
+            selectinload(TaskHistory.assigned_user)) 
     )
     history_records = res.scalars().all()
 
-    # 3. Форматируем для ответа
+    # 3. Форматируем для ответач
     out = []
     for h in history_records:
-        out.append(TaskHistoryItem.model_validate(h)) # Pydantic сам преобразует поля
+        item = TaskHistoryItem.model_validate(h)
+
+        # имя пользователя, совершившего действие
+        if h.user:
+            item.user_name = f"{h.user.name or ''} {h.user.lastname or ''}".strip()
+
+        # имя монтажника, назначенного на задачу
+        if h.assigned_user:
+            item.assigned_user_name = f"{h.assigned_user.name or ''} {h.assigned_user.lastname or ''}".strip()
+
+        out.append(item)
+
     return out
 
 
@@ -1754,6 +1798,8 @@ async def task_detail(
         {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
         for tw in (task.works or [])
     ] or None
+
+    requires_tech_supp = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
 
     # --- history ---
     history = [
@@ -1818,7 +1864,8 @@ async def task_detail(
         "equipment": equipment,
         "work_types": work_types,
         "history": history,
-        "reports": reports or None
+        "reports": reports or None,
+        "requires_tech_supp": requires_tech_supp
     }
 
 #редактирование лоигврование 
@@ -1987,6 +2034,8 @@ async def logist_completed_task_detail(
         for tw in (task.works or [])
     ] or None
 
+    requires_tech_supp = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
+
     # --- history ---
     history = [
         {
@@ -2043,7 +2092,8 @@ async def logist_completed_task_detail(
         "equipment": equipment,
         "work_types": work_types,
         "history": history,
-        "reports": reports or None
+        "reports": reports or None,
+        "requires_tech_supp":requires_tech_supp
     }
 
 
@@ -2087,10 +2137,6 @@ async def archive_task(
     task = res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
-
-    # ✅ УБРАНА проверка на статус "completed"
-    # if task.status != TaskStatus.completed:
-    #     raise HTTPException(status_code=400, detail=f"Нельзя архивировать задачу со статусом '{task.status.value}'. Архивировать можно только завершённые задачи.")
 
     old_status = task.status
     task.status = TaskStatus.archived
@@ -2264,6 +2310,8 @@ async def logist_archive_task_detail(
         for tw in (task.works or [])
     ] or None
 
+    requires_tech_supp = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
+
     # --- history ---
     history = [
         {
@@ -2320,5 +2368,6 @@ async def logist_archive_task_detail(
         "equipment": equipment,
         "work_types": work_types,
         "history": history,
-        "reports": reports or None
+        "reports": reports or None,
+        "requires_tech_supp": requires_tech_supp
     }
