@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['registrar-viewed-lloyd-wal.trycloudflare.com']
+    allowedHosts: ['excluding-component-bass-mold.trycloudflare.com']
   },
 })
 

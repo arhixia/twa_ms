@@ -98,19 +98,21 @@ function UsersPage() {
               Фамилия
               <input type="text" name="lastname" value={formData.lastname} onChange={handleChange} required />
             </label>
-            <label>
-              Роль
-              <select name="role" value={formData.role} onChange={handleChange}>
-                <option value="admin">admin</option>
-                <option value="logist">logist</option>
-                <option value="montajnik">montajnik</option>
-                <option value="tech_supp">tech_supp</option>
-              </select>
-            </label>
-            <label>
-              Telegram ID
-              <input type="number" name="telegram_id" value={formData.telegram_id} onChange={handleChange} />
-            </label>
+            <label className="dark-label">
+  Роль
+  <select
+    name="role"
+    value={formData.role}
+    onChange={handleChange}
+    className="dark-select"
+  >
+    <option value="admin">admin</option>
+    <option value="logist">logist</option>
+    <option value="montajnik">montajnik</option>
+    <option value="tech_supp">tech_supp</option>
+  </select>
+</label>
+
           </div>
           <button type="submit" className="add-btn">Создать</button>
         </form>

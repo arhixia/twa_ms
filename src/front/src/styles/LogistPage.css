@@ -153,3 +153,23 @@
   padding: 8px; 
 }
 
+
+.dark-select {
+  color: white;
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 4px;
+  appearance: none;       /* убрать нативные стрелки в некоторых браузерах */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+.dark-select option {
+  background-color: #161b22; /* фон для выпадающего списка */
+  color: white;              /* текст для опций */
+}
+.dark-label {
+  display: block;
+  color: white;
+  margin-bottom: 8px;
+}

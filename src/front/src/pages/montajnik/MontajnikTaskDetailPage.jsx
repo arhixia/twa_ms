@@ -99,7 +99,11 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   const [comment, setComment] = useState("");
   const [photos, setPhotos] = useState([]); // Массив объектов файлов/ключей
   const [submitting, setSubmitting] = useState(false);
+useEffect(() => {
+  setSelectedWorkTypes(taskWorkTypes);
+}, [taskWorkTypes]);
 
+  
   const handleWorkTypeChange = (wtId) => {
     setSelectedWorkTypes(prev =>
       prev.includes(wtId)
@@ -615,12 +619,38 @@ export default function MontajnikTaskDetailPage() {
 
       {/* Кнопки действий перемещены сюда */}
       <div className="section" style={{ marginTop: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-        {task.status !== "completed" && (
-          <button className="add-btn" onClick={() => setShowStatusModal(true)}>
-            🔄 Изменить статус
-          </button>
-        )}
-      </div>
+  {(() => {
+    const statusFlow = {
+      accepted: { next: "on_the_road", label: "🚗 Выехал" },
+      on_the_road: { next: "on_site", label: "📍 На месте" },
+      on_site: { next: "started", label: "🔧 Начал выполнение" },
+    };
+    const current = task.status;
+    const nextAction = statusFlow[current];
+
+    if (!nextAction) return null; // если нет следующего статуса — не показываем кнопку
+
+    const handleStatusChange = async () => {
+      if (!window.confirm(`Подтвердить действие: "${nextAction.label}"?`)) return;
+      try {
+        await changeTaskStatus(task.id, nextAction.next);
+        alert(`Статус изменён на ${nextAction.next}`);
+        await loadTask();
+      } catch (err) {
+        console.error(err);
+        alert(err.response?.data?.detail || "Ошибка при смене статуса");
+      }
+    };
+
+    return (
+      <button className="primary" onClick={handleStatusChange}>
+        {nextAction.label}
+      </button>
+    );
+  })()}
+</div>
+
+      
 
       {/* Модальное окно изменения статуса */}
       {showStatusModal && (
