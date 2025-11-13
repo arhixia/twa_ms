@@ -666,13 +666,12 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 window.location.href = `tel:${form.contact_person_phone}`;
               }}
             >
-              📞 Позвонить
             </a>
           )}
         </label>
 
         <label>
-          ТС (марка, гос.номер)
+          ТС
           <input
             value={form.vehicle_info}
             onChange={(e) => setField("vehicle_info", e.target.value)}

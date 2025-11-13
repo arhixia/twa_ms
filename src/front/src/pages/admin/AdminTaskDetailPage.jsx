@@ -813,13 +813,12 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
                     textDecoration: 'none',
                   }}
                 >
-                  📞 Позвонить
                 </a>
               )}
             </label>
 
             <label>
-              ТС (марка, гос.номер)
+              ТС 
               <input value={form.vehicle_info || ""} onChange={(e) => setField("vehicle_info", e.target.value)} style={{
                     width: "100%",
                     padding: "8px",

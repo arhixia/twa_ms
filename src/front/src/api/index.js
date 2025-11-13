@@ -378,6 +378,13 @@ export async function acceptTask(taskId) {
   return (await api.post(`/montajnik/tasks/${taskId}/accept`)).data;
 }
 
+export async function rejectTask(taskId, comment) {
+  const res = await api.post(`/montajnik/tasks/${taskId}/reject`, { comment });
+  return res.data;
+}
+
+
+
 // ✅ Изменить статус задачи
 export async function changeTaskStatus(taskId, statusPayload) {
   return (await api.post(`/montajnik/tasks/${taskId}/status`, { status: statusPayload })).data;

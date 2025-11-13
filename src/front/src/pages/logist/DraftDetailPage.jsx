@@ -766,7 +766,6 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
                   window.location.href = `tel:${form.contact_person_phone}`;
                 }}
               >
-                📞 Позвонить
               </a>
             )}
           </label>

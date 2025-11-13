@@ -173,3 +173,7 @@
   color: white;
   margin-bottom: 8px;
 }
+
+.reject-btn:hover {
+  background: #d73a49;
+}

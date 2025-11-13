@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['excluding-component-bass-mold.trycloudflare.com']
+    allowedHosts: ['regarding-trivia-newfoundland-chips.trycloudflare.com']
   },
 })
 

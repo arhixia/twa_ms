@@ -514,6 +514,106 @@ async def accept_task(
     return {"detail": "accepted"}
 
 
+@router.post("/tasks/{task_id}/reject", dependencies=[Depends(require_roles(Role.montajnik))])
+async def reject_task(
+    background_tasks: BackgroundTasks,
+    task_id: int,
+    payload: Dict[str, Any] = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Монтажник отклоняет задачу.
+    После отклонения:
+      - статус -> new
+      - assigned_user_id -> None
+      - запись в истории со всеми полями, как в accept_task
+    """
+    _ensure_montajnik_or_403(current_user)
+
+    res = await db.execute(
+        select(Task)
+        .where(Task.id == task_id, Task.is_draft == False)
+        .options(
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type)
+        )
+    )
+    task = res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+
+    if task.status in [TaskStatus.completed]:
+        raise HTTPException(status_code=400, detail="Нельзя отклонить завершённую задачу")
+
+    old_status = task.status
+    task.status = TaskStatus.new
+    task.assigned_user_id = None
+    task.assignment_type = AssignmentType.broadcast
+
+    # комментарий из тела запроса
+    comment_text = f"Отклонено монтажником: {payload.get('comment')}" if payload.get("comment") else "Отклонено монтажником"
+
+    # --- СНИМКИ ДЛЯ ИСТОРИИ ---
+    equipment_snapshot_for_history = [
+        {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+        for te in task.equipment_links
+    ]
+
+    work_types_snapshot_for_history = [
+        {"name": tw.work_type.name, "quantity": tw.quantity}
+        for tw in task.works
+    ]
+
+    # --- ИСТОРИЯ СО ВСЕМИ ПОЛЯМИ ---
+    hist = TaskHistory(
+        task_id=task.id,
+        user_id=current_user.id,
+        action=TaskStatus.new,
+        event_type=TaskHistoryEventType.status_changed,
+        comment=comment_text,
+        # основные поля задачи
+        company_id=task.company_id,
+        contact_person_id=task.contact_person_id,
+        contact_person_phone=task.contact_person_phone,
+        vehicle_info=task.vehicle_info,
+        gos_number=task.gos_number,
+        scheduled_at=task.scheduled_at,
+        location=task.location,
+        comment_field=task.comment,
+        status=task.status.value if task.status else None,
+        assigned_user_id=None,  # открепили монтажника
+        client_price=str(task.client_price) if task.client_price is not None else None,
+        montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+        photo_required=task.photo_required,
+        assignment_type=task.assignment_type.value if task.assignment_type else None,
+        field_name="status",
+        old_value=old_status.value if old_status else None,
+        new_value=TaskStatus.new.value,
+        equipment_snapshot=equipment_snapshot_for_history,
+        work_types_snapshot=work_types_snapshot_for_history,
+    )
+    db.add(hist)
+
+    try:
+        await db.commit()
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка при отклонении задачи: {e}")
+
+    # уведомляем логиста/создателя, если есть
+    if task.created_by:
+        background_tasks.add_task(
+            "back.utils.notify.notify_user",
+            task.created_by,
+            f"Задача #{task.id} отклонена монтажником {current_user.name} {current_user.lastname}",
+            task.id
+        )
+
+    return {"detail": "rejected"}
+
+
 
 @router.post("/tasks/{task_id}/status")
 async def change_status(
