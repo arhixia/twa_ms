@@ -142,34 +142,41 @@ export default function CompletedTaskDetailPage() {
 
             {/* === Отчёты === */}
             <div className="section">
-              <h3>Отчёты</h3>
-              {(task.reports && task.reports.length > 0) ? (
-                task.reports.map(r => (
-                  <div key={r.id} className="report">
-                    <p>#{r.id}: {r.text || "—"}</p>
-                    <p>
-                      <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
-                        {r.approval_logist || "—"}
-                      </span> |
-                      <b>Тех.спец:</b> <span style={{ color: r.approval_tech === "approved" ? "green" : r.approval_tech === "rejected" ? "red" : "orange" }}>
-                        {r.approval_tech || "—"}
-                      </span>
-                    </p>
-                    {r.photos && r.photos.length > 0 && (
-                      <div className="attached-list">
-                        {r.photos.map((photoUrl, idx) => (
-                          <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={photoUrl} alt={`Report photo ${idx}`} style={{ maxHeight: 100 }} />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="empty">Отчётов нет</div>
-              )}
-            </div>
+  <h3>Отчёты монтажника</h3>
+  {(task.reports && task.reports.length > 0) ? (
+    task.reports.map(r => (
+      <div key={r.id} className="report">
+        <p>#{r.id}: {r.text || "—"}</p>
+        <p>
+          <b>Логист:</b>{" "}
+          <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
+            {r.approval_logist || "—"}
+          </span>
+          {task.requires_tech_supp && (
+            <>
+              {" | "}
+              <b>Тех. спец:</b>{" "}
+              <span style={{ color: r.approval_tech === "approved" ? "green" : r.approval_tech === "rejected" ? "red" : "orange" }}>
+                {r.approval_tech || "—"}
+              </span>
+            </>
+          )}
+        </p>
+        {r.photos && r.photos.length > 0 && (
+          <div className="attached-list">
+            {r.photos.map((photoUrl, idx) => (
+              <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
+                <img src={photoUrl} alt={`Report photo ${idx}`} style={{ maxHeight: 100 }} />
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    ))
+  ) : (
+    <div className="empty">Отчётов нет</div>
+  )}
+</div>
           </div>
         </div>
       </div>

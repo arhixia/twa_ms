@@ -29,7 +29,9 @@ export default function MontajnikPage() {
       <nav className="logist-nav"> 
         <NavLink to="/montajnik/tasks/mine">Мои задачи</NavLink>
         <NavLink to="/montajnik/tasks/available">Доступные задачи</NavLink>
+        <NavLink to="/montajnik/tasks/assigned">Назначенные задачи</NavLink>
         <NavLink to="/montajnik/me">Личный кабинет</NavLink>
+
       </nav>
 
       <main className="logist-main"> 

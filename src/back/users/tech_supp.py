@@ -534,17 +534,13 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
 
     history = []
     for t in completed:
-        # Найдём отчёты, проверенные тех.спецом (если загружены)
-        # Для простоты возьмём любое упоминание в отчётах или просто факт участия
-        # Можно уточнить логику: например, брать только задачи, где хотя бы один отчёт был одобрен/отклонён тех.спецом
-        # Пока просто добавляем задачу, если она в списке checked_task_ids
         history.append({
             "id": t.id,
             "client": t.company.name if t.company else "—", # Имя компании
             "contact_person": t.contact_person.name if t.contact_person else "—", # Имя контактного лица
             "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
             "completed_at": t.completed_at.isoformat() if t.completed_at else None,
-            "reward": str(t.client_price) if t.client_price is not None else None, # Цена клиента как "награда"
         })
 
     return {
@@ -553,7 +549,6 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
         "lastname": current_user.lastname,
         "role": current_user.role.value if current_user.role else None,
         "completed_count": len(completed),
-        "total_earned": str(round(total, 2)),
         "history": history,
     }
 

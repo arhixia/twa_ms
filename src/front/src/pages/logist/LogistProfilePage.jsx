@@ -216,29 +216,42 @@ export default function LogistProfilePage() {
         )}
 
         {profile.history && profile.history.length > 0 ? (
-          <div className="section">
-            <h3>История выполненных задач</h3>
-            <div className="history-list">
-              {profile.history.map((task) => (
-                <div
-                  key={task.id}
-                  className="history-item clickable-history-item"
-                  onClick={() => viewCompletedTask(task.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <p><b>#{task.id}</b> — {task.contact_person} ({task.client})</p> {/* Показываем ФИО и компанию */}
-                  <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
-                  <p><b>Завершено:</b> {task.completed_at ? new Date(task.completed_at).toLocaleString() : "—"}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="section">
-            <h3>История выполненных задач</h3>
-            <div className="empty">История пока пуста</div>
-          </div>
-        )}
+  <div className="section">
+    <h3>История выполненных задач</h3>
+    <div className="history-list">
+      {profile.history.map((task) => (
+        <div
+          key={task.id}
+          className="history-item clickable-history-item"
+          onClick={() => viewCompletedTask(task.id)}
+          style={{
+            cursor: "pointer",
+            padding: "12px",
+            borderBottom: "1px solid #30363d",
+            borderRadius: "8px",
+            marginBottom: "8px",
+            backgroundColor: "#0d1117",
+          }}
+        >
+          <p style={{ margin: "4px 0" }}>
+            <b>#{task.id}</b> — {task.client || "—"}
+          </p>
+          <p style={{ margin: "4px 0" }}>
+            <b>ТС / гос.номер:</b> {task.vehicle_info || "—"} / {task.gos_number || "—"}
+          </p>
+          <p style={{ margin: "4px 0" }}>
+            <b>Дата завершения:</b> {task.completed_at ? new Date(task.completed_at).toLocaleString() : "—"}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+) : (
+  <div className="section">
+    <h3>История выполненных задач</h3>
+    <div className="empty">История пока пуста</div>
+  </div>
+)}
       </div>
     </div>
   );

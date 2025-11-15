@@ -373,6 +373,11 @@ export async function fetchAvailableTasks() {
   return (await api.get("/montajnik/tasks/available")).data;
 }
 
+export async function getAssignedTasks() {
+  const res = await api.get("/montajnik/tasks/assigned");
+  return res.data;
+}
+
 // ✅ Принять задачу
 export async function acceptTask(taskId) {
   return (await api.post(`/montajnik/tasks/${taskId}/accept`)).data;

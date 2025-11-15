@@ -83,6 +83,7 @@ def _parse_assignment_type(val):
             raise HTTPException(status_code=400, detail="Invalid assignment_type")
     raise HTTPException(status_code=400, detail="Invalid assignment_type")
 
+
 def _normalize_assigned_user_id(val):
     """
     Превращает 'false' значения и невалидные в None.
@@ -229,7 +230,7 @@ async def create_draft(
         scheduled_at=scheduled_at,
         location=data.get("location"),
         comment=data.get("comment"),
-        status=TaskStatus.new,
+        status=TaskStatus.assigned if data.get("assigned_user_id") else TaskStatus.new,
         assignment_type=assignment_type,
         assigned_user_id=data.get("assigned_user_id"),
         logist_contact_id=getattr(current_user, "telegram_id", None),
@@ -847,7 +848,7 @@ async def publish_task(
             scheduled_at=_parse_datetime(data.get("scheduled_at")),
             location=data.get("location"),
             comment=data.get("comment"),
-            status=TaskStatus.new,
+            status=TaskStatus.assigned if data.get("assigned_user_id") else TaskStatus.new,
             assignment_type=_parse_assignment_type(data.get("assignment_type")),
             assigned_user_id=_normalize_assigned_user_id(data.get("assigned_user_id")),
             logist_contact_id=getattr(current_user, "telegram_id", None),
@@ -994,6 +995,7 @@ async def edit_task(
     if "assigned_user_id" in incoming:
         incoming["assigned_user_id"] = _normalize_assigned_user_id(incoming["assigned_user_id"])
 
+    
 
     equipment_data: List[TaskEquipmentItem] = incoming.pop("equipment", None)
     # ✅ work_types_data - список ID
@@ -1007,32 +1009,43 @@ async def edit_task(
         if k not in {"equipment", "work_types"}: # Эти обрабатываем отдельно
             incoming_with_nulls[k] = v # Включаем всё, включая None
 
+
     # --- Обработка assigned_user_id (может быть null) ---
     if "assigned_user_id" in incoming_with_nulls:
         new_assigned_user_id = incoming_with_nulls["assigned_user_id"]
         old_assigned_user_id = task.assigned_user_id
         old_assignment_type = task.assignment_type
+
         if new_assigned_user_id is None:
-            # Если пришло null, сбрасываем assigned_user_id и, возможно, assignment_type
             setattr(task, "assigned_user_id", None)
-            # Если assignment_type не broadcast, меняем его на broadcast
+
             if task.assignment_type != AssignmentType.broadcast:
                 setattr(task, "assignment_type", AssignmentType.broadcast)
-                logger.info(f"Тип назначения изменён на broadcast, так как assigned_user_id сброшен")
+
+            # статус assigned → new
+            if task.status == TaskStatus.assigned:
+                task.status = TaskStatus.new
+
             changed.append(("assigned_user_id", old_assigned_user_id, None))
             changed.append(("assignment_type", old_assignment_type, task.assignment_type))
-            logger.info(f"assigned_user_id сброшен: {old_assigned_user_id} -> {None}")
-        else:
-            # Если пришло не null, просто обновляем
-            old_val = getattr(task, "assigned_user_id")
-            setattr(task, "assigned_user_id", new_assigned_user_id)
-            changed.append(("assigned_user_id", old_val, new_assigned_user_id))
-            logger.info(f"assigned_user_id изменён: {old_val} -> {new_assigned_user_id}")
+            logger.info("assigned_user_id сброшен → статус возвращен в new")
 
-    # Удаляем assigned_user_id из словаря, чтобы не обрабатывать его в основном цикле дважды
+        else:
+            old_val = task.assigned_user_id
+            setattr(task, "assigned_user_id", new_assigned_user_id)
+            setattr(task, "assignment_type", AssignmentType.individual)
+
+            # статус new → assigned
+            if task.status == TaskStatus.new:
+                task.status = TaskStatus.assigned
+
+            changed.append(("assigned_user_id", old_val, new_assigned_user_id))
+            changed.append(("assignment_type", old_assignment_type, task.assignment_type))
+            logger.info("Назначен монтажник → статус переведен в assigned")
+
+
     incoming_with_nulls.pop("assigned_user_id", None)
 
-    # --- Обновление основных полей задачи ---
     for field, value in incoming.items():
         # ✅ Пропускаем equipment и work_types, они обрабатываются отдельно
         if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
@@ -1980,8 +1993,8 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
             "client": t.company.name if t.company else "—", # Имя компании
             "contact_person": t.contact_person.name if t.contact_person else "—", # Имя контактного лица
             "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
             "completed_at": t.completed_at.isoformat() if t.completed_at else None,
-            "reward": str(t.client_price) if t.client_price is not None else None,
         })
 
     return {

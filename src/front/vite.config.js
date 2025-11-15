@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['regarding-trivia-newfoundland-chips.trycloudflare.com']
+    allowedHosts: ['neighborhood-manchester-matches-sunny.trycloudflare.com']
   },
 })
 

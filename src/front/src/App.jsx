@@ -41,7 +41,7 @@ import MontajnikTaskHistoryPage from "./pages/montajnik/MontajnikTaskHistoryPage
 import AvailableTaskDetailPage from "./pages/montajnik/AvailableTaskDetailPage";
 import ProfilePage from "./pages/montajnik/ProfilePage";
 import CompletedTaskDetailPage from "./pages/montajnik/CompletedTaskDetailPage";
-
+import AssignedTasksPage from "./pages/montajnik/AssignedTasksPage";
 
 
 export default function App() {
@@ -103,6 +103,7 @@ export default function App() {
           <Route index element={<Navigate to="tasks/available" />} />
           <Route path="tasks/available" element={<AvailableTasksPage />} />
           <Route path="tasks/mine" element={<MyTasksPage />} />
+          <Route path="tasks/assigned" element={<AssignedTasksPage />} />
           <Route path="tasks/:id" element={<MontajnikTaskDetailPage />} />
           <Route path="tasks/:id/history" element={<MontajnikTaskHistoryPage />} />
           <Route path="tasks/available/:id" element={<AvailableTaskDetailPage />} />

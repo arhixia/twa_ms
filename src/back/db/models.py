@@ -45,6 +45,7 @@ class TaskStatus(enum.Enum):
     inspection = "inspection"  # На проверке логистом/тех поддержкой
     returned = "returned"  # Возвращена на доработку
     archived = "archived"
+    assigned = "assigned"
 
 
 class ReportApproval(enum.Enum):
@@ -184,7 +185,7 @@ class ClientCompany(AsyncAttrs, Base):
     __tablename__ = "client_companies"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String, nullable=False)  # Название компании/ИП
+    name = Column(String, nullable=False) 
 
     contact_persons = relationship("ContactPerson", back_populates="company", cascade="all, delete-orphan")
 

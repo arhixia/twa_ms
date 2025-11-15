@@ -570,20 +570,20 @@ export default function MontajnikTaskDetailPage() {
                         {r.approval_logist || "—"}
                       </span> | 
                       {task.requires_tech_supp === true && (
-  <>
-    {" "} | 
-    <b>Тех.спец:</b>{" "}
-    <span style={{
-      color: r.approval_tech === "approved"
-        ? "green"
-        : r.approval_tech === "rejected"
-        ? "red"
-        : "orange"
-    }}>
-      {r.approval_tech || "waiting"}
-    </span>
-  </>
-)}
+                  <>
+                    {" "} | 
+                    <b>Тех.спец:</b>{" "}
+                    <span style={{
+                      color: r.approval_tech === "approved"
+                        ? "green"
+                        : r.approval_tech === "rejected"
+                        ? "red"
+                        : "orange"
+                    }}>
+                      {r.approval_tech || "waiting"}
+                    </span>
+                  </>
+                )}
 
                     </p>
                     {/* Отображаем комментарий отклонения, если есть */}
@@ -654,21 +654,6 @@ export default function MontajnikTaskDetailPage() {
   })()}
 </div>
 
-{["accepted", "on_the_road", "on_site"].includes(task.status) && (
-  <button
-    className="danger-btn"
-    onClick={() => setShowRejectModal(true)}
-    style={{ background: "#b60205", color: "white" }}
-  >
-    Отклонить
-  </button>
-)}
-
-
-
-      
-
-      {/* Модальное окно изменения статуса */}
       {showStatusModal && (
         <ChangeStatusModal
           taskId={parseInt(id, 10)}
@@ -676,7 +661,7 @@ export default function MontajnikTaskDetailPage() {
           onClose={() => setShowStatusModal(false)}
           onSubmitSuccess={loadTask}
           taskWorkTypeIds={taskWorkTypeIds}
-          allWorkTypes={workTypes} // Передаем все WorkTypes для фильтрации внутри модалки, если нужно
+          allWorkTypes={workTypes} 
         />
       )}
 
@@ -691,66 +676,7 @@ export default function MontajnikTaskDetailPage() {
         />
       )}
 
-      {showRejectModal && (
-  <div className="modal-backdrop">
-    <div className="modal" style={{ maxWidth: "500px" }}>
-      <div className="modal-header">
-        <h3>Отклонить задачу #{task.id}</h3>
-        <button className="close" onClick={() => setShowRejectModal(false)}>×</button>
-      </div>
-
-      <div className="modal-body">
-        <label style={{ color: "white" }}>
-          Причина отклонения (необязательно):
-          <textarea
-            value={rejectComment}
-            onChange={(e) => setRejectComment(e.target.value)}
-            placeholder="Можно оставить пустым..."
-            style={{
-              width: "100%",
-              minHeight: "80px",
-              backgroundColor: "#1a1a1a",
-              color: "white",
-              border: "1px solid #30363d",
-              borderRadius: "8px",
-              padding: "8px",
-            }}
-          />
-        </label>
-      </div>
-
-      <div className="modal-actions">
-        <button
-          className="primary"
-          onClick={async () => {
-            try {
-              await rejectTask(task.id, rejectComment || null);
-              alert("Задача отклонена. Возврат в эфир.");
-              setShowRejectModal(false);
-              setRejectComment("");
-              await loadTask();
-            } catch (err) {
-              console.error(err);
-              alert("Ошибка при отклонении задачи");
-            }
-          }}
-          style={{ background: "#b60205", color: "white" }}
-        >
-          Подтвердить
-        </button>
-
-        <button onClick={() => setShowRejectModal(false)}>Отмена</button>
-      </div>
-    </div>
-  </div>
-)}
-
-
-
-
     </div>
   );
 }
 
-
-//фронт доделать
