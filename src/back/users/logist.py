@@ -220,7 +220,8 @@ async def create_draft(
 
     # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
     final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
-    final_montajnik_reward = calculated_equipment_cost
+    final_montajnik_reward = calculated_works_cost_for_client
+
 
     task = Task(
         contact_person_id=contact_person_id,
@@ -458,7 +459,7 @@ async def patch_draft(
     changed = []
     for key, value in data.items():
         # ✅ Пропускаем equipment, work_types, contact_person_id, gos_number - они обрабатываются отдельно
-        if key in {"equipment", "work_types", "contact_person_id","assigned_user_id" "gos_number"}:
+        if key in {"equipment", "work_types", "contact_person_id","assigned_user_id", "gos_number"}:
             continue
         if value is not None:
             old = getattr(task, key)
@@ -579,7 +580,6 @@ async def patch_draft(
     for te in task_equipment_list:
         equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле unit_price
         calculated_client_price += equipment_unit_price * te.quantity # ✅ Учитываем количество
-        calculated_montajnik_reward += equipment_unit_price * te.quantity # ✅ Учитываем количество
 
     # 2. Рассчитываем стоимость работ (только для клиента)
     work_res = await db.execute(
@@ -591,6 +591,8 @@ async def patch_draft(
     for tw in task_work_list:
         work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле unit_price
         calculated_client_price += work_unit_price * tw.quantity # ✅ Учитываем количество
+        calculated_montajnik_reward += work_unit_price * tw.quantity
+
         # montajnik_reward НЕ увеличивается за работы
 
     # 3. Устанавливаем рассчитанные цены в объект задачи
@@ -611,9 +613,6 @@ async def patch_draft(
         logger.info("Обнаружены изменения (или изменились цены), продолжаем выполнение")
 
     try:
-        # --- В ЧЕРНОВИКАХ ИСТОРИЯ НЕ ЛОГИРУЕТСЯ ---
-        # Код, связанный с TaskHistory, УБИРАЕМ из этого эндпоинта.
-
         await db.commit() # теперь коммитим все изменения
         logger.info("Транзакция успешно зафиксирована")
     except Exception as e:
@@ -738,7 +737,7 @@ async def publish_task(
         # Клиент платит за работы + за оборудование
         task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
         # Монтажник получает только за оборудование
-        task.montajnik_reward = calculated_equipment_cost
+        task.montajnik_reward = calculated_works_cost_for_client
 
         task.is_draft = False # Меняем статус на опубликованную задачу
 
@@ -838,7 +837,7 @@ async def publish_task(
 
         # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
         final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
-        final_montajnik_reward = calculated_equipment_cost
+        final_montajnik_reward = calculated_works_cost_for_client
 
         task = Task(
             contact_person_id=contact_person_id,
@@ -1188,35 +1187,33 @@ async def edit_task(
          logger.info("Типы работ помечены как изменённые")
 
 
-    # --- НОВАЯ ЛОГИКА РАСЧЁТА ЦЕН ---
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
 
-    # 1. Рассчитываем стоимость оборудования (для клиента и монтажника)
+
     equipment_res = await db.execute(
         select(TaskEquipment)
-        .options(selectinload(TaskEquipment.equipment)) # Загрузим оборудование для получения цены
+        .options(selectinload(TaskEquipment.equipment)) 
         .where(TaskEquipment.task_id == task.id)
     )
     task_equipment_list = equipment_res.scalars().all()
     for te in task_equipment_list:
-        equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле unit_price
+        equipment_unit_price = te.equipment.price or Decimal('0') 
         calculated_client_price += equipment_unit_price * te.quantity
-        calculated_montajnik_reward += equipment_unit_price * te.quantity # Монтажник получает за оборудование
 
-    # 2. Рассчитываем стоимость работ (только для клиента)
     work_res = await db.execute(
         select(TaskWork)
-        .options(selectinload(TaskWork.work_type)) # Загрузим тип работы для получения цены
+        .options(selectinload(TaskWork.work_type)) 
         .where(TaskWork.task_id == task.id)
     )
+
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле unit_price
+        work_unit_price = tw.work_type.price or Decimal('0') #
         calculated_client_price += work_unit_price * tw.quantity
-        # montajnik_reward НЕ увеличивается за работы
+        calculated_montajnik_reward += work_unit_price * tw.quantity
 
-    # 3. Устанавливаем рассчитанные цены в объект задачи
+
     task.client_price = calculated_client_price
     task.montajnik_reward = calculated_montajnik_reward
     logger.info(f"Рассчитанные цены: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")

@@ -264,6 +264,20 @@ export async function adminListTasks() {
   return (await api.get("/admin/tasks")).data;
 }
 
+export async function adminFilterTasks({ status, company_id, assigned_user_id, work_type_id, task_id } = {}) {
+  const params = new URLSearchParams();
+
+  if (status) params.append("status", Array.isArray(status) ? status.join(",") : status);
+  if (company_id) params.append("company_id", company_id);
+  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
+  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (task_id) params.append("task_id", task_id);
+  
+
+  return (await api.get(`/admin/tasks/filter?${params.toString()}`)).data;
+}
+
+
 // ✅ НОВАЯ ФУНКЦИЯ: получить задачу по ID (для админа)
 export async function adminGetTaskById(taskId) {
   return (await api.get(`/admin/tasks/${taskId}`)).data;

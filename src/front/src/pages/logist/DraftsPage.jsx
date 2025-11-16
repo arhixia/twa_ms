@@ -58,7 +58,6 @@ export default function DraftsPage() {
                 <div className="task-title">
                   #{d.id} — {d.client || "Без клиента"}
                 </div>
-                <div className="task-status">Черновик</div>
               </div>
               <div className="task-meta">
                 {d.scheduled_at ? new Date(d.scheduled_at).toLocaleString() : "—"}

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['neighborhood-manchester-matches-sunny.trycloudflare.com']
+    allowedHosts: ['forever-mind-difficulties-stan.trycloudflare.com']
   },
 })
 

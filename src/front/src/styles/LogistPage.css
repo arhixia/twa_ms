@@ -119,6 +119,7 @@
   flex-wrap: wrap; /* Для адаптивности */
 }
 
+
 .profile-card {
   flex: 1;
   min-width: 200px; /* Минимальная ширина карточки */

@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from decimal import Decimal
 import enum
 import json
-from fastapi import APIRouter, Body,Depends,HTTPException,status
-from sqlalchemy import select, update, delete
+from fastapi import APIRouter, Body,Depends,HTTPException, Query,status
+from sqlalchemy import func, or_, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
@@ -383,23 +383,21 @@ async def admin_update_task(
     )
     task_equipment_list = equipment_res.scalars().all()
     for te in task_equipment_list:
-        equipment_unit_price = te.equipment.price or Decimal('0') # <--- Используем новое поле unit_price
+        equipment_unit_price = te.equipment.price or Decimal('0') # 
         calculated_client_price += equipment_unit_price * te.quantity
-        calculated_montajnik_reward += equipment_unit_price * te.quantity # Монтажник получает за оборудование
 
-    # 2. Рассчитываем стоимость работ (только для клиента)
     work_res = await db.execute(
         select(TaskWork)
-        .options(selectinload(TaskWork.work_type)) # Загрузим тип работы для получения цены
+        .options(selectinload(TaskWork.work_type)) 
         .where(TaskWork.task_id == task.id)
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
         work_unit_price = tw.work_type.price or Decimal('0') # 
         calculated_client_price += work_unit_price * tw.quantity
-        # montajnik_reward НЕ увеличивается за работы
+        calculated_montajnik_reward += work_unit_price * tw.quantity
 
-    # 3. Устанавливаем рассчитанные цены в объект задачи
+        
     task.client_price = calculated_client_price
     task.montajnik_reward = calculated_montajnik_reward
     logger.info(f"Рассчитанные цены: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
@@ -638,6 +636,93 @@ async def admin_list_tasks(
             "photo_required": t.photo_required,
         })
     return out
+
+
+
+@router.get("/tasks/filter", summary="Фильтрация задач (только админ)")
+async def admin_filter_tasks(
+    status: Optional[str] = Query(None, description="Статусы через запятую"),
+    company_id: Optional[int] = Query(None, description="ID компании"),
+    assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
+    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
+    task_id: Optional[int] = Query(None, description="ID задачи"),
+    equipment_id: Optional[int] = Query(None, description="ID оборудования"),  # новый фильтр
+    search: Optional[str] = Query(None, description="Умный поиск по задаче"),
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin)
+):
+    query = select(Task).where(Task.is_draft != True)
+
+    # --- фильтры по статусу ---
+    if status:
+        status_list = [TaskStatus(s) for s in status.split(",")]
+        query = query.where(Task.status.in_(status_list))
+    else:
+        open_statuses = [
+            TaskStatus.new, TaskStatus.accepted, TaskStatus.on_the_road,
+            TaskStatus.on_site, TaskStatus.started, TaskStatus.assigned,
+            TaskStatus.inspection, TaskStatus.returned
+        ]
+        query = query.where(Task.status.in_(open_statuses))
+
+    # --- фильтры по другим полям ---
+    if company_id:
+        query = query.where(Task.company_id == company_id)
+    if assigned_user_id:
+        query = query.where(Task.assigned_user_id == assigned_user_id)
+    if task_id:
+        query = query.where(Task.id == task_id)
+    if work_type_id:
+        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+    if equipment_id:
+        query = query.join(Task.equipments).where(TaskEquipment.equipment_id == equipment_id)  # <-- фильтр по оборудованию
+
+    # --- умный поиск ---
+    if search:
+        pattern = f"%{search.lower()}%"
+        query = query.outerjoin(Task.contact_person).outerjoin(Task.company)
+        query = query.where(
+            or_(
+                func.lower(Task.location).like(pattern),
+                func.lower(Task.comment).like(pattern),
+                func.lower(Task.vehicle_info).like(pattern),
+                func.lower(Task.gos_number).like(pattern),
+                func.lower(ContactPerson.name).like(pattern),
+                func.lower(ClientCompany.name).like(pattern)
+            )
+        )
+
+    query = query.options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company)
+    )
+
+    res = await db.execute(query)
+    tasks = res.scalars().unique().all()
+
+    out = []
+    for t in tasks:
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+
+        out.append({
+            "id": t.id,
+            "client": client_display,
+            "status": t.status.value if t.status else None,
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "location": t.location,
+            "vehicle_info": t.vehicle_info,
+            "comment": t.comment,
+            "assignment_type": t.assignment_type.value if t.assignment_type else None,
+            "assigned_user_id": t.assigned_user_id,
+            "client_price": str(t.client_price) if t.client_price else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
+            "is_draft": t.is_draft,
+            "photo_required": t.photo_required,
+        })
+
+    return out
+
 
 
 @router.get("/tasks/{task_id}", summary="Получить задачу по ID (только админ), если не черновик")

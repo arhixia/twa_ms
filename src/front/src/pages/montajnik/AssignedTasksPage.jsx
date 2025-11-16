@@ -71,62 +71,67 @@ export default function AssignedTasksPage() {
         ) : tasks.length ? (
           tasks.map((task) => (
             <div
-              key={task.id}
-              className="task-card-wrapper"
-              style={{
-                position: "relative",
-                marginBottom: "16px",
-                borderRadius: "12px",
-                overflow: "hidden",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-              }}
-            >
-              <TaskCard task={task} />
+  key={task.id}
+  className="task-card-wrapper"
+  style={{
+    position: "relative",
+    marginBottom: "16px",
+    borderRadius: "12px",
+    overflow: "hidden",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    minHeight: "150px", // фиксированная высота
+  }}
+>
+  <TaskCard task={task} />
 
-              {/* Кнопки внутри карточки */}
-              <div
-                className="task-actions"
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "8px",
-                  background: "#121212",
-                }}
-              >
-                <button
-                  disabled={actionLoading === task.id}
-                  onClick={() => openRejectModal(task.id)}
-                  style={{
-                    backgroundColor: "#dc3545",
-                    color: "white",
-                    padding: "8px 16px",
-                    borderRadius: "12px",
-                    flex: 1,
-                    marginRight: "8px",
-                    fontWeight: "bold",
-                    cursor: actionLoading === task.id ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {actionLoading === task.id ? "..." : "Отклонить"}
-                </button>
-                <button
-                  disabled={actionLoading === task.id}
-                  onClick={() => handleAccept(task.id)}
-                  style={{
-                    backgroundColor: "#28a745",
-                    color: "white",
-                    padding: "8px 16px",
-                    borderRadius: "12px",
-                    flex: 1,
-                    marginLeft: "8px",
-                    fontWeight: "bold",
-                    cursor: actionLoading === task.id ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {actionLoading === task.id ? "..." : "Принять"}
-                </button>
-              </div>
-            </div>
+  {/* Кнопки */}
+  <div
+    className="task-actions"
+    style={{
+      display: "flex",
+      justifyContent: "space-between",
+      padding: "8px",
+      background: "#121212",
+      marginTop: "auto", // обязательно, чтобы кнопки прижимались к низу
+    }}
+  >
+    <button
+      disabled={actionLoading === task.id}
+      onClick={() => openRejectModal(task.id)}
+      style={{
+        backgroundColor: "#dc3545",
+        color: "white",
+        padding: "8px 16px",
+        borderRadius: "12px",
+        flex: 1,
+        marginRight: "8px",
+        fontWeight: "bold",
+        cursor: actionLoading === task.id ? "not-allowed" : "pointer",
+      }}
+    >
+      {actionLoading === task.id ? "..." : "Отклонить"}
+    </button>
+    <button
+      disabled={actionLoading === task.id}
+      onClick={() => handleAccept(task.id)}
+      style={{
+        backgroundColor: "#28a745",
+        color: "white",
+        padding: "8px 16px",
+        borderRadius: "12px",
+        flex: 1,
+        marginLeft: "8px",
+        fontWeight: "bold",
+        cursor: actionLoading === task.id ? "not-allowed" : "pointer",
+      }}
+    >
+      {actionLoading === task.id ? "..." : "Принять"}
+    </button>
+  </div>
+</div>
           ))
         ) : (
           <div className="empty">Нет назначенных задач</div>
