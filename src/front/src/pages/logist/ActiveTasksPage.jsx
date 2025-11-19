@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { fetchActiveTasks, logistFilterTasks, getCompaniesList, getActiveMontajniks, getWorkTypes, getEquipmentList } from "../../api";
 import TaskCard from "../../components/TaskCard";
 import AddTaskModal from "./_AddTaskModal";
+import useAuthStore from "@/store/useAuthStore";
+
 
 // Вспомогательная функция для дебаунса
 function useDebounce(value, delay) {
@@ -101,7 +103,6 @@ export default function ActiveTasksPage() {
         { value: "assigned", label: "Назначена" },
         { value: "inspection", label: "На проверке" },
         { value: "returned", label: "Возвращена на доработку" },
-        { value: "archived", label: "Архив" },
     ];
 
     return (
@@ -120,7 +121,7 @@ export default function ActiveTasksPage() {
             >
                 <input
                     type="text"
-                    placeholder="Умный поиск..."
+                    placeholder="Поиск..."
                     className="dark-input"
                     value={searchInput}
                     onChange={e => handleFilterChange("search", e.target.value)}

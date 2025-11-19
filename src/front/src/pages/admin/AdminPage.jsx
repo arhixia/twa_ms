@@ -1,12 +1,32 @@
-// front/src/pages/admin/AdminPage.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/useAuthStore';
-import { logout } from '../../api';
+import { logout, adminListTasks } from '../../api';
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const { fullname, logout: clearAuth } = useAuthStore();
+  const { 
+    fullname, 
+    logout: clearAuth, 
+    adminTasksCount, 
+    updateAdminTasksCount 
+  } = useAuthStore();
+  const [loadingCounts, setLoadingCounts] = useState(true);
+
+  useEffect(() => {
+    loadTaskCounts();
+  }, []);
+
+  async function loadTaskCounts() {
+    setLoadingCounts(true);
+    try {
+      await updateAdminTasksCount();
+    } catch (e) {
+      console.error("Ошибка загрузки количества задач:", e);
+    } finally {
+      setLoadingCounts(false);
+    }
+  }
 
   async function handleLogout() {
     try {
@@ -29,7 +49,12 @@ export default function AdminPage() {
       {/* Навигация: Пользователи / Задачи */}
       <nav className="logist-nav">
         <NavLink to="/admin/users">Пользователи</NavLink>
-        <NavLink to="/admin/tasks">Задачи</NavLink>
+        <NavLink to="/admin/tasks" className="nav-item-with-badge">
+          Задачи
+          {!loadingCounts && adminTasksCount > 0 && (
+            <span className="badge">{adminTasksCount}</span>
+          )}
+        </NavLink>
          <NavLink to="/admin/me">Личный кабинет</NavLink>
       </nav>
 

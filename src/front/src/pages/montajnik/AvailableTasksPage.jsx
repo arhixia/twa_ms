@@ -1,9 +1,10 @@
-// front/src/pages/montajnik/AvailableTasksPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom"; // Убедитесь, что useNavigate импортирован
 import { fetchAvailableTasks, acceptTask } from "../../api";
 import TaskCard from "../../components/TaskCard"; // Используем общий компонент карточки задачи
 import "../../styles/LogistPage.css";
+import useAuthStore from "@/store/useAuthStore"; // Используем общий store аутентификации
+
 
 export default function AvailableTasksPage() {
   const navigate = useNavigate(); // Хук для навигации
@@ -11,32 +12,38 @@ export default function AvailableTasksPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const loadTasks = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await fetchAvailableTasks();
-        setTasks(data || []);
-      } catch (err) {
-        console.error("Ошибка загрузки доступных задач:", err);
-        setError("Не удалось загрузить доступные задачи.");
-      } finally {
-        setLoading(false);
-      }
-    };
+  const { updateAvailableTasksCount, updateMyTasksCount , updateAssignedTasksCount } = useAuthStore();
 
+  useEffect(() => {
     loadTasks();
   }, []);
 
+  async function loadTasks() {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchAvailableTasks();
+      // Теперь data - объект с полем tasks
+      setTasks(data.tasks || []);
+    } catch (err) {
+      console.error("Ошибка загрузки доступных задач:", err);
+      setError("Не удалось загрузить доступные задачи.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const handleAcceptTask = async (taskId) => {
-    // ... (ваша существующая логика принятия задачи) ...
-     try {
+    try {
       await acceptTask(taskId); // Вызываем API функцию принятия задачи
       alert("Задача успешно принята!");
-      // После успешного принятия, можно обновить список задач
-      // или удалить задачу из локального состояния
-      setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+      // После успешного принятия обновляем все счетчики и перезагружаем задачи
+      await Promise.all([
+        loadTasks(), // Перезагружаем текущие задачи
+        updateAvailableTasksCount(),
+        updateMyTasksCount(),
+        updateAssignedTasksCount()
+      ]);
     } catch (err) {
       console.error(`Ошибка при принятии задачи ${taskId}:`, err);
       // Проверяем, есть ли детализированное сообщение об ошибке в ответе
@@ -45,7 +52,7 @@ export default function AvailableTasksPage() {
     }
   };
 
-  // Функция для обработки клика по карточке - осуществляет навигацию
+  // Функция для обхода клика по карточке - осуществляет навигацию
   const handleTaskCardClick = (task) => {
     // Используем navigate для перехода на страницу предпросмотра задачи
     navigate(`/montajnik/tasks/available/${task.id}`);

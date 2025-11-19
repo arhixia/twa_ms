@@ -1,13 +1,33 @@
-// front/src/pages/tech/TechSuppPage.jsx
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import "@/styles/LogistPage.css";
-import { logout } from "@/api";
+import { logout, fetchTechActiveTasks } from "@/api";
 import useAuthStore from "@/store/useAuthStore";
 
 export default function TechSuppPage() {
   const navigate = useNavigate();
-  const { fullname, logout: clearAuth } = useAuthStore();
+  const { 
+    fullname, 
+    logout: clearAuth, 
+    techActiveTasksCount, 
+    updateTechActiveTasksCount 
+  } = useAuthStore();
+  const [loadingCounts, setLoadingCounts] = useState(true);
+
+  useEffect(() => {
+    loadTaskCounts();
+  }, []);
+
+  async function loadTaskCounts() {
+    setLoadingCounts(true);
+    try {
+      await updateTechActiveTasksCount();
+    } catch (e) {
+      console.error("Ошибка загрузки количества задач:", e);
+    } finally {
+      setLoadingCounts(false);
+    }
+  }
 
   async function handleLogout() {
     try {
@@ -27,7 +47,12 @@ export default function TechSuppPage() {
       </header>
 
       <nav className="logist-nav">
-        <NavLink to="/tech_supp/tasks/active">Активные заявки</NavLink>
+        <NavLink to="/tech_supp/tasks/active" className="nav-item-with-badge">
+          Активные заявки
+          {!loadingCounts && techActiveTasksCount > 0 && (
+            <span className="badge">{techActiveTasksCount}</span>
+          )}
+        </NavLink>
         <NavLink to="/tech_supp/me">Личный кабинет</NavLink>
         {/* Добавьте другие ссылки, если нужно */}
       </nav>

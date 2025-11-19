@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { getAssignedTasks, acceptTask, rejectTask } from "../../api";
 import TaskCard from "../../components/TaskCard";
+import useAuthStore from "@/store/useAuthStore"; // Импортируем store
 
 export default function AssignedTasksPage() {
   const [tasks, setTasks] = useState([]);
@@ -10,13 +11,16 @@ export default function AssignedTasksPage() {
   const [rejectComment, setRejectComment] = useState("");
   const [rejectTaskId, setRejectTaskId] = useState(null);
 
+  // Используем store для обновления количества задач
+  const { updateAssignedTasksCount, updateMyTasksCount , updateAvailableTasksCount } = useAuthStore();
+
   useEffect(() => { load(); }, []);
 
   async function load() {
     setLoading(true);
     try {
       const res = await getAssignedTasks();
-      setTasks(res);
+      setTasks(res.tasks || []);
     } catch (e) {
       console.error("Ошибка загрузки назначенных задач:", e);
     } finally {
@@ -28,7 +32,13 @@ export default function AssignedTasksPage() {
     setActionLoading(taskId);
     try {
       await acceptTask(taskId);
-      await load();
+      // После успешного принятия обновляем все счетчики
+      await Promise.all([
+        load(), // Перезагружаем текущие задачи
+        updateAssignedTasksCount(),
+        updateMyTasksCount(),
+        updateAvailableTasksCount()
+      ]);
     } catch (e) {
       console.error("Ошибка при принятии задачи:", e);
     } finally {
@@ -50,7 +60,13 @@ export default function AssignedTasksPage() {
       setShowRejectModal(false);
       setRejectComment("");
       setRejectTaskId(null);
-      await load();
+      // После успешного отклонения обновляем все счетчики
+      await Promise.all([
+        load(), // Перезагружаем текущие задачи
+        updateAssignedTasksCount(),
+        updateMyTasksCount(),
+        updateAvailableTasksCount()
+      ]);
     } catch (err) {
       console.error(err);
       alert("Ошибка при отклонении задачи");

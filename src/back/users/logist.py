@@ -26,7 +26,7 @@ from back.db.models import (
 from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg,require_roles
 from back.utils.notify import notify_user
 from datetime import datetime, timezone
-from sqlalchemy import and_, delete, desc, or_, select
+from sqlalchemy import and_, delete, desc, func, or_, select
 from sqlalchemy.orm import selectinload
 import json
 import logging
@@ -1652,15 +1652,24 @@ async def review_report(
 
 @router.get("/tasks/active")
 async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    # Загружаем задачи с контактным лицом и компанией
-    q = select(Task).where(
+    # Сначала получаем количество активных задач
+    count_query = select(func.count(Task.id)).where(
+        Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
+        Task.is_draft == False,
+        Task.created_by == current_user.id
+    )
+    count_res = await db.execute(count_query)
+    total_count = count_res.scalar() or 0
+
+    # Затем получаем сами задачи с загрузкой связанных объектов
+    tasks_query = select(Task).where(
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
         Task.is_draft == False,
         Task.created_by == current_user.id
     ).options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company)
     )
-    res = await db.execute(q)
+    res = await db.execute(tasks_query)
     tasks = res.scalars().all()
     
     out = []
@@ -1687,8 +1696,11 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
         })
     
-    return out
-
+    # Возвращаем список задач и общее количество
+    return {
+        "tasks": out,
+        "total_count": total_count
+    }
 
 @router.get("/drafts")
 async def get_all_dafts(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
@@ -2149,7 +2161,6 @@ async def task_detail(
         "requires_tech_supp": requires_tech_supp
     }
 
-#редактирование лоигврование 
 
 
 
@@ -2168,7 +2179,7 @@ async def get_work_types(db: AsyncSession = Depends(get_db), current_user=Depend
     
 
 
-@router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin,Role.tech_supp))])
+@router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin,Role.tech_supp,Role.montajnik))])
 async def get_companies(db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(ClientCompany))
     companies = res.scalars().all()
@@ -2237,6 +2248,7 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
     Личный кабинет логиста:
     - имя, фамилия, роль
     - история выполненных задач (где логист был создателем или участвовал в истории)
+    - статистика: задачи в черновиках, задачи в архиве
     """
     _ensure_logist_or_403(current_user)
 
@@ -2251,13 +2263,28 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
     res = await db.execute(q)
     completed = res.scalars().all()
 
+    # Подсчитываем задачи в черновиках
+    draft_query = select(func.count(Task.id)).where(
+        Task.created_by == current_user.id,
+        Task.is_draft == True
+    )
+    draft_res = await db.execute(draft_query)
+    draft_count = draft_res.scalar() or 0
+
+    # Подсчитываем задачи в архиве
+    archived_query = select(func.count(Task.id)).where(
+        Task.created_by == current_user.id,
+        Task.status == TaskStatus.archived
+    )
+    archived_res = await db.execute(archived_query)
+    archived_count = archived_res.scalar() or 0
+
     total = sum([float(t.client_price or 0) for t in completed])
 
     history = []
-    for t in completed: # Теперь обращение к t.company и t.contact_person НЕ вызывает ленивую загрузку
+    for t in completed: 
         history.append({
             "id": t.id,
-            # Теперь t.company и t.contact_person уже загружены, обращение к .name безопасно
             "client": t.company.name if t.company else "—", # Имя компании
             "contact_person": t.contact_person.name if t.contact_person else "—", # Имя контактного лица
             "vehicle_info": t.vehicle_info,
@@ -2271,9 +2298,13 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
         "lastname": current_user.lastname,
         "role": current_user.role.value if current_user.role else None,
         "completed_count": len(completed),
+        "draft_count": draft_count,
+        "archived_count": archived_count,
         "total_earned": str(round(total, 2)),
         "history": history,
     }
+
+
 
 
 @router.get("/completed-tasks/{task_id}")

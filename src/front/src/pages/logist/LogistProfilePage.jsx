@@ -220,6 +220,8 @@ export default function LogistProfilePage() {
           <div className="profile-card">
             <h2>Статистика</h2>
             <p><b>Выполнено задач:</b> {profile.completed_count || 0}</p>
+            <p><b>В черновиках:</b> {profile.draft_count || 0}</p>
+            <p><b>В архиве:</b> {profile.archived_count || 0}</p>
           </div>
         </div>
 

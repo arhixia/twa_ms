@@ -15,6 +15,8 @@ import {
   getActiveMontajniks
 } from "../../api";
 import "../../styles/LogistPage.css";
+import useAuthStore from "@/store/useAuthStore";
+
 
 export default function DraftDetailPage() {
   const { id } = useParams();
@@ -637,6 +639,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
       };
       await publishTask(publishPayload);
       alert("✅ Задача опубликована");
+      useAuthStore.getState().updateActiveTasksCount();
       navigate("/logist/tasks/active");
     } catch (e) {
       console.error(e);

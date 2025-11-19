@@ -14,6 +14,7 @@ import {
   archiveTask,
 } from "../../api";
 import "../../styles/LogistPage.css";
+import useAuthStore from "@/store/useAuthStore";
 
 function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
   const [comment, setComment] = useState("");
@@ -344,6 +345,8 @@ export default function TaskDetailPage() {
     try {
       await archiveTask(task.id); // Вызываем API функцию
       alert("✅ Задача архивирована");
+      useAuthStore.getState().updateActiveTasksCount();
+      navigate("/logist/tasks/active");
       loadTask(); // Перезагружаем данные задачи
     } catch (err) {
       console.error("Ошибка архивации задачи:", err);

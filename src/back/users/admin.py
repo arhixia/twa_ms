@@ -601,6 +601,14 @@ async def admin_list_tasks(
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin),
 ):
+    # Сначала получаем количество задач
+    count_query = select(func.count(Task.id)).where(
+        Task.is_draft != True,
+        Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
+    )
+    count_res = await db.execute(count_query)
+    total_count = count_res.scalar() or 0
+
     # Загружаем задачи с контактным лицом и компанией
     q = await db.execute(
         select(Task)
@@ -635,7 +643,10 @@ async def admin_list_tasks(
             "is_draft": t.is_draft,
             "photo_required": t.photo_required,
         })
-    return out
+    return {
+        "tasks": out,
+        "total_count": total_count
+    }
 
 
 

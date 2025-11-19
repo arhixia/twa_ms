@@ -10,8 +10,10 @@ import {
   getContactPersonsByCompany,
   getContactPersonPhone, // <--- Новый импорт
   getActiveMontajniks,
+  fetchActiveTasks,
   
 } from "../../api";
+import useAuthStore from "@/store/useAuthStore";
 
 export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraft = false }) {
   const [form, setForm] = useState({
@@ -251,13 +253,14 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       };
 
       let result;
-      if (asPublish) {
-        result = await publishTask(payload);
-        alert("✅ Опубликовано");
-      } else {
-        result = await createDraft(payload);
-        alert("💾 Сохранено черновиком");
-      }
+    if (asPublish) {
+      result = await publishTask(payload);
+      alert("✅ Опубликовано");
+      useAuthStore.getState().updateActiveTasksCount();
+    } else {
+      result = await createDraft(payload);
+      alert("💾 Сохранено черновиком");
+    }
 
       let newId = null;
       if (asPublish) {

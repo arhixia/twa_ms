@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, desc, or_, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -71,8 +71,18 @@ async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user=Dep
     """
     _ensure_tech_or_403(current_user)
 
-    # Загружаем задачи, у которых есть связь TaskWork с WorkType, где tech_supp_required = True
-    # Также фильтруем по статусу и is_draft
+    # Сначала получаем количество задач
+    count_query = select(func.count(Task.id)).where(
+        Task.is_draft == False,
+        Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
+        # Фильтр: задача должна быть связана с TaskWork, у которого work_type.tech_supp_required = True
+        Task.id.in_(
+            select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
+        )
+    )
+    count_res = await db.execute(count_query)
+    total_count = count_res.scalar() or 0
+
     q = select(Task).where(
         Task.is_draft == False,
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
@@ -102,10 +112,10 @@ async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user=Dep
         })
 
     logger.info(f"Тех.спец {current_user.id} получил {len(out)} активных задач, требующих его проверки.")
-    return out
-
-
-
+    return {
+        "tasks": out,
+        "total_count": total_count
+    }
 
 
 @router.get("/tasks/history", dependencies=[Depends(require_roles(Role.tech_supp))])

@@ -13,6 +13,7 @@ from back.db.models import (
     AssignmentType,
     ClientCompany,
     ContactPerson,
+    Equipment,
     FileType,
     Task,
     TaskHistoryEventType,
@@ -27,6 +28,7 @@ from back.db.models import (
     User,
     Role,
     ReportApproval,
+    WorkType,
 )
 from back.utils.notify import notify_user
 from back.utils.selectel import get_s3_client
@@ -67,6 +69,16 @@ async def my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depe
     Возвращает краткую информацию о задачах.
     """
     _ensure_montajnik_or_403(current_user)
+    
+    # Сначала получаем количество задач
+    count_query = select(func.count(Task.id)).where(
+        Task.assigned_user_id == current_user.id,
+        Task.is_draft == False,
+        Task.status.not_in([TaskStatus.completed, TaskStatus.archived, TaskStatus.assigned]),
+    )
+    count_res = await db.execute(count_query)
+    total_count = count_res.scalar() or 0
+
     # Загружаем задачи с контактным лицом и компанией
     q = select(Task).where(
         Task.assigned_user_id == current_user.id,
@@ -98,7 +110,11 @@ async def my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depe
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
             # is_draft не нужен, так как мы фильтруем по is_draft == False
         })
-    return out
+    
+    return {
+        "tasks": out,
+        "total_count": total_count
+    }
 
 
 @router.get("/tasks/available", dependencies=[Depends(require_roles(Role.montajnik, Role.logist, Role.tech_supp, Role.admin))])
@@ -107,6 +123,15 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
     Общие (broadcast) задачи, доступные всем активным монтажникам.
     Возвращает список рассылок (tasks with assignment_type == broadcast и is_draft == False).
     """
+
+    # Сначала получаем количество задач
+    count_query = select(func.count(Task.id)).where(
+        Task.assignment_type == AssignmentType.broadcast,
+        Task.is_draft == False,
+        Task.status == TaskStatus.new,
+    )
+    count_res = await db.execute(count_query)
+    total_count = count_res.scalar() or 0
 
     # Загружаем задачи с контактным лицом и компанией
     res = await db.execute(
@@ -142,11 +167,25 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
             "assigned_user_id": t.assigned_user_id,
         })
-    return out
+    
+    return {
+        "tasks": out,
+        "total_count": total_count
+    }
 
 
 @router.get("/tasks/assigned", dependencies=[Depends(require_roles(Role.montajnik, Role.logist, Role.tech_supp, Role.admin))])
 async def assigned_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    # Сначала получаем количество задач
+    count_query = select(func.count(Task.id)).where(
+        Task.assignment_type == AssignmentType.individual,
+        Task.is_draft == False,
+        Task.status == TaskStatus.assigned,
+        Task.assigned_user_id == current_user.id,
+    )
+    count_res = await db.execute(count_query)
+    total_count = count_res.scalar() or 0
+
     res = await db.execute(
         select(Task)
         .where(
@@ -181,7 +220,11 @@ async def assigned_tasks(db: AsyncSession = Depends(get_db), current_user: User 
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
             "assigned_user_id": t.assigned_user_id,
         })
-    return out
+    
+    return {
+        "tasks": out,
+        "total_count": total_count
+    }
 
 
 
@@ -1063,6 +1106,205 @@ async def my_profile(db: AsyncSession = Depends(get_db), current_user: User = De
         "completed_count": len(completed),
         "total_earned": str(round(total, 2)),
         "history": history,
+    }
+
+
+@router.get("/completed-tasks/filter", summary="Фильтрация завершенных задач (монтажник)")
+async def montajnik_filter_completed_tasks(
+    company_id: Optional[int] = Query(None, description="ID компании"),
+    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
+    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    query = select(Task).where(
+        Task.assigned_user_id == current_user.id,
+        Task.status == TaskStatus.completed
+    )
+
+    if company_id is not None:
+        query = query.where(Task.company_id == company_id)
+
+    if work_type_id is not None:
+        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+
+    if equipment_id is not None:
+        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+
+    if search:
+        search_term = f"%{search}%"
+        task_field_conditions = [
+            Task.location.ilike(search_term),
+            Task.comment.ilike(search_term),
+            Task.vehicle_info.ilike(search_term),
+            Task.gos_number.ilike(search_term),
+        ]
+
+        # Подзапросы с exists, как в рабочем эндпоинте
+        company_exists = select(ClientCompany).where(
+            and_(ClientCompany.id == Task.company_id, ClientCompany.name.ilike(search_term))
+        ).exists()
+
+        contact_exists = select(ContactPerson).where(
+            and_(ContactPerson.id == Task.contact_person_id, ContactPerson.name.ilike(search_term))
+        ).exists()
+
+        work_type_exists = select(TaskWork).join(TaskWork.work_type).where(
+            and_(TaskWork.task_id == Task.id, WorkType.name.ilike(search_term))
+        ).exists()
+
+        equipment_exists = select(TaskEquipment).join(TaskEquipment.equipment).where(
+            and_(TaskEquipment.task_id == Task.id, Equipment.name.ilike(search_term))
+        ).exists()
+
+        assigned_user_exists = select(User).where(
+            and_(User.id == Task.assigned_user_id, User.name.ilike(search_term))
+        ).exists()
+
+        creator_exists = select(User).where(
+            and_(User.id == Task.created_by, User.name.ilike(search_term))
+        ).exists()
+
+        combined_search_condition = or_(
+            *task_field_conditions,
+            company_exists,
+            contact_exists,
+            work_type_exists,
+            equipment_exists,
+            assigned_user_exists,
+            creator_exists
+        )
+        query = query.where(combined_search_condition)
+
+    query = query.options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.assigned_user),
+        selectinload(Task.creator),
+        selectinload(Task.works).selectinload(TaskWork.work_type),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment)
+    ).order_by(desc(Task.id))
+
+    res = await db.execute(query)
+    tasks = res.scalars().unique().all()
+
+    out = []
+    for t in tasks:
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+
+        assigned_user_full_name = None
+        if t.assigned_user:
+            assigned_user_full_name = f"{t.assigned_user.name} {t.assigned_user.lastname}"
+
+        equipment = []
+        if t.equipment_links:
+            for link in t.equipment_links:
+                equipment.append({
+                    "id": link.equipment.id,
+                    "name": link.equipment.name,
+                    "category": link.equipment.category,
+                    "price": str(link.equipment.price),
+                    "quantity": link.quantity,
+                    "serial_number": link.serial_number
+                })
+
+        work_types = []
+        if t.works:
+            for tw in t.works:
+                work_types.append({
+                    "id": tw.work_type.id,
+                    "name": tw.work_type.name,
+                    "price": str(tw.work_type.price),
+                    "quantity": tw.quantity
+                })
+
+        out.append({
+            "id": t.id,
+            "client": client_display,
+            "status": t.status.value if t.status else None,
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "location": t.location,
+            "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
+            "comment": t.comment,
+            "assignment_type": t.assignment_type.value if t.assignment_type else None,
+            "assigned_user_id": t.assigned_user_id,
+            "assigned_user_name": assigned_user_full_name,
+            "client_price": str(t.client_price) if t.client_price else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
+            "is_draft": t.is_draft,
+            "photo_required": t.photo_required,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "company_id": t.company_id,
+            "contact_person_id": t.contact_person_id,
+            "company_name": company_name,
+            "contact_person_name": contact_person_name,
+            "equipment": equipment,
+            "work_types": work_types,
+        })
+
+    return out
+
+
+@router.get("/earnings-by-period", summary="Заработок монтажника за период")
+async def montajnik_earnings_by_period(
+    start_year: Optional[int] = Query(None, description="Год начала (например, 2025)"),
+    start_month: Optional[int] = Query(None, description="Месяц начала (1-12)"),
+    end_year: Optional[int] = Query(None, description="Год окончания (например, 2025)"),
+    end_month: Optional[int] = Query(None, description="Месяц окончания (1-12)"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    from datetime import date
+    import calendar
+    
+    # Если параметры не указаны, используем текущий месяц
+    if start_year is None or start_month is None or end_year is None or end_month is None:
+        current_date = date.today()
+        start_year = current_date.year
+        start_month = current_date.month
+        end_year = current_date.year
+        end_month = current_date.month
+    
+    # Получаем первый день начального месяца и последний день конечного месяца
+    start_date = date(start_year, start_month, 1)
+    end_date = date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
+    
+    # Проверяем, что начальная дата не позже конечной
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="Начальная дата не может быть позже конечной")
+    
+    # Запрос для подсчета суммы наград за выполненные задачи в указанный период
+    query = select(func.sum(Task.montajnik_reward)).where(
+        Task.assigned_user_id == current_user.id,
+        Task.status == TaskStatus.completed,
+        Task.completed_at >= start_date,
+        Task.completed_at <= end_date
+    )
+    
+    result = await db.execute(query)
+    total_earned = result.scalar() or 0
+    
+    # Также можем вернуть количество задач за период
+    count_query = select(func.count(Task.id)).where(
+        Task.assigned_user_id == current_user.id,
+        Task.status == TaskStatus.completed,
+        Task.completed_at >= start_date,
+        Task.completed_at <= end_date
+    )
+    
+    count_result = await db.execute(count_query)
+    task_count = count_result.scalar() or 0
+    
+    return {
+        "period": f"{start_year}-{start_month:02d} - {end_year}-{end_month:02d}",
+        "total_earned": str(total_earned),
+        "task_count": task_count,
+        "period_display": f"{start_year} г., {calendar.month_name[start_month]} - {end_year} г., {calendar.month_name[end_month]}",
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat()
     }
 
 

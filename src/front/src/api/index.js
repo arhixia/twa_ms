@@ -456,6 +456,16 @@ export async function rejectTask(taskId, comment) {
   return res.data;
 }
 
+export async function montajnikFilterCompletedTasks({ company_id, work_type_id, equipment_id, search } = {}) {
+  const params = new URLSearchParams();
+
+  if (company_id) params.append("company_id", company_id);
+  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (search) params.append("search", search);
+
+  return (await api.get(`/montajnik/completed-tasks/filter?${params.toString()}`)).data;
+}
 
 
 // ✅ Изменить статус задачи
@@ -467,6 +477,18 @@ export async function changeTaskStatus(taskId, statusPayload) {
 export async function createReport(taskId, text, photos = []) {
   // photos: ["storage_key1", ...]
   return (await api.post(`/montajnik/tasks/${taskId}/report`, { text, photos })).data;
+}
+
+export async function getMontajnikEarningsByPeriod(startYear, startMonth, endYear, endMonth) {
+  const params = new URLSearchParams();
+  if (startYear && startMonth && endYear && endMonth) {
+    params.append("start_year", startYear);
+    params.append("start_month", startMonth);
+    params.append("end_year", endYear);
+    params.append("end_month", endMonth);
+  }
+  
+  return (await api.get(`/montajnik/earnings-by-period?${params.toString()}`)).data;
 }
 
 // ✅ Отправить отчёт на проверку
