@@ -52,27 +52,36 @@ export default function DraftsPage() {
         <div className="empty">Черновиков пока нет — создайте новый.</div>
       ) : (
         <div className="cards">
-          {drafts.map((d) => (
-            <div key={d.id} className="task-card" onClick={() => navigate(`/logist/drafts/${d.id}`)}>
-              <div className="task-row">
-                <div className="task-title">
-                  #{d.id} — {d.client || "Без клиента"}
+          {drafts.map((d) => {
+            const vehicleDisplay = d.vehicle_info && d.gos_number 
+              ? `${d.vehicle_info} / ${d.gos_number}`
+              : d.vehicle_info || d.gos_number || "—";
+              
+            return (
+              <div key={d.id} className="task-card" onClick={() => navigate(`/logist/drafts/${d.id}`)}>
+                <div className="task-row">
+                  <div className="task-title">
+                    #{d.id} — {d.client || "Без клиента"}
+                  </div>
                 </div>
+                <div className="task-meta-bold">
+                  {vehicleDisplay}
+                </div>
+                <div className="task-meta">
+                  {d.scheduled_at ? new Date(d.scheduled_at).toLocaleString() : "—"}
+                </div>
+                <button
+                  className="delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(d.id);
+                  }}
+                >
+                  🗑
+                </button>
               </div>
-              <div className="task-meta">
-                {d.scheduled_at ? new Date(d.scheduled_at).toLocaleString() : "—"}
-              </div>
-              <button
-                className="delete-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(d.id);
-                }}
-              >
-                🗑
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

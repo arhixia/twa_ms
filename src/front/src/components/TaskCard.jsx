@@ -26,17 +26,12 @@ export default function TaskCard({ task, onClick }) {
     }
   }
 
-  // Определяем отображаемый статус и цвет
-  // const displayStatus = task.status !== 'new' ? 'в работе' : task.status;
-  // Цвет оставляем от первоначального статуса задачи или задаём общий для 'в работе'
-  // const statusColor = task.status !== 'new' ? 'orange' : getStatusColor(task.status); // Пример с цветом
-  // const statusColor = getStatusColor(task.status); // Или всегда использовать цвет оригинального статуса
-
-  // Если нужно, чтобы цвет был фиксированным для "в работе", раскомментируйте следующую строку:
-  // const statusColor = task.status !== 'new' ? '#FFA500' : getStatusColor(task.status); // Оранжевый для "в работе"
-
   const statusColor = getStatusColor(task.status);
-  // const statusColor = task.status !== 'new' ? '#FFA500' : getStatusColor(task.status); // Пример: оранжевый для "в работе"
+  const statusDisplay = getStatusLabel(task.status);
+
+  const vehicleDisplay = task.vehicle_info && task.gos_number 
+    ? `${task.vehicle_info} / ${task.gos_number}`
+    : task.vehicle_info || task.gos_number || "—";
 
   return (
     <div className="task-card" onClick={handleClick}>
@@ -48,15 +43,17 @@ export default function TaskCard({ task, onClick }) {
           className="task-status"
           style={{
             backgroundColor: statusColor,
-            padding: '2px 6px', // Если у вас нет padding в CSS для .task-status
-            borderRadius: '4px', // Если у вас нет borderRadius в CSS для .task-status
-            color: 'white', // Если у вас нет color в CSS для .task-status
-            fontSize: '0.8em', // Если у вас нет fontSize в CSS для .task-status
+            padding: '2px 6px',
+            borderRadius: '4px',
+            color: 'white',
+            fontSize: '0.8em',
           }}
         >
-          {/* {displayStatus} */}
-          {task.status}
+          {statusDisplay}
         </div>
+      </div>
+      <div className="task-meta-bold">
+        {vehicleDisplay}
       </div>
       <div className="task-meta">
         {task.scheduled_at
@@ -67,6 +64,22 @@ export default function TaskCard({ task, onClick }) {
   );
 }
 
+function getStatusLabel(status) {
+  const labelMap = {
+    new: 'Создана',
+    accepted: 'Принята',
+    on_the_road: 'Выехал',
+    started: 'Выполняется',
+    on_site: 'Прибыл',
+    completed: 'Завершена',
+    inspection: 'На проверке',
+    returned: 'Возвращена',
+    archived: 'Архив',
+    assigned: 'Назначена'
+  };
+
+  return labelMap[status] || status;
+}
 
 function getStatusColor(status) {
   if (!status) return '#6c757d'; // серый для undefined/null
@@ -74,13 +87,14 @@ function getStatusColor(status) {
   const colorMap = {
     new: '#28a745', // зелёный
     accepted: '#ffc107', // жёлтый
+    on_the_road: '#17a2b8', // синий
     started: '#17a2b8', // синий
+    on_site: '#17a2b8', // синий
     completed: '#20c997', // бирюзовый
     inspection: '#6f42c1', // фиолетовый
     returned: '#fd7e14', // оранжевый
+    assigned: '#6f42c1', // фиолетовый
   };
 
   return colorMap[status] || '#6c757d'; // серый по умолчанию
 }
-
-// личный кабинет

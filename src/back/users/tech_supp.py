@@ -1,7 +1,7 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -12,6 +12,7 @@ from back.auth.auth import get_current_user
 from back.db.models import (
     ClientCompany,
     ContactPerson,
+    Equipment,
     FileType,
     Task,
     TaskAttachment,
@@ -520,10 +521,11 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
                 selectinload(Task.company),
                 selectinload(Task.contact_person),
                 selectinload(Task.reports.and_(TaskReport.approval_tech != ReportApproval.waiting)) # Опционально: только отчёты, проверенные техспецом
-            ).where(
+            ).where
+            (
                 Task.id.in_(checked_task_ids),
                 Task.status == TaskStatus.completed # Только завершённые
-            )
+            ).order_by(desc(Task.id)) 
         )
         completed = task_res.scalars().all()
     else:
@@ -551,6 +553,279 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
         "completed_count": len(completed),
         "history": history,
     }
+
+
+@router.get("/tasks_tech_supp/filter", summary="Фильтрация задач (только тех.специалист)")
+async def tech_supp_filter_tasks(
+    status: Optional[str] = Query(None, description="Статусы через запятую"),
+    company_id: Optional[int] = Query(None, description="ID компании"),
+    assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
+    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
+    task_id: Optional[int] = Query(None, description="ID задачи"),
+    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Task).where(
+        Task.is_draft != True,
+        # Добавляем условие: задача должна содержать виды работ, требующие проверки тех.специалистом
+        Task.id.in_(
+            select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
+        )
+    )
+
+    if status:
+        status_list = [TaskStatus(s) for s in status.split(",") if s]
+        if status_list:
+            query = query.where(Task.status.in_(status_list))
+    else:
+        # Для тех.специалистов показываем только активные задачи (не completed или archived)
+        open_statuses = [
+            TaskStatus.new, TaskStatus.accepted, TaskStatus.on_the_road,
+            TaskStatus.on_site, TaskStatus.started, TaskStatus.assigned,
+            TaskStatus.inspection, TaskStatus.returned
+        ]
+        query = query.where(Task.status.in_(open_statuses))
+
+    if company_id is not None:
+        query = query.where(Task.company_id == company_id)
+
+    if assigned_user_id is not None:
+        query = query.where(Task.assigned_user_id == assigned_user_id)
+
+    if task_id is not None:
+        query = query.where(Task.id == task_id)
+
+    if work_type_id is not None:
+        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+
+    if equipment_id is not None:
+        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+
+    if search:
+        search_lower = search.lower()
+        search_term = f"%{search}%"
+        task_field_conditions = [
+            Task.location.ilike(search_term),
+            Task.comment.ilike(search_term),
+            Task.vehicle_info.ilike(search_term),
+            Task.gos_number.ilike(search_term),
+        ]
+
+        company_exists = select(ClientCompany).where(
+            and_(ClientCompany.id == Task.company_id, ClientCompany.name.ilike(search_term))
+        ).exists()
+
+        contact_exists = select(ContactPerson).where(
+            and_(ContactPerson.id == Task.contact_person_id, ContactPerson.name.ilike(search_term))
+        ).exists()
+
+        work_type_exists = select(TaskWork).join(TaskWork.work_type).where(
+            and_(TaskWork.task_id == Task.id, WorkType.name.ilike(search_term))
+        ).exists()
+
+        equipment_exists = select(TaskEquipment).join(TaskEquipment.equipment).where(
+            and_(TaskEquipment.task_id == Task.id, Equipment.name.ilike(search_term))
+        ).exists()
+
+        assigned_user_exists = select(User).where(
+            and_(User.id == Task.assigned_user_id, User.name.ilike(search_term))
+        ).exists()
+
+        creator_exists = select(User).where(
+            and_(User.id == Task.created_by, User.name.ilike(search_term))
+        ).exists()
+
+        combined_search_condition = or_(
+            *task_field_conditions,
+            company_exists,
+            contact_exists,
+            work_type_exists,
+            equipment_exists,
+            assigned_user_exists,
+            creator_exists
+        )
+        query = query.where(combined_search_condition)
+
+    query = query.options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
+
+    res = await db.execute(query)
+    tasks = res.scalars().unique().all()
+
+    out = []
+    for t in tasks:
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+
+        out.append({
+            "id": t.id,
+            "client": client_display,
+            "status": t.status.value if t.status else None,
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "location": t.location,
+            "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
+            "comment": t.comment,
+            "assignment_type": t.assignment_type.value if t.assignment_type else None,
+            "assigned_user_id": t.assigned_user_id,
+            "client_price": str(t.client_price) if t.client_price else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
+            "is_draft": t.is_draft,
+            "photo_required": t.photo_required,
+        })
+
+    return out
+
+
+@router.get("/tech_supp_completed-tasks/filter", summary="Фильтрация завершенных задач (тех.специалист)")
+async def tech_supp_filter_completed_tasks(
+    company_id: Optional[int] = Query(None, description="ID компании"),
+    assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
+    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
+    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    # Сначала находим ID задач, где тех.спец проверял отчёты
+    report_res = await db.execute(
+        select(TaskReport.task_id).where(TaskReport.approval_tech != ReportApproval.waiting)
+    )
+    checked_task_ids = [row[0] for row in report_res.fetchall() if row[0] is not None]
+
+    query = select(Task).where(
+        Task.is_draft != True,
+        Task.status == TaskStatus.completed,
+        # Только задачи, которые проверял текущий тех.спец
+        Task.id.in_(checked_task_ids)
+    )
+
+    if company_id is not None:
+        query = query.where(Task.company_id == company_id)
+
+    if assigned_user_id is not None:
+        query = query.where(Task.assigned_user_id == assigned_user_id)
+
+    if work_type_id is not None:
+        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+
+    if equipment_id is not None:
+        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+
+    if search:
+        search_term = f"%{search}%"
+        task_field_conditions = [
+            Task.location.ilike(search_term),
+            Task.comment.ilike(search_term),
+            Task.vehicle_info.ilike(search_term),
+            Task.gos_number.ilike(search_term),
+        ]
+
+        company_exists = select(ClientCompany).where(
+            and_(ClientCompany.id == Task.company_id, ClientCompany.name.ilike(search_term))
+        ).exists()
+
+        contact_exists = select(ContactPerson).where(
+            and_(ContactPerson.id == Task.contact_person_id, ContactPerson.name.ilike(search_term))
+        ).exists()
+
+        work_type_exists = select(TaskWork).join(TaskWork.work_type).where(
+            and_(TaskWork.task_id == Task.id, WorkType.name.ilike(search_term))
+        ).exists()
+
+        equipment_exists = select(TaskEquipment).join(TaskEquipment.equipment).where(
+            and_(TaskEquipment.task_id == Task.id, Equipment.name.ilike(search_term))
+        ).exists()
+
+        assigned_user_exists = select(User).where(
+            and_(User.id == Task.assigned_user_id, User.name.ilike(search_term))
+        ).exists()
+
+        creator_exists = select(User).where(
+            and_(User.id == Task.created_by, User.name.ilike(search_term))
+        ).exists()
+
+        combined_search_condition = or_(
+            *task_field_conditions,
+            company_exists,
+            contact_exists,
+            work_type_exists,
+            equipment_exists,
+            assigned_user_exists,
+            creator_exists
+        )
+        query = query.where(combined_search_condition)
+
+    query = query.options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.assigned_user),
+        selectinload(Task.creator),
+        selectinload(Task.works).selectinload(TaskWork.work_type),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment)
+    ).order_by(desc(Task.id))
+
+    res = await db.execute(query)
+    tasks = res.scalars().unique().all()
+
+    out = []
+    for t in tasks:
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+
+        assigned_user_full_name = None
+        if t.assigned_user:
+            assigned_user_full_name = f"{t.assigned_user.name} {t.assigned_user.lastname}"
+
+        equipment = []
+        if t.equipment_links:
+            for link in t.equipment_links:
+                equipment.append({
+                    "id": link.equipment.id,
+                    "name": link.equipment.name,
+                    "category": link.equipment.category,
+                    "price": str(link.equipment.price),
+                    "quantity": link.quantity,
+                    "serial_number": link.serial_number
+                })
+
+        work_types = []
+        if t.works:
+            for tw in t.works:
+                work_types.append({
+                    "id": tw.work_type.id,
+                    "name": tw.work_type.name,
+                    "price": str(tw.work_type.price),
+                    "quantity": tw.quantity
+                })
+
+        out.append({
+            "id": t.id,
+            "client": client_display,
+            "status": t.status.value if t.status else None,
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "location": t.location,
+            "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
+            "comment": t.comment,
+            "assignment_type": t.assignment_type.value if t.assignment_type else None,
+            "assigned_user_id": t.assigned_user_id,
+            "assigned_user_name": assigned_user_full_name,
+            "client_price": str(t.client_price) if t.client_price else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
+            "is_draft": t.is_draft,
+            "photo_required": t.photo_required,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "company_id": t.company_id,
+            "contact_person_id": t.contact_person_id,
+            "company_name": company_name,
+            "contact_person_name": contact_person_name,
+            "equipment": equipment,
+            "work_types": work_types,
+        })
+
+    return out
 
 
 # --- НОВЫЙ ЭНДПОИНТ: Детали завершённой задачи для тех.спеца ---

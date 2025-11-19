@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import desc, select, and_, or_, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
@@ -90,6 +90,7 @@ async def my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depe
             "id": t.id,
             "client": client_display,  # ✅ Используем составное имя
             "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
             "location": t.location,
             "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
             "status": t.status.value if t.status else None,
@@ -133,6 +134,7 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
             "id": t.id,
             "client": client_display,  
             "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
             "location": t.location,
             "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
             "status": t.status.value if t.status else None,
@@ -171,6 +173,7 @@ async def assigned_tasks(db: AsyncSession = Depends(get_db), current_user: User 
             "id": t.id,
             "client": client_display,  
             "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
             "location": t.location,
             "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
             "status": t.status.value if t.status else None,
@@ -1035,7 +1038,7 @@ async def my_profile(db: AsyncSession = Depends(get_db), current_user: User = De
     ).where(
         Task.assigned_user_id == current_user.id, 
         Task.status == TaskStatus.completed
-    )
+    ).order_by(desc(Task.id)) 
     res = await db.execute(q)
     completed = res.scalars().all()
 

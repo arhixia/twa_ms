@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['forever-mind-difficulties-stan.trycloudflare.com']
+    allowedHosts: ['scuba-perfect-declare-acquisition.trycloudflare.com']
   },
 })
 

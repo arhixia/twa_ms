@@ -3,7 +3,7 @@ from decimal import Decimal
 import enum
 import json
 from fastapi import APIRouter, Body,Depends,HTTPException, Query,status
-from sqlalchemy import func, or_, select, update, delete
+from sqlalchemy import and_, func, or_, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
@@ -646,17 +646,17 @@ async def admin_filter_tasks(
     assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
     work_type_id: Optional[int] = Query(None, description="ID типа работы"),
     task_id: Optional[int] = Query(None, description="ID задачи"),
-    equipment_id: Optional[int] = Query(None, description="ID оборудования"),  # новый фильтр
-    search: Optional[str] = Query(None, description="Умный поиск по задаче"),
+    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin)
 ):
     query = select(Task).where(Task.is_draft != True)
 
-    # --- фильтры по статусу ---
     if status:
-        status_list = [TaskStatus(s) for s in status.split(",")]
-        query = query.where(Task.status.in_(status_list))
+        status_list = [TaskStatus(s) for s in status.split(",") if s]
+        if status_list:
+            query = query.where(Task.status.in_(status_list))
     else:
         open_statuses = [
             TaskStatus.new, TaskStatus.accepted, TaskStatus.on_the_road,
@@ -665,36 +665,67 @@ async def admin_filter_tasks(
         ]
         query = query.where(Task.status.in_(open_statuses))
 
-    # --- фильтры по другим полям ---
-    if company_id:
+    if company_id is not None:
         query = query.where(Task.company_id == company_id)
-    if assigned_user_id:
+
+    if assigned_user_id is not None:
         query = query.where(Task.assigned_user_id == assigned_user_id)
-    if task_id:
+
+    if task_id is not None:
         query = query.where(Task.id == task_id)
-    if work_type_id:
+
+    if work_type_id is not None:
         query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
-    if equipment_id:
-        query = query.join(Task.equipments).where(TaskEquipment.equipment_id == equipment_id)  # <-- фильтр по оборудованию
 
-    # --- умный поиск ---
+    if equipment_id is not None:
+        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+
     if search:
-        pattern = f"%{search.lower()}%"
-        query = query.outerjoin(Task.contact_person).outerjoin(Task.company)
-        query = query.where(
-            or_(
-                func.lower(Task.location).like(pattern),
-                func.lower(Task.comment).like(pattern),
-                func.lower(Task.vehicle_info).like(pattern),
-                func.lower(Task.gos_number).like(pattern),
-                func.lower(ContactPerson.name).like(pattern),
-                func.lower(ClientCompany.name).like(pattern)
-            )
-        )
+        search_lower = search.lower()
+        search_term = f"%{search}%"
+        task_field_conditions = [
+            Task.location.ilike(search_term),
+            Task.comment.ilike(search_term),
+            Task.vehicle_info.ilike(search_term),
+            Task.gos_number.ilike(search_term),
+        ]
 
-    query = query.options(
-        selectinload(Task.contact_person).selectinload(ContactPerson.company)
-    )
+        company_exists = select(ClientCompany).where(
+            and_(ClientCompany.id == Task.company_id, ClientCompany.name.ilike(search_term))
+        ).exists()
+
+        contact_exists = select(ContactPerson).where(
+            and_(ContactPerson.id == Task.contact_person_id, ContactPerson.name.ilike(search_term))
+        ).exists()
+
+        work_type_exists = select(TaskWork).join(TaskWork.work_type).where(
+            and_(TaskWork.task_id == Task.id, WorkType.name.ilike(search_term))
+        ).exists()
+
+        equipment_exists = select(TaskEquipment).join(TaskEquipment.equipment).where(
+            and_(TaskEquipment.task_id == Task.id, Equipment.name.ilike(search_term))
+        ).exists()
+
+        assigned_user_exists = select(User).where(
+            and_(User.id == Task.assigned_user_id, User.name.ilike(search_term))
+        ).exists()
+
+        creator_exists = select(User).where(
+            and_(User.id == Task.created_by, User.name.ilike(search_term))
+        ).exists()
+
+        combined_search_condition = or_(
+            *task_field_conditions,
+            company_exists,
+            contact_exists,
+            work_type_exists,
+            equipment_exists,
+            assigned_user_exists,
+            creator_exists
+        )
+        query = query.where(combined_search_condition)
+
+    query = query.options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
 
     res = await db.execute(query)
     tasks = res.scalars().unique().all()
@@ -712,6 +743,7 @@ async def admin_filter_tasks(
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
             "location": t.location,
             "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
             "comment": t.comment,
             "assignment_type": t.assignment_type.value if t.assignment_type else None,
             "assigned_user_id": t.assigned_user_id,

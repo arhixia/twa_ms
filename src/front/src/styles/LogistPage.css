@@ -178,3 +178,10 @@
 .reject-btn:hover {
   background: #d73a49;
 }
+
+.task-meta-bold {
+  font-weight: bold;
+  color: #e0e0e0; /* Яркий цвет текста */
+  font-size: 0.9em;
+  margin-top: 4px;
+}
