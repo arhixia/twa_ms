@@ -3,7 +3,7 @@ from decimal import Decimal
 import enum
 import json
 from fastapi import APIRouter, Body,Depends,HTTPException, Query,status
-from sqlalchemy import and_, func, or_, select, update, delete
+from sqlalchemy import and_, desc, func, or_, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
@@ -725,7 +725,7 @@ async def admin_filter_tasks(
             and_(User.id == Task.created_by, User.name.ilike(search_term))
         ).exists()
 
-        combined_search_condition = or_(
+        conditions = [
             *task_field_conditions,
             company_exists,
             contact_exists,
@@ -733,7 +733,12 @@ async def admin_filter_tasks(
             equipment_exists,
             assigned_user_exists,
             creator_exists
-        )
+        ]
+        
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        
+        combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
     query = query.options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
@@ -1067,3 +1072,298 @@ async def admin_add_equipment_no_schema(
 
     return {"id": equipment.id, "name": equipment.name, "category": equipment.category, "price": str(equipment.price)}
 
+
+
+@router.get("/tasks/completed_admin", summary="Получить все завершенные задачи (только админ)")
+async def admin_list_completed_tasks(
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    # Сначала получаем количество задач
+    count_query = select(func.count(Task.id)).where(
+        Task.status == TaskStatus.completed,
+    )
+    count_res = await db.execute(count_query)
+    total_count = count_res.scalar() or 0
+
+    # Загружаем задачи с контактным лицом и компанией
+    q = await db.execute(
+        select(Task)
+        .where(Task.status == TaskStatus.completed)
+        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем контактное лицо и компанию
+    )
+    tasks = q.scalars().all()
+    
+    out = []
+    for t in tasks:
+        # Получаем имя контактного лица и компании
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
+        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        
+        out.append({
+            "id": t.id,
+            "client": client_display,  
+            "status": t.status.value if t.status else None,
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "location": t.location,
+            "vehicle_info": t.vehicle_info,
+            "comment": t.comment,
+            "assignment_type": t.assignment_type.value if t.assignment_type else None,
+            "assigned_user_id": t.assigned_user_id,
+            "client_price": str(t.client_price) if t.client_price else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
+            "is_draft": t.is_draft,
+            "photo_required": t.photo_required,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+        })
+    return {
+        "tasks": out,
+        "total_count": total_count
+    }
+
+
+@router.get("/tasks/completed_admin/filter", summary="Фильтрация завершенных задач (только админ)")
+async def admin_filter_completed_tasks(
+    company_id: Optional[int] = Query(None, description="ID компании"),
+    assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
+    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
+    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin)
+):
+    query = select(Task).where(Task.status == TaskStatus.completed)
+
+    if company_id is not None:
+        query = query.where(Task.company_id == company_id)
+
+    if assigned_user_id is not None:
+        query = query.where(Task.assigned_user_id == assigned_user_id)
+
+    if work_type_id is not None:
+        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+
+    if equipment_id is not None:
+        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+
+    if search:
+        search_term = f"%{search}%"
+        task_field_conditions = [
+            Task.location.ilike(search_term),
+            Task.comment.ilike(search_term),
+            Task.vehicle_info.ilike(search_term),
+            Task.gos_number.ilike(search_term),
+        ]
+
+        # Подзапросы с exists, как в рабочем эндпоинте
+        company_exists = select(ClientCompany).where(
+            and_(ClientCompany.id == Task.company_id, ClientCompany.name.ilike(search_term))
+        ).exists()
+
+        contact_exists = select(ContactPerson).where(
+            and_(ContactPerson.id == Task.contact_person_id, ContactPerson.name.ilike(search_term))
+        ).exists()
+
+        work_type_exists = select(TaskWork).join(TaskWork.work_type).where(
+            and_(TaskWork.task_id == Task.id, WorkType.name.ilike(search_term))
+        ).exists()
+
+        equipment_exists = select(TaskEquipment).join(TaskEquipment.equipment).where(
+            and_(TaskEquipment.task_id == Task.id, Equipment.name.ilike(search_term))
+        ).exists()
+
+        assigned_user_exists = select(User).where(
+            and_(User.id == Task.assigned_user_id, User.name.ilike(search_term))
+        ).exists()
+
+        creator_exists = select(User).where(
+            and_(User.id == Task.created_by, User.name.ilike(search_term))
+        ).exists()
+
+        conditions = [
+            *task_field_conditions,
+            company_exists,
+            contact_exists,
+            work_type_exists,
+            equipment_exists,
+            assigned_user_exists,
+            creator_exists
+        ]
+        
+        # Добавляем условие поиска по ID, если search - число
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        
+        combined_search_condition = or_(*conditions)
+        query = query.where(combined_search_condition)
+
+    query = query.options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.assigned_user),
+        selectinload(Task.creator),
+        selectinload(Task.works).selectinload(TaskWork.work_type),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment)
+    ).order_by(desc(Task.id))
+
+    res = await db.execute(query)
+    tasks = res.scalars().unique().all()
+
+    out = []
+    for t in tasks:
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+
+        assigned_user_full_name = None
+        if t.assigned_user:
+            assigned_user_full_name = f"{t.assigned_user.name} {t.assigned_user.lastname}"
+
+        equipment = []
+        if t.equipment_links:
+            for link in t.equipment_links:
+                equipment.append({
+                    "id": link.equipment.id,
+                    "name": link.equipment.name,
+                    "category": link.equipment.category,
+                    "price": str(link.equipment.price),
+                    "quantity": link.quantity,
+                    "serial_number": link.serial_number
+                })
+
+        work_types = []
+        if t.works:
+            for tw in t.works:
+                work_types.append({
+                    "id": tw.work_type.id,
+                    "name": tw.work_type.name,
+                    "price": str(tw.work_type.price),
+                    "quantity": tw.quantity
+                })
+
+        out.append({
+            "id": t.id,
+            "client": client_display,
+            "status": t.status.value if t.status else None,
+            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "location": t.location,
+            "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
+            "comment": t.comment,
+            "assignment_type": t.assignment_type.value if t.assignment_type else None,
+            "assigned_user_id": t.assigned_user_id,
+            "assigned_user_name": assigned_user_full_name,
+            "client_price": str(t.client_price) if t.client_price else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
+            "is_draft": t.is_draft,
+            "photo_required": t.photo_required,
+            "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            "company_id": t.company_id,
+            "contact_person_id": t.contact_person_id,
+            "company_name": company_name,
+            "contact_person_name": contact_person_name,
+            "equipment": equipment,
+            "work_types": work_types,
+        })
+
+    return out
+
+@router.get("/admin_completed-tasks/{task_id}")
+async def admin_completed_task_detail(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+   
+    res = await db.execute(
+        select(Task)
+        .options(
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type),
+            selectinload(Task.history),
+            selectinload(Task.reports),
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.assigned_user)
+        )
+        .where(
+            Task.id == task_id,
+            Task.status == TaskStatus.completed      # ✅ И что она завершена
+        )
+    )
+    task = res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена или недоступна")
+
+    # --- equipment и work_types ---
+    equipment = [
+        {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number}
+        for te in (task.equipment_links or [])
+    ] or None
+
+    work_types = [
+        {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
+        for tw in (task.works or [])
+    ] or None
+
+    requires_tech_supp = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
+
+    # --- history ---
+    history = [
+        {
+            "action": h.action.value if h.action else None,
+            "user_id": h.user_id,
+            "comment": h.comment,
+            "ts": str(h.timestamp)
+        }
+        for h in (task.history or [])
+    ] or None
+
+    # --- reports с фото ---
+    reports = []
+    for r in (task.reports or []):
+        photos = []
+        if r.photos_json:
+            try:
+                keys = json.loads(r.photos_json)
+                photos = keys # Возвращаем список storage_key
+            except Exception:
+                photos = []
+        reports.append({
+            "id": r.id,
+            "text": r.text,
+            "approval_logist": r.approval_logist.value if r.approval_logist else None,
+            "approval_tech": r.approval_tech.value if r.approval_tech else None,
+            "photos": photos or None
+        })
+
+    company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+    contact_person_name = task.contact_person.name if task.contact_person else None
+
+    assigned_user_name = task.assigned_user.name if task.assigned_user else None
+    assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
+    assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
+
+
+    return {
+        "id": task.id,
+        "company_name": company_name,
+        "contact_person_name": contact_person_name,
+        "contact_person_phone": task.contact_person_phone,
+        "vehicle_info": task.vehicle_info or None,
+        "gos_number": task.gos_number or None,
+        "location": task.location or None,
+        "scheduled_at": str(task.scheduled_at) if task.scheduled_at else None,
+        "status": task.status.value if task.status else None,
+        "assigned_user_id": task.assigned_user_id or None,
+        "assigned_user_name": assigned_user_full_name,
+        "comment": task.comment or None,
+        "photo_required": task.photo_required,
+        "client_price": str(task.client_price) if task.client_price else None,
+        "montajnik_reward": str(task.montajnik_reward) if task.montajnik_reward else None,
+        "equipment": equipment,
+        "work_types": work_types,
+        "history": history,
+        "reports": reports or None,
+        "requires_tech_supp":requires_tech_supp
+    }

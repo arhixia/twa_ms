@@ -517,6 +517,16 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
     """
     _ensure_tech_supp_or_403(current_user)
 
+    # Считаем количество задач, которые тех.спец сейчас проверяет (в статусе inspection)
+    active_checking_query = select(func.count(Task.id)).where(
+        Task.status.not_in([TaskStatus.completed,TaskStatus.archived]),
+        Task.id.in_(
+            select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
+        )
+    )
+    active_checking_res = await db.execute(active_checking_query)
+    active_checking_count = active_checking_res.scalar() or 0
+
     # Задачи, где тех.спец проверял отчёты (approval_tech)
     # Получаем ID отчётов, которые проверял текущий тех.спец
     report_res = await db.execute(
@@ -560,6 +570,7 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
         "name": current_user.name,
         "lastname": current_user.lastname,
         "role": current_user.role.value if current_user.role else None,
+        "active_checking_count": active_checking_count,
         "completed_count": len(completed),
         "history": history,
     }
@@ -646,7 +657,7 @@ async def tech_supp_filter_tasks(
             and_(User.id == Task.created_by, User.name.ilike(search_term))
         ).exists()
 
-        combined_search_condition = or_(
+        conditions = [
             *task_field_conditions,
             company_exists,
             contact_exists,
@@ -654,7 +665,13 @@ async def tech_supp_filter_tasks(
             equipment_exists,
             assigned_user_exists,
             creator_exists
-        )
+        ]
+        
+        # Добавляем условие поиска по ID, если search - число
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        
+        combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
     query = query.options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
@@ -756,7 +773,7 @@ async def tech_supp_filter_completed_tasks(
             and_(User.id == Task.created_by, User.name.ilike(search_term))
         ).exists()
 
-        combined_search_condition = or_(
+        conditions = [
             *task_field_conditions,
             company_exists,
             contact_exists,
@@ -764,7 +781,13 @@ async def tech_supp_filter_completed_tasks(
             equipment_exists,
             assigned_user_exists,
             creator_exists
-        )
+        ]
+        
+        # Добавляем условие поиска по ID, если search - число
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        
+        combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
     query = query.options(

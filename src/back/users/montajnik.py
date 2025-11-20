@@ -1166,7 +1166,7 @@ async def montajnik_filter_completed_tasks(
             and_(User.id == Task.created_by, User.name.ilike(search_term))
         ).exists()
 
-        combined_search_condition = or_(
+        conditions = [
             *task_field_conditions,
             company_exists,
             contact_exists,
@@ -1174,7 +1174,13 @@ async def montajnik_filter_completed_tasks(
             equipment_exists,
             assigned_user_exists,
             creator_exists
-        )
+        ]
+        
+        # Добавляем условие поиска по ID, если search - число
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        
+        combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
     query = query.options(

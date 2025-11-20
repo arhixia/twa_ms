@@ -1750,7 +1750,7 @@ async def logist_history(db: AsyncSession = Depends(get_db), current_user=Depend
     return out
 
 
-@router.get("/tasks_logist/filter", summary="Фильтрация задач (только админ)")
+@router.get("/tasks_logist/filter", summary="Фильтрация задач")
 async def logist_filter_tasks(
     status: Optional[str] = Query(None, description="Статусы через запятую"),
     company_id: Optional[int] = Query(None, description="ID компании"),
@@ -1791,7 +1791,6 @@ async def logist_filter_tasks(
         query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
 
     if search:
-        search_lower = search.lower()
         search_term = f"%{search}%"
         task_field_conditions = [
             Task.location.ilike(search_term),
@@ -1824,7 +1823,7 @@ async def logist_filter_tasks(
             and_(User.id == Task.created_by, User.name.ilike(search_term))
         ).exists()
 
-        combined_search_condition = or_(
+        conditions = [
             *task_field_conditions,
             company_exists,
             contact_exists,
@@ -1832,7 +1831,13 @@ async def logist_filter_tasks(
             equipment_exists,
             assigned_user_exists,
             creator_exists
-        )
+        ]
+        
+        # Добавляем условие поиска по ID, если search - число
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        
+        combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
     query = query.options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
@@ -1872,6 +1877,7 @@ async def logist_filter_completed_tasks(
     company_id: Optional[int] = Query(None, description="ID компании"),
     assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
     work_type_id: Optional[int] = Query(None, description="ID типа работы"),
+    task_id: Optional[int] = Query(None, description="ID задачи"),
     equipment_id: Optional[int] = Query(None, description="ID оборудования"),
     search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
     db: AsyncSession = Depends(get_db),
@@ -1891,6 +1897,9 @@ async def logist_filter_completed_tasks(
     if work_type_id is not None:
         query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
 
+    if task_id is not None:
+        query = query.where(Task.id == task_id)
+
     if equipment_id is not None:
         query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
 
@@ -1903,7 +1912,6 @@ async def logist_filter_completed_tasks(
             Task.gos_number.ilike(search_term),
         ]
 
-        # Подзапросы с exists, как в рабочем эндпоинте
         company_exists = select(ClientCompany).where(
             and_(ClientCompany.id == Task.company_id, ClientCompany.name.ilike(search_term))
         ).exists()
@@ -1928,7 +1936,7 @@ async def logist_filter_completed_tasks(
             and_(User.id == Task.created_by, User.name.ilike(search_term))
         ).exists()
 
-        combined_search_condition = or_(
+        conditions = [
             *task_field_conditions,
             company_exists,
             contact_exists,
@@ -1936,7 +1944,12 @@ async def logist_filter_completed_tasks(
             equipment_exists,
             assigned_user_exists,
             creator_exists
-        )
+        ]
+
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        
+        combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
     query = query.options(

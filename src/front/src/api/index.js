@@ -195,12 +195,13 @@ export async function logistFilterTasks({ status, company_id, assigned_user_id, 
 }
 
 
-export async function logistFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, equipment_id, search } = {}) {
+export async function logistFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id,equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
   if (company_id) params.append("company_id", company_id);
   if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
   if (work_type_id) params.append("work_type_id", work_type_id);
+  if (task_id) params.append("task_id", task_id);
   if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
   if (search) params.append("search", search);
 
@@ -288,6 +289,29 @@ export async function adminUpdateTask(taskId, payload) {
 export async function adminListTasks() {
   return (await api.get("/admin/tasks")).data;
 }
+
+export async function adminListCompletedTasks() {
+  return (await api.get("/admin/tasks/completed_admin")).data;
+}
+
+export async function adminCompletedTaskDetail(taskId) {
+  return (await api.get(`/admin/admin_completed-tasks/${taskId}`)).data;
+}
+
+
+export async function adminFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id,equipment_id, search } = {}) {
+  const params = new URLSearchParams();
+
+  if (company_id) params.append("company_id", company_id);
+  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
+  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (task_id) params.append("task_id", task_id);
+  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (search) params.append("search", search);
+
+  return (await api.get(`/admin/tasks/completed_admin/filter?${params.toString()}`)).data;
+}
+
 
 export async function adminFilterTasks({ status, company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
@@ -411,12 +435,13 @@ export async function techSuppFilterTasks({ status, company_id, assigned_user_id
 }
 
 
-export async function techSuppFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, equipment_id, search } = {}) {
+export async function techSuppFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
   if (company_id) params.append("company_id", company_id);
   if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
   if (work_type_id) params.append("work_type_id", work_type_id);
+  if (task_id) params.append("task_id", task_id);
   if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
   if (search) params.append("search", search);
 
@@ -456,11 +481,12 @@ export async function rejectTask(taskId, comment) {
   return res.data;
 }
 
-export async function montajnikFilterCompletedTasks({ company_id, work_type_id, equipment_id, search } = {}) {
+export async function montajnikFilterCompletedTasks({ company_id, work_type_id,task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
   if (company_id) params.append("company_id", company_id);
   if (work_type_id) params.append("work_type_id", work_type_id);
+  if (task_id) params.append("task_id", task_id);
   if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
   if (search) params.append("search", search);
 

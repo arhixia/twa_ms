@@ -153,7 +153,7 @@ function AdminTasksPage() {
 >
   <input
     type="text"
-    placeholder="Умный поиск..."
+    placeholder="Поиск..."
     className="dark-input"
     value={searchInput}
     onChange={e => handleFilterChange("search", e.target.value)}

@@ -1,4 +1,3 @@
-// front/src/pages/admin/AdminProfilePage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -12,8 +11,28 @@ import {
   adminAddWorkType,
   getAdminEquipmentList,
   getAdminWorkTypesList,
+  adminListCompletedTasks,
+  adminFilterCompletedTasks,
+  getActiveMontajniks, // Используем существующий эндпоинт
 } from "../../api";
 import "../../styles/LogistPage.css";
+
+// Вспомогательная функция для дебаунса
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 function SearchableEquipmentSelect({ availableEquipment, onSelect }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -127,10 +146,37 @@ export default function AdminProfilePage() {
   const [newWorkTypeName, setNewWorkTypeName] = useState("");
   const [newWorkTypePrice, setNewWorkTypePrice] = useState("");
 
+  // Состояния для истории задач
+  const [historyTasks, setHistoryTasks] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Состояния для фильтров истории задач
+  const [selectedFilters, setSelectedFilters] = useState({
+    company_id: null,
+    assigned_user_id: null,
+    work_type_id: null,
+    equipment_id: null,
+    search: "",
+  });
+
+  const [montajniks, setMontajniks] = useState([]);
+  const [workTypes, setWorkTypes] = useState([]);
+  const [equipments, setEquipments] = useState([]);
+
+  // Дебаунс для поиска
+  const debouncedSearch = useDebounce(selectedFilters.search, 500);
+
   useEffect(() => {
     loadProfile();
     loadRefsForModals();
+    loadFilterOptions();
   }, []);
+
+  useEffect(() => {
+    // Загружаем задачи при изменении дебаунснутого поиска или других фильтров
+    const filtersToUse = { ...selectedFilters, search: debouncedSearch };
+    loadHistoryTasks(filtersToUse);
+  }, [debouncedSearch, selectedFilters.company_id, selectedFilters.assigned_user_id, selectedFilters.work_type_id, selectedFilters.equipment_id]);
 
   async function loadProfile() {
     setLoading(true);
@@ -166,15 +212,46 @@ export default function AdminProfilePage() {
     }
   }
 
-  const handleCategorySearchChange = (e) => {
-    const value = e.target.value;
-    setNewEquipmentCategory(value);
-    setFilteredCategories(
-      !value.trim()
-        ? categories
-        : categories.filter((cat) => cat.toLowerCase().includes(value.toLowerCase()))
-    );
-    setShowCategoryDropdown(true);
+  async function loadFilterOptions() {
+    try {
+      const [montajniksData, workTypesData, equipmentsData] = await Promise.all([
+        getActiveMontajniks(), // Используем существующий эндпоинт
+        getAdminWorkTypesList(),
+        getAdminEquipmentList()
+      ]);
+      setMontajniks(montajniksData || []);
+      setWorkTypes(workTypesData || []);
+      setEquipments(equipmentsData || []);
+    } catch (e) {
+      console.error("Ошибка загрузки опций фильтров:", e);
+    }
+  }
+
+  async function loadHistoryTasks(filters) {
+    try {
+      setHistoryLoading(true);
+      const data = await adminFilterCompletedTasks(filters);
+      setHistoryTasks(data || []);
+    } catch (err) {
+      console.error("Ошибка загрузки истории задач:", err);
+      setHistoryTasks([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }
+
+  const handleFilterChange = (field, value) => {
+    let normalized;
+    if (value === "" || value === null) normalized = null;
+    else if (!isNaN(value) && value !== true && value !== false) normalized = Number(value);
+    else normalized = value;
+
+    setSelectedFilters(prev => ({ ...prev, [field]: normalized }));
+  };
+
+  // Функция для перехода к деталям завершенной задачи
+  const viewCompletedTask = (taskId) => {
+    navigate(`/admin/admin_completed-tasks/${taskId}`);
   };
 
   const handleAddCompany = async () => {
@@ -252,198 +329,305 @@ export default function AdminProfilePage() {
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
 
   return (
-  <div className="logist-main">
-    <div className="page">
-      <div className="page-header">
-        <h1>Личный кабинет</h1>
-        <div>
-          <button onClick={() => setShowAddCompanyModal(true)}>+ Компания</button>
-          <button onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
-          <button onClick={() => setShowAddEquipmentModal(true)}>+ Оборудование</button>
-          <button onClick={() => setShowAddWorkTypeModal(true)}>+ Вид работ</button>
-        </div>
-      </div>
-
-      <div className="profile-overview">
-        <div className="profile-card">
-          <h2>Информация</h2>
-          <p>
-            <b>Имя:</b> {profile?.name || "—"}
-          </p>
-          <p>
-            <b>Фамилия:</b> {profile?.lastname || "—"}
-          </p>
-        </div>
-      </div>
-
-      {/* === Добавить компанию === */}
-      {showAddCompanyModal && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="modal-header">
-              <h2>Добавить компанию</h2>
-              <button className="close" onClick={() => setShowAddCompanyModal(false)}>
-                ×
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <input
-                type="text"
-                value={newCompanyName}
-                onChange={(e) => setNewCompanyName(e.target.value)}
-                placeholder="Название компании"
-                className="input"
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button className="primary" onClick={handleAddCompany}>
-                Добавить
-              </button>
-              <button onClick={() => setShowAddCompanyModal(false)}>Отмена</button>
-            </div>
+    <div className="logist-main">
+      <div className="page">
+        <div className="page-header">
+          <h1>Личный кабинет</h1>
+          <div>
+            <button onClick={() => setShowAddCompanyModal(true)}>+ Компания</button>
+            <button onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
+            <button onClick={() => setShowAddEquipmentModal(true)}>+ Оборудование</button>
+            <button onClick={() => setShowAddWorkTypeModal(true)}>+ Вид работ</button>
           </div>
         </div>
-      )}
 
-      {/* === Добавить контакт === */}
-      {showAddContactModal && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="modal-header">
-              <h2>Добавить контакт</h2>
-              <button className="close" onClick={() => setShowAddContactModal(false)}>
-                ×
-              </button>
-            </div>
+        <div className="profile-overview">
+          <div className="profile-card">
+            <h2>Информация</h2>
+            <p>
+              <b>Имя:</b> {profile?.name || "—"}
+            </p>
+            <p>
+              <b>Фамилия:</b> {profile?.lastname || "—"}
+            </p>
+          </div>
+        </div>
 
-            <div className="modal-body">
-              <input
-                type="text"
-                placeholder="ФИО"
-                value={newContactName}
-                onChange={(e) => setNewContactName(e.target.value)}
-                className="input"
-              />
-              <input
-                type="text"
-                placeholder="Телефон"
-                value={newContactPhone}
-                onChange={(e) => setNewContactPhone(e.target.value)}
-                className="input"
-              />
+        {/* === История завершенных задач === */}
+        <div className="section">
+          <h3>История выполненных задач</h3>
+          <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', maxWidth: '100%' }}>
+            {/* Компания */}
+            <div>
+              <label className="dark-label">Компания</label>
               <select
-                value={selectedCompanyId}
-                onChange={(e) => setSelectedCompanyId(e.target.value)}
-                className="input"
+                className="dark-select"
+                value={selectedFilters.company_id ?? ""}
+                onChange={e => handleFilterChange("company_id", e.target.value)}
               >
-                <option value="">Выберите компанию</option>
-                {companies.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
+                <option value="">Все компании</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
 
-            <div className="modal-actions">
-              <button className="primary" onClick={handleAddContact}>
-                Добавить
-              </button>
-              <button onClick={() => setShowAddContactModal(false)}>Отмена</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* === Добавить оборудование === */}
-      {showAddEquipmentModal && (
-  <div className="modal-backdrop">
-    <div className="modal">
-      <div className="modal-header">
-        <h2>Добавить оборудование</h2>
-        <button className="close" onClick={() => setShowAddEquipmentModal(false)}>×</button>
-      </div>
-
-      <div className="modal-body">
-        <input
-          type="text"
-          value={newEquipmentName}
-          onChange={(e) => setNewEquipmentName(e.target.value)}
-          placeholder="Название"
-          className="input"
-        />
-
-        {/* Выбор категории как у компании */}
-        <select
-          value={newEquipmentCategory}
-          onChange={(e) => setNewEquipmentCategory(e.target.value)}
-          className="input"
-        >
-          <option value="">Выберите категорию</option>
-          {categories.map((cat, i) => (
-            <option key={i} value={cat}>{cat}</option>
-          ))}
-        </select>
-
-        <input
-          type="number"
-          step="0.01"
-          value={newEquipmentPrice}
-          onChange={(e) => setNewEquipmentPrice(e.target.value)}
-          placeholder="Цена"
-          className="input"
-        />
-      </div>
-
-      <div className="modal-actions">
-        <button className="primary" onClick={handleAddEquipment}>Добавить</button>
-        <button onClick={() => setShowAddEquipmentModal(false)}>Отмена</button>
-      </div>
-    </div>
-  </div>
-)}
-
-      {/* === Добавить вид работ === */}
-      {showAddWorkTypeModal && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <div className="modal-header">
-              <h2>Добавить вид работ</h2>
-              <button className="close" onClick={() => setShowAddWorkTypeModal(false)}>
-                ×
-              </button>
+            {/* Монтажник */}
+            <div>
+              <label className="dark-label">Монтажник</label>
+              <select
+                className="dark-select"
+                value={selectedFilters.assigned_user_id ?? ""}
+                onChange={e => handleFilterChange("assigned_user_id", e.target.value)}
+              >
+                <option value="">Все монтажники</option>
+                {montajniks.map(m => <option key={m.id} value={m.id}>{m.name} {m.lastname}</option>)}
+              </select>
             </div>
 
-            <div className="modal-body">
+            {/* Тип работы */}
+            <div>
+              <label className="dark-label">Тип работы</label>
+              <select
+                className="dark-select"
+                value={selectedFilters.work_type_id ?? ""}
+                onChange={e => handleFilterChange("work_type_id", e.target.value)}
+              >
+                <option value="">Все типы работ</option>
+                {workTypes.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+              </select>
+            </div>
+
+            {/* Оборудование */}
+            <div>
+              <label className="dark-label">Оборудование</label>
+              <select
+                className="dark-select"
+                value={selectedFilters.equipment_id ?? ""}
+                onChange={e => handleFilterChange("equipment_id", e.target.value)}
+              >
+                <option value="">Все оборудование</option>
+                {equipments.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
+              </select>
+            </div>
+
+            {/* Поиск */}
+            <div style={{ flex: 1, minWidth: '200px' }}>
+              <label className="dark-label">Поиск</label>
               <input
                 type="text"
-                value={newWorkTypeName}
-                onChange={(e) => setNewWorkTypeName(e.target.value)}
-                placeholder="Название"
-                className="input"
+                className="dark-input"
+                placeholder="Поиск..."
+                value={selectedFilters.search}
+                onChange={e => handleFilterChange("search", e.target.value)}
               />
-              <input
-                type="number"
-                step="0.01"
-                value={newWorkTypePrice}
-                onChange={(e) => setNewWorkTypePrice(e.target.value)}
-                placeholder="Цена"
-                className="input"
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button className="primary" onClick={handleAddWorkType}>
-                Добавить
-              </button>
-              <button onClick={() => setShowAddWorkTypeModal(false)}>Отмена</button>
             </div>
           </div>
+
+          {historyLoading ? (
+            <div className="empty">Загрузка истории задач...</div>
+          ) : historyTasks && historyTasks.length > 0 ? (
+            <div className="history-list">
+              {historyTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="history-item clickable-history-item"
+                  onClick={() => viewCompletedTask(task.id)}
+                  style={{
+                    cursor: "pointer",
+                    padding: "12px",
+                    borderBottom: "1px solid #30363d",
+                    borderRadius: "8px",
+                    marginBottom: "8px",
+                    backgroundColor: "#0d1117",
+                  }}
+                >
+                  <p style={{ margin: "4px 0" }}>
+                    <b>#{task.id}</b> — {task.client || "—"}
+                  </p>
+                  <p style={{ margin: "4px 0" }}>
+                    <b>Монтажник:</b> {task.assigned_user_name || "—"}
+                  </p>
+                  <p style={{ margin: "4px 0" }}>
+                    <b>ТС / гос.номер:</b> {task.vehicle_info || "—"} / {task.gos_number || "—"}
+                  </p>
+                  <p style={{ margin: "4px 0" }}>
+                    <b>Дата завершения:</b> {task.completed_at ? new Date(task.completed_at).toLocaleString() : "—"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="empty">История задач пуста</div>
+          )}
         </div>
-      )}
+
+        {/* === Добавить компанию === */}
+        {showAddCompanyModal && (
+          <div className="modal-backdrop">
+            <div className="modal">
+              <div className="modal-header">
+                <h2>Добавить компанию</h2>
+                <button className="close" onClick={() => setShowAddCompanyModal(false)}>
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <input
+                  type="text"
+                  value={newCompanyName}
+                  onChange={(e) => setNewCompanyName(e.target.value)}
+                  placeholder="Название компании"
+                  className="input"
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button className="primary" onClick={handleAddCompany}>
+                  Добавить
+                </button>
+                <button onClick={() => setShowAddCompanyModal(false)}>Отмена</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === Добавить контакт === */}
+        {showAddContactModal && (
+          <div className="modal-backdrop">
+            <div className="modal">
+              <div className="modal-header">
+                <h2>Добавить контакт</h2>
+                <button className="close" onClick={() => setShowAddContactModal(false)}>
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <input
+                  type="text"
+                  placeholder="ФИО"
+                  value={newContactName}
+                  onChange={(e) => setNewContactName(e.target.value)}
+                  className="input"
+                />
+                <input
+                  type="text"
+                  placeholder="Телефон"
+                  value={newContactPhone}
+                  onChange={(e) => setNewContactPhone(e.target.value)}
+                  className="input"
+                />
+                <select
+                  value={selectedCompanyId}
+                  onChange={(e) => setSelectedCompanyId(e.target.value)}
+                  className="input"
+                >
+                  <option value="">Выберите компанию</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="modal-actions">
+                <button className="primary" onClick={handleAddContact}>
+                  Добавить
+                </button>
+                <button onClick={() => setShowAddContactModal(false)}>Отмена</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === Добавить оборудование === */}
+        {showAddEquipmentModal && (
+          <div className="modal-backdrop">
+            <div className="modal">
+              <div className="modal-header">
+                <h2>Добавить оборудование</h2>
+                <button className="close" onClick={() => setShowAddEquipmentModal(false)}>×</button>
+              </div>
+
+              <div className="modal-body">
+                <input
+                  type="text"
+                  value={newEquipmentName}
+                  onChange={(e) => setNewEquipmentName(e.target.value)}
+                  placeholder="Название"
+                  className="input"
+                />
+
+                {/* Выбор категории как у компании */}
+                <select
+                  value={newEquipmentCategory}
+                  onChange={(e) => setNewEquipmentCategory(e.target.value)}
+                  className="input"
+                >
+                  <option value="">Выберите категорию</option>
+                  {categories.map((cat, i) => (
+                    <option key={i} value={cat}>{cat}</option>
+                  ))}
+                </select>
+
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newEquipmentPrice}
+                  onChange={(e) => setNewEquipmentPrice(e.target.value)}
+                  placeholder="Цена"
+                  className="input"
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button className="primary" onClick={handleAddEquipment}>Добавить</button>
+                <button onClick={() => setShowAddEquipmentModal(false)}>Отмена</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* === Добавить вид работ === */}
+        {showAddWorkTypeModal && (
+          <div className="modal-backdrop">
+            <div className="modal">
+              <div className="modal-header">
+                <h2>Добавить вид работ</h2>
+                <button className="close" onClick={() => setShowAddWorkTypeModal(false)}>
+                  ×
+                </button>
+              </div>
+
+              <div className="modal-body">
+                <input
+                  type="text"
+                  value={newWorkTypeName}
+                  onChange={(e) => setNewWorkTypeName(e.target.value)}
+                  placeholder="Название"
+                  className="input"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={newWorkTypePrice}
+                  onChange={(e) => setNewWorkTypePrice(e.target.value)}
+                  placeholder="Цена"
+                  className="input"
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button className="primary" onClick={handleAddWorkType}>
+                  Добавить
+                </button>
+                <button onClick={() => setShowAddWorkTypeModal(false)}>Отмена</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
 }

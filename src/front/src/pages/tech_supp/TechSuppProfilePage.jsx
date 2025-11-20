@@ -140,8 +140,8 @@ export default function TechSuppProfilePage() {
 
           <div className="profile-card">
             <h2>Статистика</h2>
+            <p><b>Активные задачи:</b> {profile.active_checking_count || 0}</p>
             <p><b>Проверено задач:</b> {profile.completed_count || 0}</p>
-            <p><b>Общая стоимость задач:</b> {profile.total_earned ? `${profile.total_earned} руб.` : "0 руб."}</p>
           </div>
         </div>
 

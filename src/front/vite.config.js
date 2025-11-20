@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['scuba-perfect-declare-acquisition.trycloudflare.com']
+    allowedHosts: ['baskets-plates-brothers-alan.trycloudflare.com']
   },
 })
 
