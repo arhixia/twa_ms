@@ -316,27 +316,24 @@ async def tech_review_report(
         raise HTTPException(status_code=500, detail="Failed to review report")
 
 
-    if report.author_id:
-        # ✅ Сообщение для монтажника: тех.спец одобрил
-        msg = f"Report #{report.id} reviewed by tech: approved."
+    if task.assigned_user_id:
+        # Если оба одобрены - уведомляем монтажника о завершении
+        if (report.approval_tech == ReportApproval.approved and 
+            report.approval_logist == ReportApproval.approved):
+            montajnik_msg = f"Работы по задаче {task_id} проверены и выполнены"
+        else:
+            # Только тех.спец одобрил - уведомляем о тех.проверке
+            montajnik_msg = f"Отчет по задаче {task_id} одобрен тех.специалистом"
+        
         background_tasks.add_task(
-            notify_user, # Убедитесь, что notify_user создаёт свою сессию
-            report.author_id,
-            msg,
+            notify_user,
+            task.assigned_user_id,
+            montajnik_msg,
             task_id
         )
 
-  
-    if report.approval_logist == ReportApproval.waiting:
-        if task.created_by: # created_by - ID логиста, который создал задачу
-            background_tasks.add_task(
-                notify_user,
-                task.created_by,
-                f"Отчёт #{report.id} по задаче #{task.id} ожидает вашей проверки (проверено тех.специалистом).",
-                task_id
-            )
+    return {"detail": "Reviewed", "approval": "approved"}
 
-    return {"detail": "Reviewed", "approval": "approved"} # <--- Всегда возвращаем approved
 
 
 @router.get("/tasks/{task_id}")
@@ -579,11 +576,11 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
 @router.get("/tasks_tech_supp/filter", summary="Фильтрация задач (только тех.специалист)")
 async def tech_supp_filter_tasks(
     status: Optional[str] = Query(None, description="Статусы через запятую"),
-    company_id: Optional[int] = Query(None, description="ID компании"),
-    assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
-    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
+    company_id: Optional[str] = Query(None, description="ID компаний через запятую"),
+    assigned_user_id: Optional[str] = Query(None, description="ID монтажников через запятую"),
+    work_type_id: Optional[str] = Query(None, description="ID типов работ через запятую"),
     task_id: Optional[int] = Query(None, description="ID задачи"),
-    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    equipment_id: Optional[str] = Query(None, description="ID оборудования через запятую"),
     search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
     db: AsyncSession = Depends(get_db)
 ):
@@ -608,20 +605,28 @@ async def tech_supp_filter_tasks(
         ]
         query = query.where(Task.status.in_(open_statuses))
 
-    if company_id is not None:
-        query = query.where(Task.company_id == company_id)
+    if company_id:
+        company_ids = [int(id) for id in company_id.split(",") if id.strip().isdigit()]
+        if company_ids:
+            query = query.where(Task.company_id.in_(company_ids))
 
-    if assigned_user_id is not None:
-        query = query.where(Task.assigned_user_id == assigned_user_id)
+    if assigned_user_id:
+        user_ids = [int(id) for id in assigned_user_id.split(",") if id.strip().isdigit()]
+        if user_ids:
+            query = query.where(Task.assigned_user_id.in_(user_ids))
 
     if task_id is not None:
         query = query.where(Task.id == task_id)
 
-    if work_type_id is not None:
-        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+    if work_type_id:
+        work_type_ids = [int(id) for id in work_type_id.split(",") if id.strip().isdigit()]
+        if work_type_ids:
+            query = query.join(Task.works).where(TaskWork.work_type_id.in_(work_type_ids))
 
-    if equipment_id is not None:
-        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+    if equipment_id:
+        equipment_ids = [int(id) for id in equipment_id.split(",") if id.strip().isdigit()]
+        if equipment_ids:
+            query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id.in_(equipment_ids)))
 
     if search:
         search_lower = search.lower()
@@ -707,10 +712,10 @@ async def tech_supp_filter_tasks(
 
 @router.get("/tech_supp_completed-tasks/filter", summary="Фильтрация завершенных задач (тех.специалист)")
 async def tech_supp_filter_completed_tasks(
-    company_id: Optional[int] = Query(None, description="ID компании"),
-    assigned_user_id: Optional[int] = Query(None, description="ID монтажника"),
-    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
-    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    company_id: Optional[str] = Query(None, description="ID компаний через запятую"),
+    assigned_user_id: Optional[str] = Query(None, description="ID монтажников через запятую"),
+    work_type_id: Optional[str] = Query(None, description="ID типов работ через запятую"),
+    equipment_id: Optional[str] = Query(None, description="ID оборудования через запятую"),
     search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
@@ -724,21 +729,28 @@ async def tech_supp_filter_completed_tasks(
     query = select(Task).where(
         Task.is_draft != True,
         Task.status == TaskStatus.completed,
-        # Только задачи, которые проверял текущий тех.спец
         Task.id.in_(checked_task_ids)
     )
 
-    if company_id is not None:
-        query = query.where(Task.company_id == company_id)
+    if company_id:
+        company_ids = [int(id) for id in company_id.split(",") if id.strip().isdigit()]
+        if company_ids:
+            query = query.where(Task.company_id.in_(company_ids))
 
-    if assigned_user_id is not None:
-        query = query.where(Task.assigned_user_id == assigned_user_id)
+    if assigned_user_id:
+        user_ids = [int(id) for id in assigned_user_id.split(",") if id.strip().isdigit()]
+        if user_ids:
+            query = query.where(Task.assigned_user_id.in_(user_ids))
 
-    if work_type_id is not None:
-        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+    if work_type_id:
+        work_type_ids = [int(id) for id in work_type_id.split(",") if id.strip().isdigit()]
+        if work_type_ids:
+            query = query.join(Task.works).where(TaskWork.work_type_id.in_(work_type_ids))
 
-    if equipment_id is not None:
-        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+    if equipment_id:
+        equipment_ids = [int(id) for id in equipment_id.split(",") if id.strip().isdigit()]
+        if equipment_ids:
+            query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id.in_(equipment_ids)))
 
     if search:
         search_term = f"%{search}%"

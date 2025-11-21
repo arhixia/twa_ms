@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['baskets-plates-brothers-alan.trycloudflare.com']
+    allowedHosts: ['sole-paste-internship-competitions.trycloudflare.com']
   },
 })
 

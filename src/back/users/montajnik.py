@@ -590,9 +590,9 @@ async def accept_task(
 
     if task.created_by:
         background_tasks.add_task(
-            "back.utils.notify.notify_user", # Предполагаем, что notify_user в отдельном модуле и создаёт свою сессию
+            notify_user,
             task.created_by,
-            f"Задача #{task.id} принята монтажником {current_user.name} {current_user.lastname}",
+            f"Монтажник {current_user.name} {current_user.lastname} принял задачу #{task.id}",
             task.id
         )
     return {"detail": "accepted"}
@@ -689,9 +689,9 @@ async def reject_task(
     # уведомляем логиста/создателя, если есть
     if task.created_by:
         background_tasks.add_task(
-            "back.utils.notify.notify_user",
+            notify_user,
             task.created_by,
-            f"Задача #{task.id} отклонена монтажником {current_user.name} {current_user.lastname}",
+            f"Монтажник {current_user.name} {current_user.lastname} отклонил задачу #{task.id}",
             task.id
         )
 
@@ -807,14 +807,6 @@ async def change_status(
         await db.flush()
 
         await db.commit()
-
-        if task.created_by:
-            background_tasks.add_task(
-                "back.utils.notify.notify_user", # Убедитесь, что notify_user создаёт свою сессию
-                task.created_by,
-                f"Монтажник {current_user.name} {current_user.lastname} изменил статус задачи #{task.id} -> {new_status_enum.value}",
-                task.id
-            )
 
     except Exception as e:
         logger.exception("Failed to change status: %s", e)
@@ -1050,12 +1042,9 @@ async def submit_report_for_review(
             logger.exception("rollback failed")
         raise HTTPException(status_code=500, detail="Ошибка при отправке отчёта на проверку")
 
-    # --- УВЕДОМЛЕНИЯ ---
-    # Уведомляем логиста (создателя задачи)
     if notify_logist and task.created_by:
         background_tasks.add_task(notify_user, task.created_by, f"По задаче #{task.id} отправлен отчёт на проверку", task.id)
 
-    # ✅ Уведомляем тех.спеца ТОЛЬКО если это требуется для задачи
     if notify_tech:
         tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True))
         techs = tech_q.scalars().all()
@@ -1111,9 +1100,9 @@ async def my_profile(db: AsyncSession = Depends(get_db), current_user: User = De
 
 @router.get("/completed-tasks/filter", summary="Фильтрация завершенных задач (монтажник)")
 async def montajnik_filter_completed_tasks(
-    company_id: Optional[int] = Query(None, description="ID компании"),
-    work_type_id: Optional[int] = Query(None, description="ID типа работы"),
-    equipment_id: Optional[int] = Query(None, description="ID оборудования"),
+    company_id: Optional[str] = Query(None, description="ID компаний через запятую"),
+    work_type_id: Optional[str] = Query(None, description="ID типов работ через запятую"),
+    equipment_id: Optional[str] = Query(None, description="ID оборудования через запятую"),
     search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
@@ -1123,14 +1112,20 @@ async def montajnik_filter_completed_tasks(
         Task.status == TaskStatus.completed
     )
 
-    if company_id is not None:
-        query = query.where(Task.company_id == company_id)
+    if company_id:
+        company_ids = [int(id) for id in company_id.split(",") if id.strip().isdigit()]
+        if company_ids:
+            query = query.where(Task.company_id.in_(company_ids))
 
-    if work_type_id is not None:
-        query = query.join(Task.works).where(TaskWork.work_type_id == work_type_id)
+    if work_type_id:
+        work_type_ids = [int(id) for id in work_type_id.split(",") if id.strip().isdigit()]
+        if work_type_ids:
+            query = query.join(Task.works).where(TaskWork.work_type_id.in_(work_type_ids))
 
-    if equipment_id is not None:
-        query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id == equipment_id))
+    if equipment_id:
+        equipment_ids = [int(id) for id in equipment_id.split(",") if id.strip().isdigit()]
+        if equipment_ids:
+            query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id.in_(equipment_ids)))
 
     if search:
         search_term = f"%{search}%"

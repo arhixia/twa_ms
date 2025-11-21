@@ -183,30 +183,29 @@ export async function reviewReport(taskId, reportId, payload) {
 export async function logistFilterTasks({ status, company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
-  if (status) params.append("status", Array.isArray(status) ? status.join(",") : status);
-  if (company_id) params.append("company_id", company_id);
-  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
-  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (status && status.length > 0) params.append("status", status.join(","));
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (assigned_user_id && assigned_user_id.length > 0) params.append("assigned_user_id", assigned_user_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
   if (task_id) params.append("task_id", task_id);
-  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
   if (search) params.append("search", search);
 
   return (await api.get(`/logist/tasks_logist/filter?${params.toString()}`)).data;
 }
 
 
-export async function logistFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id,equipment_id, search } = {}) {
+export async function logistFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
-  if (company_id) params.append("company_id", company_id);
-  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
-  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (assigned_user_id && assigned_user_id.length > 0) params.append("assigned_user_id", assigned_user_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
   if (task_id) params.append("task_id", task_id);
-  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
   if (search) params.append("search", search);
 
   return (await api.get(`/logist/completed-tasks/filter?${params.toString()}`)).data;
-
 }
 
 
@@ -299,14 +298,14 @@ export async function adminCompletedTaskDetail(taskId) {
 }
 
 
-export async function adminFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id,equipment_id, search } = {}) {
+export async function adminFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
-  if (company_id) params.append("company_id", company_id);
-  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
-  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (assigned_user_id && assigned_user_id.length > 0) params.append("assigned_user_id", assigned_user_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
   if (task_id) params.append("task_id", task_id);
-  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
   if (search) params.append("search", search);
 
   return (await api.get(`/admin/tasks/completed_admin/filter?${params.toString()}`)).data;
@@ -316,12 +315,12 @@ export async function adminFilterCompletedTasks({ company_id, assigned_user_id, 
 export async function adminFilterTasks({ status, company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
-  if (status) params.append("status", Array.isArray(status) ? status.join(",") : status);
-  if (company_id) params.append("company_id", company_id);
-  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
-  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (status && status.length > 0) params.append("status", status.join(","));
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (assigned_user_id && assigned_user_id.length > 0) params.append("assigned_user_id", assigned_user_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
   if (task_id) params.append("task_id", task_id);
-  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
   if (search) params.append("search", search);
 
   return (await api.get(`/admin/tasks/filter?${params.toString()}`)).data;
@@ -423,26 +422,25 @@ export async function techSuppCompletedTaskDetail(taskId) {
 export async function techSuppFilterTasks({ status, company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
-  if (status) params.append("status", Array.isArray(status) ? status.join(",") : status);
-  if (company_id) params.append("company_id", company_id);
-  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
-  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (status && status.length > 0) params.append("status", status.join(","));
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (assigned_user_id && assigned_user_id.length > 0) params.append("assigned_user_id", assigned_user_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
   if (task_id) params.append("task_id", task_id);
-  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
   if (search) params.append("search", search);
 
   return (await api.get(`/tech_supp/tasks_tech_supp/filter?${params.toString()}`)).data;
 }
 
-
 export async function techSuppFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
-  if (company_id) params.append("company_id", company_id);
-  if (assigned_user_id) params.append("assigned_user_id", assigned_user_id);
-  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (assigned_user_id && assigned_user_id.length > 0) params.append("assigned_user_id", assigned_user_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
   if (task_id) params.append("task_id", task_id);
-  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
   if (search) params.append("search", search);
 
   return (await api.get(`/tech_supp/tech_supp_completed-tasks/filter?${params.toString()}`)).data;
@@ -481,13 +479,13 @@ export async function rejectTask(taskId, comment) {
   return res.data;
 }
 
-export async function montajnikFilterCompletedTasks({ company_id, work_type_id,task_id, equipment_id, search } = {}) {
+export async function montajnikFilterCompletedTasks({ company_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
-  if (company_id) params.append("company_id", company_id);
-  if (work_type_id) params.append("work_type_id", work_type_id);
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
   if (task_id) params.append("task_id", task_id);
-  if (equipment_id !== null && equipment_id !== undefined && equipment_id !== "") params.append("equipment_id", equipment_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
   if (search) params.append("search", search);
 
   return (await api.get(`/montajnik/completed-tasks/filter?${params.toString()}`)).data;

@@ -1,4 +1,3 @@
-// front/src/pages/admin/AdminTasksPage.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import {
   adminFilterTasks,
@@ -9,6 +8,7 @@ import {
 } from '../../api';
 import TaskCard from '../../components/TaskCard';
 import { useNavigate } from 'react-router-dom';
+import MultiSelectFilter from "../../components/MultiSelectFilter"; // Добавляем импорт компонента
 import "../../styles/LogistPage.css";
 import "../../styles/styles.css";
 
@@ -39,12 +39,12 @@ function AdminTasksPage() {
   const [equipments, setEquipments] = useState([]);
 
   const [selectedFilters, setSelectedFilters] = useState({
-    status: "",
-    company_id: null,
-    assigned_user_id: null,
-    work_type_id: null,
+    status: [],
+    company_id: [],
+    assigned_user_id: [],
+    work_type_id: [],
     task_id: null,
-    equipment_id: null,
+    equipment_id: [],
     search: "",
   });
 
@@ -78,8 +78,6 @@ function AdminTasksPage() {
 
   // Обновим fetchTasks, чтобы он принимал фильтры и управлял загрузкой
   const fetchTasks = async (filters = {}) => {
-    // Не устанавливаем setLoading(true) здесь, если мы управляем загрузкой по-другому
-    // или делаем это более аккуратно, чтобы избежать мерцания при быстрых вводах
     try {
       const data = await adminFilterTasks(filters);
       setTasks(data || []);
@@ -107,13 +105,13 @@ function AdminTasksPage() {
 
   const handleFilterChange = (field, value) => {
     let normalized;
-    if (value === "" || value === null) normalized = null;
-    else if (!isNaN(value) && value !== true && value !== false) normalized = Number(value);
-    else normalized = value;
+    if (value === "" || value === null) normalized = [];
+    else if (Array.isArray(value)) normalized = value;
+    else normalized = [value];
 
     // Для поля 'search' обновляем отдельное состояние searchInput
     if (field === 'search') {
-      setSearchInput(normalized);
+      setSearchInput(value);
     } else {
       // Для остальных полей обновляем selectedFilters напрямую
       setSelectedFilters(prev => ({ ...prev, [field]: normalized }));
@@ -136,6 +134,12 @@ function AdminTasksPage() {
     { value: "archived", label: "Архив" },
   ];
 
+  // Преобразование опций для MultiSelectFilter
+  const companyOptions = companies.map(c => ({ value: c.id, label: c.name }));
+  const montajnikOptions = montajniks.map(m => ({ value: m.id, label: m.name }));
+  const workTypeOptions = workTypes.map(w => ({ value: w.id, label: w.name }));
+  const equipmentOptions = equipments.map(eq => ({ value: eq.id, label: eq.name }));
+
   if (loading && tasks.length === 0) return <div className="empty">Загрузка задач...</div>;
 
   return (
@@ -145,97 +149,91 @@ function AdminTasksPage() {
       </div>
 
       <div
-  className="search-container"
-  style={{
-    marginBottom: '12px',
-    width: '100%',
-  }}
->
-  <input
-    type="text"
-    placeholder="Поиск..."
-    className="dark-input"
-    value={searchInput}
-    onChange={e => handleFilterChange("search", e.target.value)}
-    style={{
-      width: '100%',
-      padding: '10px 14px',
-      borderRadius: '6px',
-      border: '1px solid #444',
-      backgroundColor: '#1a1a1a',
-      color: '#e0e0e0',
-      fontSize: '14px',
-      outline: 'none',
-      transition: '0.2s',
-    }}
-  />
-</div>
-
+        className="search-container"
+        style={{
+          marginBottom: '12px',
+          width: '100%',
+        }}
+      >
+        <input
+          type="text"
+          placeholder="Поиск..."
+          className="dark-input"
+          value={searchInput}
+          onChange={e => handleFilterChange("search", e.target.value)}
+          style={{
+            width: '100%',
+            padding: '10px 14px',
+            borderRadius: '6px',
+            border: '1px solid #444',
+            backgroundColor: '#1a1a1a',
+            color: '#e0e0e0',
+            fontSize: '14px',
+            outline: 'none',
+            transition: '0.2s',
+          }}
+        />
+      </div>
 
       <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', maxWidth: '100%' }}>
         {/* Статус */}
-        <div>
+        <div style={{ minWidth: '150px' }}>
           <label className="dark-label">Статус</label>
-          <select
-            className="dark-select"
-            value={selectedFilters.status || ""}
-            onChange={e => handleFilterChange("status", e.target.value)}
-          >
-            <option value="">Все статусы</option>
-            {STATUS_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-          </select>
+          <MultiSelectFilter
+            options={STATUS_OPTIONS}
+            selectedValues={selectedFilters.status}
+            onChange={(values) => handleFilterChange("status", values)}
+            placeholder="Все статусы"
+            maxHeight={200}
+          />
         </div>
 
         {/* Компания */}
-        <div>
+        <div style={{ minWidth: '150px' }}>
           <label className="dark-label">Компания</label>
-          <select
-            className="dark-select"
-            value={selectedFilters.company_id ?? ""}
-            onChange={e => handleFilterChange("company_id", e.target.value)}
-          >
-            <option value="">Все компании</option>
-            {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          <MultiSelectFilter
+            options={companyOptions}
+            selectedValues={selectedFilters.company_id}
+            onChange={(values) => handleFilterChange("company_id", values)}
+            placeholder="Все компании"
+            maxHeight={200}
+          />
         </div>
 
         {/* Монтажник */}
-        <div>
+        <div style={{ minWidth: '150px' }}>
           <label className="dark-label">Монтажник</label>
-          <select
-            className="dark-select"
-            value={selectedFilters.assigned_user_id ?? ""}
-            onChange={e => handleFilterChange("assigned_user_id", e.target.value)}
-          >
-            <option value="">Все монтажники</option>
-            {montajniks.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <MultiSelectFilter
+            options={montajnikOptions}
+            selectedValues={selectedFilters.assigned_user_id}
+            onChange={(values) => handleFilterChange("assigned_user_id", values)}
+            placeholder="Все монтажники"
+            maxHeight={200}
+          />
         </div>
 
         {/* Тип работы */}
-        <div>
+        <div style={{ minWidth: '150px' }}>
           <label className="dark-label">Тип работы</label>
-          <select
-            className="dark-select"
-            value={selectedFilters.work_type_id ?? ""}
-            onChange={e => handleFilterChange("work_type_id", e.target.value)}
-          >
-            <option value="">Все типы работ</option>
-            {workTypes.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-          </select>
+          <MultiSelectFilter
+            options={workTypeOptions}
+            selectedValues={selectedFilters.work_type_id}
+            onChange={(values) => handleFilterChange("work_type_id", values)}
+            placeholder="Все типы работ"
+            maxHeight={200}
+          />
         </div>
 
         {/* Оборудование */}
-        <div>
+        <div style={{ minWidth: '150px' }}>
           <label className="dark-label">Оборудование</label>
-          <select
-            className="dark-select"
-            value={selectedFilters.equipment_id ?? ""}
-            onChange={e => handleFilterChange("equipment_id", e.target.value)}
-          >
-            <option value="">Все оборудование</option>
-            {equipments.map(eq => <option key={eq.id} value={eq.id}>{eq.name}</option>)}
-          </select>
+          <MultiSelectFilter
+            options={equipmentOptions}
+            selectedValues={selectedFilters.equipment_id}
+            onChange={(values) => handleFilterChange("equipment_id", values)}
+            placeholder="Все оборудование"
+            maxHeight={200}
+          />
         </div>
       </div>
 
