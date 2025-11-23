@@ -339,13 +339,15 @@ async def mont_task_detail(
             selectinload(Task.history),
             selectinload(Task.reports),
             selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
-            selectinload(Task.assigned_user)
+            selectinload(Task.assigned_user),
+            selectinload(Task.attachments)  # ✅ Загружаем вложения задачи
         )
         .where(Task.id == task_id)
     )
     task = res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
+    
     # --- equipment и work_types ---
     equipment = [
         {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number} # <--- Добавлен serial_number
@@ -388,14 +390,29 @@ async def mont_task_detail(
             "photos": photos or None
         })
 
-   
+    # --- attachments ---
+    attachments = [
+        {
+            "id": att.id,
+            "storage_key": att.storage_key,
+            "file_type": att.file_type.value,
+            "original_name": att.original_name,
+            "size": att.size,
+            "uploader_id": att.uploader_id,
+            "uploaded_at": str(att.uploaded_at) if att.uploaded_at else None,
+            "thumb_key": att.thumb_key,
+            "report_id": att.report_id  # ✅ Включаем ID отчёта, к которому привязано вложение
+        }
+        for att in (task.attachments or [])
+        if att.processed and not att.deleted_at  # Только обработанные и не удалённые вложения
+    ] or None
+
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
 
     assigned_user_name = task.assigned_user.name if task.assigned_user else None
     assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
     assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
-
 
     return {
         "id": task.id,
@@ -417,6 +434,7 @@ async def mont_task_detail(
         "work_types": work_types,
         "history": history,
         "reports": reports or None,
+        "attachments": attachments or None,  # ✅ Включаем вложения
         "requires_tech_supp": requires_tech_supp,
     }
 

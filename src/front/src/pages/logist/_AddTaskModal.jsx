@@ -913,41 +913,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </div>
         )}
 
-        <label>
-          Цена клиента (авто)
-          <input
-            value=""
-            disabled
-            placeholder="Рассчитывается автоматически"
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#2a2a2a",
-              color: "#b0b0b0",
-              cursor: "not-allowed",
-            }}
-          />
-        </label>
-
-        <label>
-          Вознаграждение монтажнику (авто)
-          <input
-            value=""
-            disabled
-            placeholder="Рассчитывается автоматически"
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#2a2a2a",
-              color: "#b0b0b0",
-              cursor: "not-allowed",
-            }}
-          />
-        </label>
+        
 
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <input

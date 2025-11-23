@@ -22,8 +22,10 @@ class InitMultipartIn(BaseModel):
     filename: str
     content_type: str
     size: int
-    task_id: Optional[int] = None  # можно привязать к черновику/задаче
+    task_id: Optional[int] = None
+    report_id: Optional[int] = None  # НОВОЕ: ID отчёта
     draft: Optional[bool] = False
+
 
 
 class InitMultipartOut(BaseModel):
@@ -39,10 +41,10 @@ class CompleteMultipartIn(BaseModel):
     upload_id: str
     parts: List[Dict[str, Any]]
     task_id: Optional[int] = None
+    report_id: Optional[int] = None  # НОВОЕ: ID отчёта
     original_name: Optional[str] = None
     mime_type: Optional[str] = None
     size: Optional[int] = None
-
 
 class AttachmentOut(BaseModel):
     id: int
@@ -55,7 +57,6 @@ class AttachmentOut(BaseModel):
     original_name: Optional[str] = None
 
 
-# Инициация multipart upload — возвращаем upload_id и список частей
 @router.post("/init-multipart", response_model=InitMultipartOut)
 async def init_multipart(
     payload: InitMultipartIn = Body(...),
@@ -74,7 +75,12 @@ async def init_multipart(
         raise HTTPException(status_code=400, detail="Unsupported content_type")
 
     s3 = get_s3_client()
-    key = s3.key_for_task(payload.task_id or 0, payload.filename)
+    
+    # Генерируем ключ в зависимости от наличия report_id
+    if payload.report_id:
+        key = s3.key_for_report_attachment(payload.task_id or 0, payload.report_id, payload.filename)
+
+    
     upload_id = await s3.create_multipart_upload(key, content_type=payload.content_type)
     parts_info = s3.compute_parts(payload.size)
     return InitMultipartOut(
@@ -114,7 +120,7 @@ async def complete_multipart(
     # Создаём запись TaskAttachment
     attach = TaskAttachment(
         task_id=payload.task_id if payload.task_id is not None else 0,
-        report_id=None,
+        report_id=payload.report_id,  # Указываем report_id если есть
         storage_key=payload.storage_key,
         file_type=FileType.photo,
         original_name=payload.original_name,
@@ -134,16 +140,19 @@ async def complete_multipart(
     return {"attachment_id": attach.id, "storage_key": attach.storage_key}
 
 
-# Fallback серверный upload (для небольших файлов)
 @router.post("/upload-fallback")
-async def upload_fallback(
+async def upload_fallback_report(
     background_tasks: BackgroundTasks,
-    task_id: Optional[int] = Query(None),
+    task_id: int = Query(..., description="ID задачи"),
+    report_id: Optional[int] = Query(None, description="ID отчёта (опционально)"),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Проверка ролей
+    """
+    Загрузка файла в S3 с созданием записи TaskAttachment для отчёта.
+    """
+    # Проверки прав
     user_role = getattr(current_user, "role", None)
     if user_role not in (Role.logist, Role.montajnik, Role.tech_supp, Role.admin):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -152,31 +161,32 @@ async def upload_fallback(
     if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
         raise HTTPException(status_code=400, detail="Unsupported content_type")
 
-    # Чтение файла с обработкой ошибок
-    try:
-        data = await file.read()
-        if len(data) > 10 * 1024 ** 3:
-            raise HTTPException(status_code=400, detail="File too large")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"File read failed: {e}")
+    # Чтение файла
+    data = await file.read()
+    if len(data) > 10 * 1024 ** 3:
+        raise HTTPException(status_code=400, detail="File too large")
 
     s3 = get_s3_client()
-    key = s3.key_for_task(task_id or 0, file.filename)
+    
+    # Генерируем ключ с учётом report_id
+    if report_id:
+        key = s3.key_for_report_attachment(task_id, report_id, file.filename)
+    else:
+        # Если report_id нет, используем старую логику
+        key = s3.key_for_task(task_id, file.filename)
 
-    # Загрузка в S3 с обработкой ошибок
-    try:
-        await s3.put_object(
-            key,
-            data,
-            content_type=file.content_type,
-            content_disposition="inline"
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"S3 upload failed: {e}")
+    # Загрузка в S3
+    await s3.put_object(
+        key,
+        data,
+        content_type=file.content_type,
+        content_disposition="inline"
+    )
 
     # Создаем запись в БД
     attach = TaskAttachment(
-        task_id=task_id if task_id is not None else 0,
+        task_id=task_id,
+        report_id=report_id,  # Указываем report_id если есть
         storage_key=key,
         file_type=FileType.photo,
         original_name=file.filename,
@@ -191,19 +201,27 @@ async def upload_fallback(
     await db.commit()
     await db.refresh(attach)
 
-    # Фоновая обработка (thumbnail, checksum)
+    # Фоновая обработка
     background_tasks.add_task(validate_and_process_attachment, attach.id)
 
     return {"attachment_id": attach.id, "storage_key": key}
 
 
 # Список вложений задачи
-@router.get("/tasks/{task_id}/attachments", response_model=List[AttachmentOut])
+@router.get("/attachments/tasks/{task_id}/attachments", response_model=List[AttachmentOut])
 async def list_attachments(
     task_id: int,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
+  
+    task_res = await db.execute(select(Task).where(Task.id == task_id))
+    task = task_res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    
+    
+
     res = await db.execute(
         select(TaskAttachment)
         .where(TaskAttachment.task_id == task_id, TaskAttachment.deleted_at.is_(None), TaskAttachment.processed == True)
@@ -220,7 +238,7 @@ async def list_attachments(
         out.append(AttachmentOut(
             id=it.id,
             storage_key=it.storage_key,
-            presigned_url=url,
+            presigned_url=url,  # ✅ Включаем предварительный URL
             thumb_key=it.thumb_key,
             uploader_id=it.uploader_id,
             uploaded_at=it.uploaded_at,

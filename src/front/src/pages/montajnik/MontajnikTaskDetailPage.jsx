@@ -16,6 +16,7 @@ import {
   getMontContactPersonsByCompany,
   getMontContactPersonPhone,
   rejectTask,
+  api // Импортируем api для получения предварительных URL
 } from "../../api";
 import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
@@ -93,17 +94,17 @@ function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, ta
 
 // --- Новый компонент: Модальное окно создания отчёта ---
 function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSubmitSuccess }) {
-  // taskWorkTypes - это массив ID, назначенных задаче (например, [3])
-  // allWorkTypes - это полный список WorkType из справочника (например, [{id: 1, name: "A"}, {id: 2, name: "B"}, ...])
-  const [selectedWorkTypes, setSelectedWorkTypes] = useState([]); // Массив ID выбранных для отчёта
+  const [selectedWorkTypes, setSelectedWorkTypes] = useState([]);
   const [comment, setComment] = useState("");
-  const [photos, setPhotos] = useState([]); // Массив объектов файлов/ключей
+  const [photos, setPhotos] = useState([]); // Файлы, которые будут загружены ПОСЛЕ создания отчёта
+  const [pendingPhotos, setPendingPhotos] = useState([]); // Файлы, загруженные до создания отчёта
   const [submitting, setSubmitting] = useState(false);
-useEffect(() => {
-  setSelectedWorkTypes(taskWorkTypes);
-}, [taskWorkTypes]);
+  const [currentReportId, setCurrentReportId] = useState(null);
 
-  
+  useEffect(() => {
+    setSelectedWorkTypes(taskWorkTypes);
+  }, [taskWorkTypes]);
+
   const handleWorkTypeChange = (wtId) => {
     setSelectedWorkTypes(prev =>
       prev.includes(wtId)
@@ -113,41 +114,52 @@ useEffect(() => {
   };
 
   const handlePhotoUpload = (file) => {
-    setPhotos(prev => [...prev, file]);
+    if (currentReportId) {
+      // Если reportId уже создан, добавляем в основной список
+      setPhotos(prev => [...prev, file]);
+    } else {
+      // Если reportId ещё нет, добавляем в pending
+      setPendingPhotos(prev => [...prev, file]);
+    }
   };
 
   const handleRemovePhoto = (indexToRemove) => {
     setPhotos(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
+  const handleRemovePendingPhoto = (indexToRemove) => {
+    setPendingPhotos(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
   const handleSubmit = async () => {
-    // Формируем текст отчёта только из выбранных работ
+    // Формируем текст отчёта
     const performedWorksText = selectedWorkTypes
       .map(id => allWorkTypes.find(wt => wt.id === id)?.name || `ID ${id}`)
       .join(", ");
 
-    // Комбинируем выполненные работы и комментарий
     let fullComment = "";
     if (performedWorksText) {
         fullComment += `Выполнено: ${performedWorksText}`;
     }
     if (comment.trim()) {
-        fullComment += fullComment ? `\n\n${comment}` : comment; // Добавляем пустую строку между "Выполнено" и комментарием
+        fullComment += fullComment ? `\n\n${comment}` : comment;
     }
 
-
-    if (!fullComment.trim() && photos.length === 0) {
+    if (!fullComment.trim() && pendingPhotos.length === 0) {
       alert("Добавьте выполненные работы, комментарий или фото.");
       return;
     }
 
     setSubmitting(true);
     try {
-      const photoKeys = photos.map(p => p.storage_key).filter(sk => sk);
+      // Сначала создаем отчёт с фото, которые были загружены до создания отчёта
+      const photoKeys = pendingPhotos.map(p => p.storage_key).filter(sk => sk);
 
       const createRes = await createReport(taskId, fullComment, photoKeys);
       const reportId = createRes.report_id;
+      setCurrentReportId(reportId);
 
+      // Отправляем на проверку
       await submitReportForReview(taskId, reportId);
 
       alert("Отчёт создан и отправлен на проверку!");
@@ -162,7 +174,6 @@ useEffect(() => {
     }
   };
 
-  // Фильтруем allWorkTypes, оставляя только те, чей id есть в taskWorkTypes (массиве ID)
   const relevantWorkTypes = allWorkTypes.filter(wt => taskWorkTypes.includes(wt.id));
 
   return (
@@ -174,9 +185,8 @@ useEffect(() => {
         </div>
 
         <div className="modal-body">
-          {/* Выбор выполненных работ (только из назначенных задаче) */}
           <div className="section">
-            <h3 style={{ color: 'white' }}> {/* Белый текст на черном фоне */}
+            <h3 style={{ color: 'white' }}>
               Выполненные работы:
             </h3>
             <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #ccc', padding: '5px', borderRadius: '4px', backgroundColor: '#1a1a1a' }}>
@@ -200,26 +210,30 @@ useEffect(() => {
             </div>
           </div>
 
-          {/* Комментарий */}
           <div className="section">
-            <label style={{ color: 'white' }}> {/* Белый текст на черном фоне */}
+            <label style={{ color: 'white' }}>
               Комментарий:
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows="4"
                 placeholder="Дополнительная информация..."
-                style={{ backgroundColor: '#1a1a1a', color: 'white', border: '1px solid #555' }} // Стили для textarea
+                style={{ backgroundColor: '#1a1a1a', color: 'white', border: '1px solid #555' }}
               />
             </label>
           </div>
 
-          {/* Фото */}
           <div className="section">
             <label style={{ color: 'white' }}>Фото:</label>
-            <FileUploader onUploaded={handlePhotoUpload} />
+            <FileUploader 
+              onUploaded={handlePhotoUpload} 
+              taskId={taskId} 
+              reportId={currentReportId} 
+            />
+            
+            {/* Показываем загруженные фото */}
             <div className="attached-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
-              {photos.map((photo, index) => (
+              {pendingPhotos.map((photo, index) => (
                 <div key={index} style={{ position: 'relative', display: 'inline-block' }}>
                   <img
                     src={photo.preview || `${import.meta.env.VITE_API_URL}/attachments/${photo.storage_key}`}
@@ -227,7 +241,7 @@ useEffect(() => {
                     style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '4px' }}
                   />
                   <button
-                    onClick={() => handleRemovePhoto(index)}
+                    onClick={() => handleRemovePendingPhoto(index)}
                     style={{
                       position: 'absolute',
                       top: '-5px',
@@ -285,6 +299,7 @@ export default function MontajnikTaskDetailPage() {
   const [showReportModal, setShowReportModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
+  const [attachments, setAttachments] = useState([]); // Состояние для вложений
 
 
   useEffect(() => {
@@ -316,6 +331,7 @@ export default function MontajnikTaskDetailPage() {
       setEquipment(eq || []);
       setWorkTypes(wt || []);
       setCompanies(comps || []); // ✅ Сохраняем компании
+      
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
@@ -343,6 +359,8 @@ export default function MontajnikTaskDetailPage() {
       t.work_types_ids = t.work_types.map(wt => wt.work_type_id); // <-- ПРАВИЛЬНО: извлекаем work_type_id
 
       setTask(t);
+      setAttachments(t.attachments || []);
+
       // При загрузке задачи, устанавливаем form в состояние задачи (включая *_ids)
       // setForm(t); // Убираем, так как у монтажника нет редактирования задачи
 
@@ -502,8 +520,6 @@ export default function MontajnikTaskDetailPage() {
               </p>
             <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
 
-        
-
             {/* История */}
             <div className="section">
               <h3>История</h3>
@@ -526,16 +542,7 @@ export default function MontajnikTaskDetailPage() {
                     {review.review_comment && (
                       <p><b>Комментарий:</b> <span style={{ color: "white" }}>{review.review_comment}</span></p>
                     )}
-                    {review.review_photos && review.review_photos.length > 0 && (
-                      <div className="attached-list">
-                        <p><b>Фото от проверяющего:</b></p>
-                        {review.review_photos.map((photoUrl, idx) => (
-                          <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={photoUrl} alt={`Review photo ${idx}`} style={{ maxHeight: 100 }} />
-                          </a>
-                        ))}
-                      </div>
-                    )}
+
                     <details>
                       <summary>Оригинальный отчёт</summary>
                       <p>{review.original_report_text || "—"}</p>
@@ -559,64 +566,85 @@ export default function MontajnikTaskDetailPage() {
 
             {/* Отчёты */}
             <div className="section">
-              <h3>Отчёты</h3>
-              {(task.reports && task.reports.length > 0) ? (
-                task.reports.map(r => (
-                  <div key={r.id} className="report">
-                    <p>#{r.id}: {r.text || "—"}</p>
-                    {/* Отображаем статусы approval_logist и approval_tech */}
-                    <p>
-                      <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
-                        {r.approval_logist || "—"}
-                      </span> | 
-                      {task.requires_tech_supp === true && (
-                  <>
-                    {" "} | 
-                    <b>Тех.спец:</b>{" "}
-                    <span style={{
-                      color: r.approval_tech === "approved"
-                        ? "green"
-                        : r.approval_tech === "rejected"
-                        ? "red"
-                        : "orange"
-                    }}>
-                      {r.approval_tech || "waiting"}
-                    </span>
-                  </>
-                )}
+   <h3>Отчёты</h3>
+   {(task.reports && task.reports.length > 0) ? (
+     task.reports.map(r => (
+       <div key={r.id} className="report">
+         <p>#{r.id}: {r.text || "—"}</p>
+         {/* Отображаем статусы approval_logist и approval_tech */}
+         <p>
+           <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
+             {r.approval_logist || "—"}
+           </span>
+           {/* Используем r (отчёт) вместо task (задача), если поле находится в отчёте. 
+                Если же requires_tech_supp - это поле задачи, оставляем task. */}
+           {task.requires_tech_supp === true && ( 
+             <> 
+               {" "} | 
+               <b>Тех.спец:</b>{" "}
+               <span style={{
+                 color: r.approval_tech === "approved"
+                   ? "green"
+                   : r.approval_tech === "rejected"
+                   ? "red"
+                   : "orange"
+               }}>
+                 {r.approval_tech || "waiting"}
+               </span>
+             </>
+           )}
+         </p>
+         {/* Отображаем комментарий отклонения, если есть */}
+         {r.review_comment && (
+           <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
+         )}
+         {/* Отображаем вложения, привязанные к отчёту */}
+         {r.photos && r.photos.length > 0 && (
+           <div className="attached-list">
+             {r.photos.map((photoUrl, idx) => {
+               // Находим вложение по storage_key
+               const attachment = attachments.find(att => att.storage_key === photoUrl); // Используем attachments из замыкания render()
+               const thumbKey = attachment?.thumb_key;
+               const originalUrl = `${import.meta.env.VITE_API_URL}/attachments/${encodeURIComponent(photoUrl)}`;
+               const thumbUrl = thumbKey 
+                 ? `${import.meta.env.VITE_API_URL}/attachments/${encodeURIComponent(thumbKey)}` 
+                 : originalUrl; // Если миниатюры нет, используем оригинал
 
-                    </p>
-                    {/* Отображаем комментарий отклонения, если есть */}
-                    {r.review_comment && (
-                      <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
-                    )}
-                    {r.photos && r.photos.length > 0 && (
-                      <div className="attached-list">
-                        {r.photos.map((photoUrl, idx) => (
-                          <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={photoUrl} alt={`Report photo ${idx}`} style={{ maxHeight: 100 }} />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="empty">Отчётов пока нет</div>
-              )}
+               return (
+                 <a 
+                   key={idx} 
+                   href={originalUrl} // Ссылка на оригинал
+                   target="_blank" 
+                   rel="noopener noreferrer"
+                 >
+                   <img 
+                     src={thumbUrl} // Отображаем миниатюру или оригинал
+                     alt={`Report photo ${idx}`} 
+                     style={{ maxHeight: 100 }} 
+                   />
+                 </a>
+               );
+             })}
+           </div>
+         )}
+       </div>
+     ))
+   ) : (
+     <div className="empty">Отчётов пока нет</div>
+   )}
 
-              {/* Форма создания нового отчёта */}
-              <div className="report-form">
-                {task.status !== "completed" && (
-                    <div className="report-form">
-                      <h4>Создать новый отчёт</h4>
-                      <button className="add-btn" onClick={() => setShowReportModal(true)}>
-                        📝 Добавить отчёт
-                      </button>
-                    </div>
-                  )}
-              </div>
-            </div>
+   {/* Форма создания нового отчёта */}
+   <div className="report-form">
+     {task.status !== "completed" && (
+       <div className="report-form">
+         <h4>Создать новый отчёт</h4>
+         <button className="add-btn" onClick={() => setShowReportModal(true)}>
+           📝 Добавить отчёт
+         </button>
+       </div>
+     )}
+   </div>
+ </div>
           </div>
         </div>
       </div>
@@ -679,4 +707,3 @@ export default function MontajnikTaskDetailPage() {
     </div>
   );
 }
-

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['sole-paste-internship-competitions.trycloudflare.com']
+    allowedHosts: ['rapid-forward-fixes-adequate.trycloudflare.com']
   },
 })
 

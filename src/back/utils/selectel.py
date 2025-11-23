@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from aiobotocore.session import get_session
 from back.db.config import ACCESS_KEY_S3, SECRET_KEY_S3, ENDPOINT_URL_S3, BUCKET_NAME_S3
 import asyncio 
+from uuid import uuid4
 
 DEFAULT_PART_SIZE = 50 * 1024 * 1024  # 50 MiB
 ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
@@ -147,14 +148,22 @@ class S3Client:
 
     def key_for_task(self, task_id: int, original_filename: str) -> str:
         """
-        Recommended key format:
-        tasks/{task_id}/{YYYY}/{MM}/{DD}/{uuid4}{ext}
-        Here we produce a simple timestamp-uuid-like key if caller doesn't provide uuid.
+        Ключ для вложения задачи: tasks/{task_id}/{YYYY}/{MM}/{DD}/{uuid4}{ext}
         """
-        from uuid import uuid4
+    
         now = datetime.now(timezone.utc)
         ext = Path(original_filename).suffix or ""
         key = f"tasks/{task_id}/{now.year:04d}/{now.month:02d}/{now.day:02d}/{uuid4().hex}{ext}"
+        return key
+
+    def key_for_report_attachment(self, task_id: int, report_id: int, original_filename: str) -> str:
+        """
+        Ключ для вложения отчёта: reports/{task_id}/{report_id}/{uuid4}{ext}
+        """
+       
+        now = datetime.now(timezone.utc)
+        ext = Path(original_filename).suffix or ""
+        key = f"reports/{task_id}/{report_id}/{uuid4().hex}{ext}"
         return key
 
 

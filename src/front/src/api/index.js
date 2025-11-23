@@ -211,11 +211,17 @@ export async function logistFilterCompletedTasks({ company_id, assigned_user_id,
 
 // ---------- ATTACHMENTS ----------
 
-export async function uploadFallback(file, taskId) {
+export async function uploadFallback(file, taskId, reportId = null) {
   const form = new FormData();
   form.append("file", file);
+  
+  let url = `/attachments/upload-fallback?task_id=${taskId}`;
+  if (reportId) {
+    url += `&report_id=${reportId}`;
+  }
+  
   const res = await api.post(
-    `/attachments/upload-fallback?task_id=${taskId}`, // передаём реальный taskId
+    url,
     form,
     { headers: { "Content-Type": "multipart/form-data" } }
   );
@@ -223,8 +229,8 @@ export async function uploadFallback(file, taskId) {
 }
 
 
-export async function listAttachments(taskId) {
-  return (await api.get(`/attachments/tasks/${taskId}/attachments`)).data;
+export async function listAttachments(taskId, reportId) {
+  return (await api.get(`/attachments/tasks/${taskId}/reports/${reportId}/attachments`)).data;
 }
 
 
