@@ -185,57 +185,7 @@ async def complete_multipart(
 
 
 
-@router.get("/attachments/{storage_key:path}")
-async def get_attachment(
-    storage_key: str = Path(..., description="Storage key в S3"),
-    db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user)
-):
-    # Проверить, что пользователь может получить этот файл
-    res = await db.execute(
-        select(TaskAttachment)
-        .where(TaskAttachment.storage_key == storage_key, TaskAttachment.deleted_at.is_(None))
-    )
-    attachment = res.scalars().first()
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Вложение не найдено")
 
-    # Проверить права доступа
-    allowed = False
-    if attachment.uploader_id == getattr(current_user, "id", None):
-        allowed = True
-    # Проверить, связан ли пользователь с задачей (логист, монтажник, админ, тех.спец)
-    task_res = await db.execute(select(Task).where(Task.id == attachment.task_id))
-    task = task_res.scalars().first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Задача вложения не найдена")
-
-    if task.created_by == getattr(current_user, "id", None): # логист
-        allowed = True
-    elif task.assigned_user_id == getattr(current_user, "id", None): # монтажник
-        allowed = True
-    elif getattr(current_user, "role", None) == Role.admin:
-        allowed = True
-    elif getattr(current_user, "role", None) == Role.tech_supp:
-        # Проверим, требуется ли тех.проверка для задачи
-        task_works_res = await db.execute(
-            select(TaskWork).where(TaskWork.task_id == task.id).options(selectinload(TaskWork.work_type))
-        )
-        task_works = task_works_res.scalars().all()
-        requires_tech_review = any(tw.work_type and tw.work_type.tech_supp_require for tw in task_works)
-        if requires_tech_review:
-            allowed = True
-
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    s3 = get_s3_client()
-    try:
-        url = await s3.presign_get(storage_key, expires=3600)
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=url)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Ошибка получения файла из S3")
     
 
 @router.post("/upload-fallback")
@@ -475,3 +425,38 @@ async def delete_attachment(task_id: int, attachment_id: int, background_tasks: 
     # запланировать удаление из S3
     background_tasks.add_task(delete_object_from_s3, att.storage_key)
     return DeleteOut(detail="Deleted")
+
+
+
+@router.get("/{full_path:path}")
+async def get_attachment(
+    full_path: str = Path(..., description="Storage key в S3"),
+    db: AsyncSession = Depends(get_db),
+):
+    print(f"[DEBUG] get_attachment called with full_path: {full_path}") # <--- Используем full_path
+
+    res = await db.execute(
+        select(TaskAttachment)
+        .where(
+            (
+                (TaskAttachment.storage_key == full_path) |  # <--- Используем full_path
+                (TaskAttachment.thumb_key == full_path)     # <--- Используем full_path
+            ),
+            TaskAttachment.deleted_at.is_(None)
+        )
+    )
+    attachment = res.scalars().first()
+    print(f"[DEBUG] Found attachment: {attachment}")
+
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Вложение не найдено")
+
+    s3 = get_s3_client()
+    try:
+        url = await s3.presign_get(full_path, expires=3600)
+        print(f"[DEBUG] Generated presigned URL: {url}")
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+    except Exception as e:
+        print(f"[DEBUG] get_attachment: S3 presign failed for {full_path}: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка получения файла из S3")

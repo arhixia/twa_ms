@@ -340,7 +340,6 @@ async def mont_task_detail(
             selectinload(Task.reports),
             selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
             selectinload(Task.assigned_user),
-            selectinload(Task.attachments)  # ✅ Загружаем вложения задачи
         )
         .where(Task.id == task_id)
     )
@@ -390,22 +389,6 @@ async def mont_task_detail(
             "photos": photos or None
         })
 
-    # --- attachments ---
-    attachments = [
-        {
-            "id": att.id,
-            "storage_key": att.storage_key,
-            "file_type": att.file_type.value,
-            "original_name": att.original_name,
-            "size": att.size,
-            "uploader_id": att.uploader_id,
-            "uploaded_at": str(att.uploaded_at) if att.uploaded_at else None,
-            "thumb_key": att.thumb_key,
-            "report_id": att.report_id  # ✅ Включаем ID отчёта, к которому привязано вложение
-        }
-        for att in (task.attachments or [])
-        if att.processed and not att.deleted_at  # Только обработанные и не удалённые вложения
-    ] or None
 
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
@@ -434,7 +417,6 @@ async def mont_task_detail(
         "work_types": work_types,
         "history": history,
         "reports": reports or None,
-        "attachments": attachments or None,  # ✅ Включаем вложения
         "requires_tech_supp": requires_tech_supp,
     }
 
@@ -1434,79 +1416,6 @@ async def mont_completed_task_detail(
         "reports": reports or None,
         "requires_tech_supp": requires_tech_supp
     }
-
-
-@router.get("/tasks/{task_id}/reports/{report_id}/attachments", dependencies=[Depends(require_roles(Role.montajnik))])
-async def get_report_attachments(
-    task_id: int,
-    report_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    # Проверка, что отчёт существует и принадлежит монтажнику
-    res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
-    report = res.scalars().first()
-    if not report or report.author_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Report not found or access denied")
-
-    res = await db.execute(select(TaskAttachment).where(
-        TaskAttachment.task_id == task_id,
-        TaskAttachment.report_id == report_id,
-        TaskAttachment.deleted_at == None
-    ))
-    items = res.scalars().all()
-
-    s3 = get_s3_client()
-    out = []
-    for it in items:
-        try:
-            url = await s3.presign_get(it.storage_key, expires=300)
-        except Exception:
-            url = None
-        out.append({
-            "id": it.id,
-            "storage_key": it.storage_key,
-            "presigned_url": url,
-            "thumb_key": it.thumb_key,
-            "uploaded_at": it.uploaded_at,
-            "original_name": it.original_name,
-        })
-    return out
-
-
-@router.delete("/tasks/{task_id}/reports/{report_id}/attachments/{attachment_id}", dependencies=[Depends(require_roles(Role.montajnik))])
-async def delete_report_attachment_by_montajnik(
-    background_tasks: BackgroundTasks,
-    task_id: int,
-    report_id: int,
-    attachment_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    # Проверка, что отчёт существует и принадлежит монтажнику
-    r_res = await db.execute(select(TaskReport).where(TaskReport.id == report_id, TaskReport.task_id == task_id))
-    report = r_res.scalars().first()
-    if not report or report.author_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Report not found or access denied")
-
-    # Проверка, что вложение принадлежит этому отчёту и монтажнику
-    a_res = await db.execute(select(TaskAttachment).where(
-        TaskAttachment.id == attachment_id,
-        TaskAttachment.task_id == task_id,
-        TaskAttachment.report_id == report_id,
-        TaskAttachment.uploader_id == current_user.id,
-        TaskAttachment.deleted_at == None
-    ))
-    att = a_res.scalars().first()
-    if not att:
-        raise HTTPException(status_code=404, detail="Attachment not found or not yours")
-
-    att.deleted_at = datetime.now(timezone.utc)
-    await db.flush()
-    await db.commit()
-    background_tasks.add_task("back.files.handlers.delete_object_from_s3", att.storage_key)
-    return {"detail": "Attachment deleted"}
-
 
 @router.get("/my_reports_reviews", response_model=List[MontajnikReportReview], dependencies=[Depends(require_roles(Role.montajnik))])
 async def get_my_reports_reviews(

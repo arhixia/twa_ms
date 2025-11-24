@@ -12,9 +12,43 @@ import {
   getContactPersonPhone, // <--- Импорт
   getActiveMontajniks,
   archiveTask,
+  listReportAttachments,
+  getAttachmentUrl,
 } from "../../api";
 import "../../styles/LogistPage.css";
 import useAuthStore from "@/store/useAuthStore";
+
+
+function useReportAttachments(reportId) {
+  const [attachments, setAttachments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!reportId) {
+      setAttachments([]);
+      return;
+    }
+    const fetchAttachments = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await listReportAttachments(reportId);
+        setAttachments(data);
+      } catch (err) {
+        console.error("Ошибка загрузки вложений отчёта:", err);
+        setError(err.response?.data?.detail || "Ошибка загрузки вложений");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAttachments();
+  }, [reportId]);
+
+  return { attachments, loading, error };
+}
+
 
 function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
   const [comment, setComment] = useState("");
@@ -324,11 +358,25 @@ export default function TaskDetailPage() {
   const [loadingPhone, setLoadingPhone] = useState(false); // <--- Для редактирования
   const [rejectModal, setRejectModal] = useState({ open: false, taskId: null, reportId: null });
   const [montajniks, setMontajniks] = useState([]); // <--- Список монтажников
+   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
+
 
   useEffect(() => {
     loadRefs();
     loadTask();
   }, [id]);
+
+  const loadReportAttachments = async (reportId) => {
+    try {
+      const data = await listReportAttachments(reportId);
+      setReportAttachmentsMap(prev => ({
+        ...prev,
+        [reportId]: data
+      }));
+    } catch (err) {
+      console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
+    }
+  };
 
 
   async function handleArchiveTask() {
@@ -464,6 +512,14 @@ export default function TaskDetailPage() {
       } else {
         setContactPersons([]);
       }
+
+      if (t.reports) {
+        t.reports.forEach(r => {
+          loadReportAttachments(r.id);
+        });
+      }
+
+      
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       alert("Ошибка загрузки задачи");
@@ -749,43 +805,46 @@ export default function TaskDetailPage() {
     setField("assignment_type", "broadcast"); // <--- Меняем тип на broadcast
   }
 
-  function renderAttachments(attachments) {
+   function renderAttachments(attachments) {
     if (!Array.isArray(attachments) || attachments.length === 0) {
       return <span>Нет вложений</span>;
     }
-
     return (
       <div className="attached-list" style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
         {attachments.map((a, index) => {
           let src = "";
           let key = `attachment-${index}`;
-
           if (a && typeof a === "object") {
+            // Используем presigned_url, если есть, иначе формируем через getAttachmentUrl
             if (a.presigned_url) {
               src = a.presigned_url;
+            } else if (a.thumb_key) {
+              src = getAttachmentUrl(a.thumb_key); // <--- Используем thumb
             } else if (a.storage_key) {
-              src = `https://s3.storage.selcloud.ru/mobile-service-testing/${a.storage_key}`;
+              src = getAttachmentUrl(a.storage_key); // <--- Используем storage_key
             }
             key = a.id ? `id-${a.id}` : a.storage_key ? `sk-${a.storage_key}` : `index-${index}`;
           } else if (typeof a === "string") {
-            src = `https://s3.storage.selcloud.ru/mobile-service-testing/${a}`;
+            // Если приходит строка, предполагаем, что это storage_key
+            src = getAttachmentUrl(a);
             key = `str-${a}`;
           }
-
           if (src) {
             return (
               <div className="attached" key={key} style={{ minWidth: '100px', minHeight: '100px', border: '1px dashed #ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '5px' }}>
-                <img
-                  src={src}
-                  alt={`Attachment ${index}`}
-                  style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
-                  onLoad={() => console.log(`✅ IMG Loaded: ${src}`)}
-                  onError={(e) => {
-                    console.error(`❌ IMG Error: ${src}`, e);
-                    e.target.onerror = null;
-                    e.target.parentElement.innerHTML = `<span style={{ fontSize: 12px, textAlign: 'center' }}>Img Err (${index})</span>`;
-                  }}
-                />
+                <a href={src} target="_blank" rel="noopener noreferrer" style={{ display: 'contents' }}>
+                  <img
+                    src={src}
+                    alt={`Attachment ${index}`}
+                    style={{ maxHeight: 100, maxWidth: '100%', objectFit: 'contain' }}
+                    onLoad={() => console.log(`✅ IMG Loaded: ${src}`)}
+                    onError={(e) => {
+                      console.error(`❌ IMG Error: ${src}`, e);
+                      e.target.onerror = null;
+                      e.target.parentElement.innerHTML = `<span style={{ fontSize: 12px, textAlign: 'center' }}>Img Err (${index})</span>`;
+                    }}
+                  />
+                </a>
               </div>
             );
           } else {
@@ -799,6 +858,7 @@ export default function TaskDetailPage() {
       </div>
     );
   }
+
 
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (!task) return <div className="logist-main"><div className="empty">Задача не найдена</div></div>;
@@ -1277,71 +1337,119 @@ export default function TaskDetailPage() {
               </div>
 
               <div className="section">
-  <h3>Отчёты монтажников</h3>
+  <div className="section">
+            <h3>Отчёты монтажников</h3>
+            {(task.reports || []).length ? (
+              task.reports.map((r) => {
+                // --- ИЗМЕНЕНО: Извлечение выполненных работ и комментария ---
+                let performedWorks = "";
+                let comment = "";
+                if (r.text) {
+                  const lines = r.text.split("\n\n");
+                  if (lines[0].startsWith("Выполнено: ")) {
+                    performedWorks = lines[0].substring("Выполнено: ".length);
+                  }
+                  if (lines.length > 1) {
+                    comment = lines.slice(1).join("\n\n");
+                  } else if (!r.text.startsWith("Выполнено: ")) {
+                    comment = r.text;
+                  }
+                }
 
-  {(task.reports || []).length ? (
-    task.reports.map((r) => (
-      <div key={r.id} className="report">
-        <p>
-          #{r.id}: {r.text || "—"}
-        </p>
+                // --- ИЗМЕНЕНО: Получение вложений из reportAttachmentsMap ---
+                const reportAttachments = reportAttachmentsMap[r.id] || [];
+                const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
 
-        <p>
-          <b>Логист:</b> {r.approval_logist || "—"}
-          {task.requires_tech_supp === true && (
-            <>
-              {" "} | <b>Тех.спец:</b> {r.approval_tech || "—"}
-            </>
-          )}
-        </p>
+                return (
+                  <div key={r.id} className="report">
+                    {/* #37: Выполнено: {типы работ} */}
+                    <p>
+                      <b>#{r.id}:</b> {performedWorks ? `Выполнено: ${performedWorks}` : "Нет выполненных работ"}
+                    </p>
+                    {/* С новой строки — комментарий монтажника */}
+                    {comment && (
+                      <p>{comment}</p>
+                    )}
+                    {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
+                    {reportAttachmentsLoading ? (
+                      <p>Загрузка вложений...</p>
+                    ) : reportAttachments.length > 0 ? (
+                      <div className="attached-list">
+                        {reportAttachments.map((att, idx) => {
+                          const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+                          const thumbUrl = att.thumb_key
+                            ? getAttachmentUrl(att.thumb_key)
+                            : originalUrl;
 
-        {task.requires_tech_supp === true &&
-          (r.approval_tech !== "waiting" &&
-            r.approval_tech !== "rejected") && (
-            <p
-              style={{
-                color:
-                  r.approval_tech === "approved"
-                    ? "green"
-                    : r.approval_tech === "rejected"
-                    ? "red"
-                    : "orange",
-              }}
-            >
-              <b>Тех.спец:</b> {r.approval_tech}
-              {r.review_comment &&
-                r.approval_tech === "rejected" &&
-                ` - ${r.review_comment}`}
-            </p>
-          )}
-
-        <div className="report-actions">
-          {r.approval_logist === "waiting" ? (
-            <>
-              <button
-                type="button"
-                onClick={() => handleApproveReport(task.id, r.id)}
-              >
-                ✅ Принять
-              </button>
-              <button
-                type="button"
-                onClick={() => handleRejectReport(task.id, r.id)}
-              >
-                ❌ Отклонить
-              </button>
-            </>
-          ) : null}
-        </div>
-
-        {r.photos && r.photos.length > 0 && (
-          <div className="attached-list">{renderAttachments(r.photos)}</div>
-        )}
-      </div>
-    ))
-  ) : (
-    <div className="empty">Отчётов пока нет</div>
-  )}
+                          return (
+                            <a
+                              key={att.id}
+                              href={originalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <img
+                                src={thumbUrl}
+                                alt={`Report attachment ${idx}`}
+                                style={{ maxHeight: 100 }}
+                              />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p>Вложений нет</p>
+                    )}
+                    {/* СО СЛЕДУЮЩЕЙ СТРОКИ — статусы проверки */}
+                    <p>
+                      <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
+                        {r.approval_logist || "waiting"}
+                      </span>
+                      {task.requires_tech_supp === true && (
+                        <>
+                          {" | "}
+                          <b>Тех.спец:</b>{" "}
+                          <span style={{
+                            color: r.approval_tech === "approved"
+                              ? "green"
+                              : r.approval_tech === "rejected"
+                              ? "red"
+                              : "orange"
+                          }}>
+                            {r.approval_tech || "waiting"}
+                          </span>
+                        </>
+                      )}
+                    </p>
+                    {/* Комментарий отклонения */}
+                    {r.review_comment && (
+                      <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
+                    )}
+                    <div className="report-actions">
+                      {r.approval_logist === "waiting" ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleApproveReport(task.id, r.id)}
+                          >
+                            ✅ Принять
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRejectReport(task.id, r.id)}
+                          >
+                            ❌ Отклонить
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="empty">Отчётов пока нет</div>
+            )}
+          </div>
 </div>
 
             </>

@@ -372,16 +372,17 @@ export default function MontajnikTaskDetailPage() {
   }
 
   const loadReportAttachments = async (reportId) => {
-    try {
-      const data = await listReportAttachments(reportId);
-      setReportAttachmentsMap(prev => ({
-        ...prev,
-        [reportId]: data
-      }));
-    } catch (err) {
-      console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
-    }
-  };
+  try {
+    const data = await listReportAttachments(reportId);
+    console.log(`[DEBUG] loadReportAttachments for ${reportId}:`, data); // <--- Добавить лог
+    setReportAttachmentsMap(prev => ({
+      ...prev,
+      [reportId]: data
+    }));
+  } catch (err) {
+    console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
+  }
+};
 
 
   useEffect(() => {
@@ -568,88 +569,119 @@ export default function MontajnikTaskDetailPage() {
             {/* --- КОНЕЦ НОВОЙ СЕКЦИИ --- */}
 
             {/* Отчёты */}
-             <div className="section">
-        <h3>Отчёты</h3>
-        {(task.reports && task.reports.length > 0) ? (
-          task.reports.map(r => {
-            const reportAttachments = reportAttachmentsMap[r.id] || [];
-            const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
+            <div className="section">
+  <h3>Отчёты</h3>
+  {(task.reports && task.reports.length > 0) ? (
+    task.reports.map(r => {
+      const reportAttachments = reportAttachmentsMap[r.id] || [];
+      console.log(`[DEBUG] reportAttachments for ${r.id}:`, reportAttachments);
+      const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
 
-            return (
-              <div key={r.id} className="report">
-                <p>#{r.id}: {r.text || "—"}</p>
-                <p>
-                  <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
-                    {r.approval_logist || "—"}
-                  </span>
-                  {task.requires_tech_supp === true && (
-                    <>
-                      {" "} |
-                      <b>Тех.спец:</b>{" "}
-                      <span style={{
-                        color: r.approval_tech === "approved"
-                          ? "green"
-                          : r.approval_tech === "rejected"
-                          ? "red"
-                          : "orange"
-                      }}>
-                        {r.approval_tech || "waiting"}
-                      </span>
-                    </>
-                  )}
-                </p>
-                {r.review_comment && (
-                  <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
-                )}
-                {/* Отображаем вложения отчёта */}
-                {reportAttachmentsLoading ? (
-                  <p>Загрузка вложений...</p>
-                ) : reportAttachments.length > 0 ? (
-                  <div className="attached-list">
-                    {reportAttachments.map((att, idx) => {
-                      // Используем presigned_url из вложения отчёта
-                      const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
-                      const thumbUrl = att.thumb_key
-                        ? getAttachmentUrl(att.thumb_key)
-                        : originalUrl;
+      // --- НОВОЕ: Извлекаем выполненные работы и комментарий из r.text ---
+      let performedWorks = "";
+      let comment = "";
+      if (r.text) {
+        const lines = r.text.split("\n\n");
+        if (lines[0].startsWith("Выполнено: ")) {
+          performedWorks = lines[0].substring("Выполнено: ".length);
+        }
+        if (lines.length > 1) {
+          comment = lines.slice(1).join("\n\n");
+        } else if (!r.text.startsWith("Выполнено: ")) {
+          comment = r.text;
+        }
+      }
+      // --- КОНЕЦ НОВОГО ---
 
-                      return (
-                        <a
-                          key={att.id}
-                          href={originalUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <img
-                            src={thumbUrl}
-                            alt={`Report attachment ${idx}`}
-                            style={{ maxHeight: 100 }}
-                          />
-                        </a>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p>Вложений нет</p>
-                )}
-              </div>
-            );
-          })
-        ) : (
-          <div className="empty">Отчётов пока нет</div>
-        )}
+      return (
+        <div key={r.id} className="report">
+          {/* #37: Выполнено: {типы работ} */}
+          <p>
+            <b>#{r.id}:</b> {performedWorks ? `Выполнено: ${performedWorks}` : "Нет выполненных работ"}
+          </p>
+          
+          {/* С НОВОЙ СТРОКИ — комментарий монтажника */}
+          {comment && (
+            <p>{comment}</p>
+          )}
+          
+          {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
+          {reportAttachmentsLoading ? (
+            <p>Загрузка вложений...</p>
+          ) : reportAttachments.length > 0 ? (
+            <div className="attached-list">
+              {reportAttachments.map((att, idx) => {
+                const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+                const thumbUrl = att.thumb_key
+                  ? getAttachmentUrl(att.thumb_key)
+                  : originalUrl;
 
-        <div className="report-form">
-          {task.status !== "completed" && (
-            <div className="report-form">
-              <h4>Создать новый отчёт</h4>
-              <button className="add-btn" onClick={() => setShowReportModal(true)}>
-                📝 Добавить отчёт
-              </button>
+                console.log(`[DEBUG] Att ${att.id}: thumbUrl = ${thumbUrl}, originalUrl = ${originalUrl}`);
+
+                return (
+                  <a
+                    key={att.id}
+                    href={originalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <img
+                      src={thumbUrl}
+                      alt={`Report attachment ${idx}`}
+                      style={{ maxHeight: 100 }}
+                    />
+                  </a>
+                );
+              })}
             </div>
+          ) : (
+            <p>Вложений нет</p>
+          )}
+          
+          {/* СО СЛЕДУЮЩЕЙ СТРОКИ — статусы проверки */}
+          <p>
+            <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
+              {r.approval_logist || "waiting"}
+            </span>
+            {task.requires_tech_supp === true && (
+              <>
+                {" | "}
+                <b>Тех.спец:</b>{" "}
+                <span style={{
+                  color: r.approval_tech === "approved"
+                    ? "green"
+                    : r.approval_tech === "rejected"
+                    ? "red"
+                    : "orange"
+                }}>
+                  {r.approval_tech || "waiting"}
+                </span>
+              </>
+            )}
+          </p>
+          
+          {/* Комментарий отклонения */}
+          {r.review_comment && (
+            <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
           )}
         </div>
+      );
+    })
+  ) : (
+    <div className="empty">Отчётов пока нет</div>
+  )}
+
+  <div className="report-form">
+    {task.status !== "completed" && (
+      <div className="report-form">
+        <h4>Создать новый отчёт</h4>
+        <button className="add-btn" onClick={() => setShowReportModal(true)}>
+          📝 Добавить отчёт
+        </button>
       </div>
+    )}
+  </div>
+</div>
 
           </div>
         </div>

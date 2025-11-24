@@ -208,10 +208,9 @@ export async function logistFilterCompletedTasks({ company_id, assigned_user_id,
   return (await api.get(`/logist/completed-tasks/filter?${params.toString()}`)).data;
 }
 
+//att
 
-// ---------- ATTACHMENTS ----------
-
-export async function getAttachmentUrl(storageKey) {
+export function getAttachmentUrl(storageKey) { 
   return `${import.meta.env.VITE_API_URL}/attachments/${storageKey}`;
 }
 
@@ -230,7 +229,7 @@ export async function uploadFallback(file, taskId, reportId = null) {
     form,
     { headers: { "Content-Type": "multipart/form-data" } }
   );
-  return res.data; // { attachment_id, storage_key }
+  return res.data; 
 }
 
 

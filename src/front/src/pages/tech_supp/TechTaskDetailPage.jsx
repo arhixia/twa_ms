@@ -9,8 +9,42 @@ import {
   getTechCompaniesList,      // ✅ Новое
   getTechContactPersonsByCompany, // ✅ Новое
   getTechContactPersonPhone, // <--- Новый импорт
+  // --- НОВОЕ: Импорты для вложений отчётов ---
+  listReportAttachments,
+  getAttachmentUrl,
 } from "../../api";
 import "../../styles/LogistPage.css";
+
+// --- НОВОЕ: Хук для загрузки вложений отчёта ---
+function useReportAttachments(reportId) {
+  const [attachments, setAttachments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!reportId) {
+      setAttachments([]);
+      return;
+    }
+    const fetchAttachments = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await listReportAttachments(reportId);
+        setAttachments(data);
+      } catch (err) {
+        console.error("Ошибка загрузки вложений отчёта:", err);
+        setError(err.response?.data?.detail || "Ошибка загрузки вложений");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAttachments();
+  }, [reportId]);
+
+  return { attachments, loading, error };
+}
 
 export default function TechTaskDetailPage() {
   const { id } = useParams();
@@ -27,6 +61,9 @@ export default function TechTaskDetailPage() {
   const [contactPersons, setContactPersons] = useState([]); // ✅ Новое
   // ✅ Состояние для хранения телефона контактного лица
   const [contactPersonPhone, setContactPersonPhone] = useState(null); // <--- Добавлено
+
+  // --- НОВОЕ: Состояние для вложений отчётов ---
+  const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
 
   useEffect(() => {
     loadRefs();
@@ -49,6 +86,19 @@ export default function TechTaskDetailPage() {
       console.error("Ошибка загрузки справочников", e);
     }
   }
+
+  // --- НОВОЕ: Функция для загрузки вложений отчётов ---
+  const loadReportAttachments = async (reportId) => {
+    try {
+      const data = await listReportAttachments(reportId);
+      setReportAttachmentsMap(prev => ({
+        ...prev,
+        [reportId]: data
+      }));
+    } catch (err) {
+      console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
+    }
+  };
 
   async function loadTask() {
     setLoading(true);
@@ -85,6 +135,13 @@ export default function TechTaskDetailPage() {
       } else {
         // Если телефон уже есть в data или contact_person_id отсутствует
         setContactPersonPhone(t.contact_person_phone || null);
+      }
+
+      // --- НОВОЕ: Загрузка вложений для всех отчётов ---
+      if (t.reports) {
+        t.reports.forEach(r => {
+          loadReportAttachments(r.id);
+        });
       }
 
     } catch (err) {
@@ -255,39 +312,86 @@ export default function TechTaskDetailPage() {
           <div className="section">
             <h3>Отчёты монтажников</h3>
             {(task.reports || []).length ? (
-              task.reports.map((r) => (
-                <div key={r.id} className="report">
-                  <p>
-                    #{r.id}: {r.text || "—"}
-                  </p>
-                  <p>
-                    logist: <b>{r.approval_logist || "—"}</b> | tech:{" "}
-                    <b>{r.approval_tech || "—"}</b>
-                  </p>
-                  {/* Отображаем статус и комментарий другого проверяющего, если он не waiting и не текущий */}
-                  {/* В данном случае, тех.спец видит статус логиста */}
-                  {(r.approval_logist !== "waiting" && r.approval_logist !== "rejected") && (
-                    <p style={{ color: r.approval_logist === "approved" ? "green" : "orange" }}>
-                      <b>Логист:</b> {r.approval_logist} {r.review_comment && r.approval_logist === "rejected" && ` - ${r.review_comment}`}
+              task.reports.map((r) => {
+                // --- ИЗМЕНЕНО: Извлечение выполненных работ и комментария ---
+                let performedWorks = "";
+                let comment = "";
+                if (r.text) {
+                  const lines = r.text.split("\n\n");
+                  if (lines[0].startsWith("Выполнено: ")) {
+                    performedWorks = lines[0].substring("Выполнено: ".length);
+                  }
+                  if (lines.length > 1) {
+                    comment = lines.slice(1).join("\n\n");
+                  } else if (!r.text.startsWith("Выполнено: ")) {
+                    comment = r.text;
+                  }
+                }
+
+                // --- ИЗМЕНЕНО: Получение вложений из reportAttachmentsMap ---
+                const reportAttachments = reportAttachmentsMap[r.id] || [];
+                const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
+
+                return (
+                  <div key={r.id} className="report">
+                    {/* #37: Выполнено: {типы работ} */}
+                    <p>
+                      <b>#{r.id}:</b> {performedWorks ? `Выполнено: ${performedWorks}` : "Нет выполненных работ"}
                     </p>
-                  )}
-                  <div className="report-actions">
+                    {/* С новой строки — комментарий монтажника */}
+                    {comment && (
+                      <p>{comment}</p>
+                    )}
+                    {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
+                    {reportAttachmentsLoading ? (
+                      <p>Загрузка вложений...</p>
+                    ) : reportAttachments.length > 0 ? (
+                      <div className="attached-list">
+                        {reportAttachments.map((att, idx) => {
+                          const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+                          const thumbUrl = att.thumb_key
+                            ? getAttachmentUrl(att.thumb_key)
+                            : originalUrl;
+
+                          return (
+                            <a
+                              key={att.id}
+                              href={originalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <img
+                                src={thumbUrl}
+                                alt={`Report attachment ${idx}`}
+                                style={{ maxHeight: 100 }}
+                              />
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p>Вложений нет</p>
+                    )}
+                    {/* СО СЛЕДУЮЩЕЙ СТРОКИ — статусы проверки */}
+                    <p>
+                      logist: <b>{r.approval_logist || "—"}</b> | tech:{" "}
+                      <b>{r.approval_tech || "—"}</b>
+                    </p>
+                    {/* Отображаем статус и комментарий другого проверяющего, если он не waiting и не текущий */}
+                    {/* В данном случае, тех.спец видит статус логиста */}
+                    {(r.approval_logist !== "waiting" && r.approval_logist !== "rejected") && (
+                      <p style={{ color: r.approval_logist === "approved" ? "green" : "orange" }}>
+                        <b>Логист:</b> {r.approval_logist} {r.review_comment && r.approval_logist === "rejected" && ` - ${r.review_comment}`}
+                      </p>
+                    )}
+                    <div className="report-actions">
                       {r.approval_tech === "waiting" && (
                         <button onClick={() => handleTechApprove(task.id, r.id)}>✅ Принять (Тех)</button>
                       )}
                     </div>
-
-                  {r.photos && r.photos.length > 0 && (
-                    <div className="attached-list">
-                      {r.photos.map((photoUrl, idx) => (
-                        <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                          <img src={photoUrl} alt={`Report photo ${idx}`} style={{ maxHeight: 100 }} />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))
+                  </div>
+                );
+              })
             ) : (
               <div className="empty">Отчётов пока нет</div>
             )}
@@ -295,36 +399,6 @@ export default function TechTaskDetailPage() {
         </div>
       </div>
 
-      {/* Модальное окно отклонения отчёта тех.специалистом */}
-      {rejectModal.open && (
-        <div className="modal-backdrop">
-          <div className="modal" style={{ maxWidth: '500px' }}>
-            <div className="modal-header">
-              <h2>Отклонить отчёт #{rejectModal.reportId} по задаче #{rejectModal.taskId}</h2>
-              <button className="close" onClick={closeRejectModal}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-grid">
-                <label>
-                  Комментарий:
-                  <textarea
-                    value={rejectComment}
-                    onChange={(e) => setRejectComment(e.target.value)}
-                    rows="4"
-                    placeholder="Причина отклонения..."
-                  />
-                </label>
-              </div>
-            </div>
-            <div className="modal-actions">
-              <button className="primary" onClick={handleRejectTechReportSubmit}>
-                Отправить
-              </button>
-              <button onClick={closeRejectModal}>Отмена</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -407,10 +407,9 @@ async def patch_draft(
     # ✅ Сохраняем старые цены для проверки изменений
     old_client_price = task.client_price
     old_montajnik_reward = task.montajnik_reward
-    logger.info(f"Старые связи для черновика {draft_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name},contact_person_phone = {old_contact_person_phone}, company={old_company_name}, client_price={old_client_price}, montajnik_reward={old_montajnik_reward}")
-
+   
     data = payload.model_dump()
-    logger.info(f"Полный data dict: {data}")
+  
 
     contact_person_id = data.get("contact_person_id")
     assigned_user_id = data.get("assigned_user_id")

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['encourages-groundwater-william-skating.trycloudflare.com']
+    allowedHosts: ['properly-answers-attempted-decade.trycloudflare.com']
   },
 })
 
