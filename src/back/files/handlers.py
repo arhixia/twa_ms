@@ -13,27 +13,33 @@ THUMB_WIDTH = 320
 
 
 async def validate_and_process_attachment(attachment_id: int):
-    async with SessionLocal() as db:  # ✅ Так правильно
+    async with SessionLocal() as db:
         async with db.begin():
             att = (await db.execute(
                 select(TaskAttachment).where(TaskAttachment.id == attachment_id)
             )).scalars().first()
             if not att:
+                print(f"[DEBUG] validate_and_process_attachment: attachment {attachment_id} not found") # <--- Добавить
                 return
+            print(f"[DEBUG] validate_and_process_attachment: processing {att.storage_key}, current processed={att.processed}") # <--- Добавить
             s3 = get_s3_client()
 
             # head
             try:
                 meta = await s3.head_object(att.storage_key)
             except Exception as e:
+                print(f"[DEBUG] S3 head failed: {e}") # <--- Добавить
                 att.error_text = f"S3 head failed: {e}"
+                att.processed = True # <--- Помечаем как обработанное, но с ошибкой
                 await db.flush()
                 return
 
             # check content-type
             ctype = meta.get("ContentType") or att.mime_type
             if ctype not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
+                print(f"[DEBUG] Invalid content type: {ctype}") # <--- Добавить
                 att.error_text = f"Invalid content type: {ctype}"
+                att.processed = True # <--- Помечаем как обработанное, но с ошибкой
                 await db.flush()
                 return
 
@@ -44,7 +50,9 @@ async def validate_and_process_attachment(attachment_id: int):
                     body_stream = resp["Body"]
                     data = await body_stream.read()
             except Exception as e:
+                print(f"[DEBUG] S3 get failed: {e}") # <--- Добавить
                 att.error_text = f"S3 get failed: {e}"
+                att.processed = True # <--- Помечаем как обработанное, но с ошибкой
                 await db.flush()
                 return
 
@@ -73,12 +81,17 @@ async def validate_and_process_attachment(attachment_id: int):
                     content_disposition="inline"
                 )
                 att.thumb_key = thumb_key
+                print(f"[DEBUG] Thumbnail generated: {thumb_key}") # <--- Добавить
             except Exception as e:
+                print(f"[DEBUG] Thumb generation failed: {e}") # <--- Добавить
                 att.error_text = f"Thumb generation failed: {e}"
 
             att.processed = True
             att.error_text = att.error_text or None
             await db.flush()
+            print(f"[DEBUG] Attachment {att.id} marked as processed=True") # <--- Добавить
+
+            
 
 
 async def delete_object_from_s3(storage_key: str):

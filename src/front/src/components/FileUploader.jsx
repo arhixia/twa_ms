@@ -1,7 +1,8 @@
+// components/FileUploader.jsx
 import React, { useState, useEffect } from "react";
 import { uploadFallback } from "../api";
 
-export default function FileUploader({ onUploaded, onPending, taskId, reportId, maxFiles = 15 }) {
+export default function FileUploader({ onUploaded, taskId, reportId, maxFiles = 15 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -28,20 +29,17 @@ export default function FileUploader({ onUploaded, onPending, taskId, reportId, 
     const placeholder = { id: `tmp-${Date.now()}`, preview, uploading: true };
     setFiles((s) => [...s, placeholder]);
 
-    // если задача ещё не создана — просто кладём файл в pendingUploads
+    // Если задача ещё не создана — не грузим
     if (!taskId) {
-      onPending && onPending(f);
-      setFiles((s) =>
-        s.map((x) =>
-          x.id === placeholder.id ? { ...x, uploading: false, pending: true } : x
-        )
-      );
+      alert("❌ Невозможно загрузить файл: задача не создана");
+      setFiles((s) => s.filter((x) => x.id !== placeholder.id));
       return;
     }
 
     setLoading(true);
     try {
       // Используем обновлённую функцию с reportId
+      // Если reportId === null, файл привяжется к задаче
       const res = await uploadFallback(f, taskId, reportId);
       
       const item = { id: res.attachment_id, storage_key: res.storage_key, preview };
@@ -64,7 +62,7 @@ export default function FileUploader({ onUploaded, onPending, taskId, reportId, 
     <div className="uploader">
       <label className="uploader-label">
         + Загрузить фото
-        <input type="file" accept="image/*" onChange={handleFile} disabled={loading} />
+        <input type="file" accept="image/*" onChange={handleFile} disabled={loading || !taskId} />
       </label>
 
       <div className="thumbs">
@@ -72,7 +70,6 @@ export default function FileUploader({ onUploaded, onPending, taskId, reportId, 
           <div className="thumb" key={f.id}>
             <img src={f.preview} alt="preview" />
             {f.uploading && <span className="loading">⏳</span>}
-            {f.pending && <span className="pending">🕓 (ожидание задачи)</span>}
             <button className="thumb-remove" onClick={() => removeLocal(f.id)}>
               ✕
             </button>

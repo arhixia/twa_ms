@@ -211,15 +211,20 @@ export async function logistFilterCompletedTasks({ company_id, assigned_user_id,
 
 // ---------- ATTACHMENTS ----------
 
+export async function getAttachmentUrl(storageKey) {
+  return `${import.meta.env.VITE_API_URL}/attachments/${storageKey}`;
+}
+
 export async function uploadFallback(file, taskId, reportId = null) {
   const form = new FormData();
   form.append("file", file);
-  
+
+  // Если reportId передан, добавляем его в query параметры
   let url = `/attachments/upload-fallback?task_id=${taskId}`;
   if (reportId) {
     url += `&report_id=${reportId}`;
   }
-  
+
   const res = await api.post(
     url,
     form,
@@ -229,10 +234,43 @@ export async function uploadFallback(file, taskId, reportId = null) {
 }
 
 
-export async function listAttachments(taskId, reportId) {
-  return (await api.get(`/attachments/tasks/${taskId}/reports/${reportId}/attachments`)).data;
+export async function listReportAttachments(reportId) {
+  return (await api.get(`/attachments/reports/${reportId}/attachments`)).data;
 }
 
+
+export async function listTaskAttachments(taskId) {
+  return (await api.get(`/attachments/tasks/${taskId}/attachments`)).data;
+}
+
+export async function initMultipartUpload(filename, contentType, size, taskId, reportId = null) {
+  const payload = {
+    filename,
+    content_type: contentType,
+    size,
+    task_id: taskId,
+    report_id: reportId // Передаём reportId, если есть
+  };
+
+  const res = await api.post('/attachments/init-multipart', payload);
+  return res.data; // { storage_key, upload_id, part_size, parts_count, parts }
+}
+
+export async function completeMultipartUpload(storageKey, uploadId, parts, taskId, reportId = null, originalName, mimeType, size) {
+  const payload = {
+    storage_key: storageKey,
+    upload_id: uploadId,
+    parts,
+    task_id: taskId,
+    report_id: reportId, // Передаём reportId, если есть
+    original_name: originalName,
+    mime_type: mimeType,
+    size
+  };
+
+  const res = await api.post('/attachments/complete-multipart', payload);
+  return res.data; // { attachment_id, storage_key }
+}
 
 
 
@@ -504,9 +542,8 @@ export async function changeTaskStatus(taskId, statusPayload) {
 }
 
 // ✅ Создать отчёт
-export async function createReport(taskId, text, photos = []) {
-  // photos: ["storage_key1", ...]
-  return (await api.post(`/montajnik/tasks/${taskId}/report`, { text, photos })).data;
+export async function createReport(taskId, text) {
+  return (await api.post(`/montajnik/tasks/${taskId}/report`, { text})).data;
 }
 
 export async function getMontajnikEarningsByPeriod(startYear, startMonth, endYear, endMonth) {

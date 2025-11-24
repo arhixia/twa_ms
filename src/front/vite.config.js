@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['rapid-forward-fixes-adequate.trycloudflare.com']
+    allowedHosts: ['encourages-groundwater-william-skating.trycloudflare.com']
   },
 })
 

@@ -836,8 +836,6 @@ async def change_status(
 
     return {"detail": "ok", "status": new_status_enum.value}
 
-
-
 @router.post("/tasks/{task_id}/report")
 async def create_report(
     background_tasks: BackgroundTasks,
@@ -847,19 +845,21 @@ async def create_report(
     current_user=Depends(get_current_user),
 ):
     """
-    Создать черновой отчёт монтажника (text, photos list). Возвращает report_id.
-    payload: {"text": "...", "photos": ["storage_key1", ...]}
+    Создать черновой отчёт монтажника (text). Возвращает report_id.
+    payload: {"text": "..."} # photos больше нет
     """
-    _ensure_montajnik_or_403(current_user)
+    # Проверка, что пользователь - монтажник
+    if getattr(current_user, "role", None) != Role.montajnik:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     # Загружаем задачу с контактным лицом, компанией, оборудованием и видами работ для истории
     res = await db.execute(
         select(Task)
         .where(Task.id == task_id)
         .options(
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
-            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
-            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type)
         )
     )
     task = res.scalars().first()
@@ -871,29 +871,35 @@ async def create_report(
         raise HTTPException(status_code=403, detail="Задача не назначена вам")
 
     text = payload.get("text")
-    photos = payload.get("photos", [])  # список storage_key
 
-    report = TaskReport(task_id=task.id, author_id=current_user.id, text=text, photos_json=json.dumps(photos or []))
-    db.add(report)
-    await db.flush()
-
-    for sk in photos:
-        att = TaskAttachment(
-            task_id=task.id,
-            report_id=report.id,
-            storage_key=sk,
-            file_type=FileType.photo,
-            uploader_id=current_user.id,
-            uploader_role=current_user.role.value,
-            processed=False,
+    # --- НОВОЕ: Найти вложения пользователя, привязанные к задаче, но НЕ к отчёту ---
+    attachments_res = await db.execute(
+        select(TaskAttachment)
+        .where(
+            TaskAttachment.task_id == task_id,
+            TaskAttachment.report_id.is_(None),  # Не привязаны к отчёту
+            TaskAttachment.uploader_id == current_user.id,
+            TaskAttachment.processed == True,  # Только обработанные
+            TaskAttachment.deleted_at.is_(None) # И не удалённые
         )
-        db.add(att)
-        await db.flush()
-        # Убедитесь, что validate_and_process_attachment создаёт свою сессию
-        background_tasks.add_task("back.utils.processing.validate_and_process_attachment", att.id)
+    )
+    user_attachments = attachments_res.scalars().all()
+
+    # Создаём отчёт
+    report = TaskReport(task_id=task.id, author_id=current_user.id, text=text, photos_json=json.dumps([]))
+    db.add(report)
+    await db.flush() # Получаем report.id
+
+    # --- НОВОЕ: Обновить вложения, привязав их к отчёту ---
+    attachment_keys = []
+    for att in user_attachments:
+        att.report_id = report.id
+        attachment_keys.append(att.storage_key)
+
+    # --- НОВОЕ: Обновить photos_json отчёта ---
+    report.photos_json = json.dumps(attachment_keys)
 
     # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (создание отчёта) ---
-    # Формируем снимки *до* commit
     equipment_snapshot_for_history = [
         {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
         for te in task.equipment_links
@@ -909,32 +915,32 @@ async def create_report(
         user_id=getattr(current_user, "id", None),
         action=task.status,
         comment=f"Отчёт #{report.id} создан монтажником",
-        event_type=TaskHistoryEventType.report_submitted, # Новый тип
+        event_type=TaskHistoryEventType.report_submitted,
         related_entity_id=report.id,
         related_entity_type="report",
-        # --- Сохраняем все основные поля задачи ---
-        company_id=task.company_id,  # ✅ Заменено
-        contact_person_id=task.contact_person_id,  # ✅ Заменено
+        company_id=task.company_id,
+        contact_person_id=task.contact_person_id,
         contact_person_phone=task.contact_person_phone,
         vehicle_info=task.vehicle_info,
         gos_number = task.gos_number,
         scheduled_at=task.scheduled_at,
         location=task.location,
-        comment_field=task.comment, # ✅ Используем comment_field
+        comment_field=task.comment,
         status=task.status.value if task.status else None,
         assigned_user_id=task.assigned_user_id,
         client_price=str(task.client_price) if task.client_price is not None else None,
         montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
         photo_required=task.photo_required,
         assignment_type=task.assignment_type.value if task.assignment_type else None,
-        # --- НОВЫЕ ПОЛЯ: Снимки ---
-        equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
-        work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
+        equipment_snapshot=equipment_snapshot_for_history,
+        work_types_snapshot=work_types_snapshot_for_history,
     )
     db.add(hist)
-    await db.commit()
-    return {"report_id": report.id}
 
+    await db.commit()
+    await db.refresh(report) # Обновляем объект, чтобы получить актуальные данные
+
+    return {"report_id": report.id}
 
 @router.post("/tasks/{task_id}/report/{report_id}/submit", dependencies=[Depends(require_roles(Role.montajnik))])
 async def submit_report_for_review(

@@ -15,11 +15,44 @@ import {
   getMontCompaniesList,
   getMontContactPersonsByCompany,
   getMontContactPersonPhone,
-  rejectTask,
-  api // Импортируем api для получения предварительных URL
+  listReportAttachments,
+  getAttachmentUrl,
 } from "../../api";
 import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
+
+
+
+function useReportAttachments(reportId) {
+  const [attachments, setAttachments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!reportId) {
+      setAttachments([]);
+      return;
+    }
+    const fetchAttachments = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await listReportAttachments(reportId);
+        setAttachments(data);
+      } catch (err) {
+        console.error("Ошибка загрузки вложений отчёта:", err);
+        setError(err.response?.data?.detail || "Ошибка загрузки вложений");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAttachments();
+  }, [reportId]);
+
+  return { attachments, loading, error };
+}
+
 
 // --- Новый компонент: Модальное окно изменения статуса ---
 function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, taskWorkTypeIds, allWorkTypes }) {
@@ -96,10 +129,7 @@ function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, ta
 function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSubmitSuccess }) {
   const [selectedWorkTypes, setSelectedWorkTypes] = useState([]);
   const [comment, setComment] = useState("");
-  const [photos, setPhotos] = useState([]); // Файлы, которые будут загружены ПОСЛЕ создания отчёта
-  const [pendingPhotos, setPendingPhotos] = useState([]); // Файлы, загруженные до создания отчёта
   const [submitting, setSubmitting] = useState(false);
-  const [currentReportId, setCurrentReportId] = useState(null);
 
   useEffect(() => {
     setSelectedWorkTypes(taskWorkTypes);
@@ -111,24 +141,6 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
         ? prev.filter(id => id !== wtId)
         : [...prev, wtId]
     );
-  };
-
-  const handlePhotoUpload = (file) => {
-    if (currentReportId) {
-      // Если reportId уже создан, добавляем в основной список
-      setPhotos(prev => [...prev, file]);
-    } else {
-      // Если reportId ещё нет, добавляем в pending
-      setPendingPhotos(prev => [...prev, file]);
-    }
-  };
-
-  const handleRemovePhoto = (indexToRemove) => {
-    setPhotos(prev => prev.filter((_, index) => index !== indexToRemove));
-  };
-
-  const handleRemovePendingPhoto = (indexToRemove) => {
-    setPendingPhotos(prev => prev.filter((_, index) => index !== indexToRemove));
   };
 
   const handleSubmit = async () => {
@@ -145,19 +157,16 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
         fullComment += fullComment ? `\n\n${comment}` : comment;
     }
 
-    if (!fullComment.trim() && pendingPhotos.length === 0) {
-      alert("Добавьте выполненные работы, комментарий или фото.");
+    if (!fullComment.trim()) {
+      alert("Добавьте выполненные работы или комментарий.");
       return;
     }
 
     setSubmitting(true);
     try {
-      // Сначала создаем отчёт с фото, которые были загружены до создания отчёта
-      const photoKeys = pendingPhotos.map(p => p.storage_key).filter(sk => sk);
-
-      const createRes = await createReport(taskId, fullComment, photoKeys);
+      // Создаём отчёт без photos - вложения будут привязаны внутри
+      const createRes = await createReport(taskId, fullComment);
       const reportId = createRes.report_id;
-      setCurrentReportId(reportId);
 
       // Отправляем на проверку
       await submitReportForReview(taskId, reportId);
@@ -225,51 +234,21 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
 
           <div className="section">
             <label style={{ color: 'white' }}>Фото:</label>
+            {/* FileUploader теперь загружает файлы к задаче (reportId = null) */}
             <FileUploader 
-              onUploaded={handlePhotoUpload} 
+              onUploaded={() => {}} 
               taskId={taskId} 
-              reportId={currentReportId} 
+              reportId={null} // Файлы привязываются к задаче до создания отчёта
             />
-            
-            {/* Показываем загруженные фото */}
-            <div className="attached-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
-              {pendingPhotos.map((photo, index) => (
-                <div key={index} style={{ position: 'relative', display: 'inline-block' }}>
-                  <img
-                    src={photo.preview || `${import.meta.env.VITE_API_URL}/attachments/${photo.storage_key}`}
-                    alt={`Preview ${index}`}
-                    style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '4px' }}
-                  />
-                  <button
-                    onClick={() => handleRemovePendingPhoto(index)}
-                    style={{
-                      position: 'absolute',
-                      top: '-5px',
-                      right: '-5px',
-                      background: 'red',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '50%',
-                      width: '20px',
-                      height: '20px',
-                      cursor: 'pointer',
-                      fontSize: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    &times;
-                  </button>
-                </div>
-              ))}
-            </div>
+            <p style={{ color: 'orange', fontSize: '0.9em', marginTop: '5px' }}>
+              ⚠️ Фото будут привязаны к отчёту при его создании.
+            </p>
           </div>
 
         </div>
         <div className="modal-actions">
           <button className="primary" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Отправка...' : 'Отправить на проверку'}
+            {submitting ? 'Создание...' : 'Создать отчёт'}
           </button>
           <button onClick={onClose}>Отмена</button>
         </div>
@@ -300,7 +279,9 @@ export default function MontajnikTaskDetailPage() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectComment, setRejectComment] = useState("");
   const [attachments, setAttachments] = useState([]); // Состояние для вложений
+  const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
 
+  
 
   useEffect(() => {
     loadRefs();
@@ -389,6 +370,28 @@ export default function MontajnikTaskDetailPage() {
       setLoading(false);
     }
   }
+
+  const loadReportAttachments = async (reportId) => {
+    try {
+      const data = await listReportAttachments(reportId);
+      setReportAttachmentsMap(prev => ({
+        ...prev,
+        [reportId]: data
+      }));
+    } catch (err) {
+      console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
+    }
+  };
+
+
+  useEffect(() => {
+    if (task && task.reports) {
+      task.reports.forEach(r => {
+        loadReportAttachments(r.id);
+      });
+    }
+  }, [task]);
+
 
 
   
@@ -565,86 +568,89 @@ export default function MontajnikTaskDetailPage() {
             {/* --- КОНЕЦ НОВОЙ СЕКЦИИ --- */}
 
             {/* Отчёты */}
-            <div className="section">
-   <h3>Отчёты</h3>
-   {(task.reports && task.reports.length > 0) ? (
-     task.reports.map(r => (
-       <div key={r.id} className="report">
-         <p>#{r.id}: {r.text || "—"}</p>
-         {/* Отображаем статусы approval_logist и approval_tech */}
-         <p>
-           <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
-             {r.approval_logist || "—"}
-           </span>
-           {/* Используем r (отчёт) вместо task (задача), если поле находится в отчёте. 
-                Если же requires_tech_supp - это поле задачи, оставляем task. */}
-           {task.requires_tech_supp === true && ( 
-             <> 
-               {" "} | 
-               <b>Тех.спец:</b>{" "}
-               <span style={{
-                 color: r.approval_tech === "approved"
-                   ? "green"
-                   : r.approval_tech === "rejected"
-                   ? "red"
-                   : "orange"
-               }}>
-                 {r.approval_tech || "waiting"}
-               </span>
-             </>
-           )}
-         </p>
-         {/* Отображаем комментарий отклонения, если есть */}
-         {r.review_comment && (
-           <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
-         )}
-         {/* Отображаем вложения, привязанные к отчёту */}
-         {r.photos && r.photos.length > 0 && (
-           <div className="attached-list">
-             {r.photos.map((photoUrl, idx) => {
-               // Находим вложение по storage_key
-               const attachment = attachments.find(att => att.storage_key === photoUrl); // Используем attachments из замыкания render()
-               const thumbKey = attachment?.thumb_key;
-               const originalUrl = `${import.meta.env.VITE_API_URL}/attachments/${encodeURIComponent(photoUrl)}`;
-               const thumbUrl = thumbKey 
-                 ? `${import.meta.env.VITE_API_URL}/attachments/${encodeURIComponent(thumbKey)}` 
-                 : originalUrl; // Если миниатюры нет, используем оригинал
+             <div className="section">
+        <h3>Отчёты</h3>
+        {(task.reports && task.reports.length > 0) ? (
+          task.reports.map(r => {
+            const reportAttachments = reportAttachmentsMap[r.id] || [];
+            const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
 
-               return (
-                 <a 
-                   key={idx} 
-                   href={originalUrl} // Ссылка на оригинал
-                   target="_blank" 
-                   rel="noopener noreferrer"
-                 >
-                   <img 
-                     src={thumbUrl} // Отображаем миниатюру или оригинал
-                     alt={`Report photo ${idx}`} 
-                     style={{ maxHeight: 100 }} 
-                   />
-                 </a>
-               );
-             })}
-           </div>
-         )}
-       </div>
-     ))
-   ) : (
-     <div className="empty">Отчётов пока нет</div>
-   )}
+            return (
+              <div key={r.id} className="report">
+                <p>#{r.id}: {r.text || "—"}</p>
+                <p>
+                  <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
+                    {r.approval_logist || "—"}
+                  </span>
+                  {task.requires_tech_supp === true && (
+                    <>
+                      {" "} |
+                      <b>Тех.спец:</b>{" "}
+                      <span style={{
+                        color: r.approval_tech === "approved"
+                          ? "green"
+                          : r.approval_tech === "rejected"
+                          ? "red"
+                          : "orange"
+                      }}>
+                        {r.approval_tech || "waiting"}
+                      </span>
+                    </>
+                  )}
+                </p>
+                {r.review_comment && (
+                  <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
+                )}
+                {/* Отображаем вложения отчёта */}
+                {reportAttachmentsLoading ? (
+                  <p>Загрузка вложений...</p>
+                ) : reportAttachments.length > 0 ? (
+                  <div className="attached-list">
+                    {reportAttachments.map((att, idx) => {
+                      // Используем presigned_url из вложения отчёта
+                      const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+                      const thumbUrl = att.thumb_key
+                        ? getAttachmentUrl(att.thumb_key)
+                        : originalUrl;
 
-   {/* Форма создания нового отчёта */}
-   <div className="report-form">
-     {task.status !== "completed" && (
-       <div className="report-form">
-         <h4>Создать новый отчёт</h4>
-         <button className="add-btn" onClick={() => setShowReportModal(true)}>
-           📝 Добавить отчёт
-         </button>
-       </div>
-     )}
-   </div>
- </div>
+                      return (
+                        <a
+                          key={att.id}
+                          href={originalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <img
+                            src={thumbUrl}
+                            alt={`Report attachment ${idx}`}
+                            style={{ maxHeight: 100 }}
+                          />
+                        </a>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p>Вложений нет</p>
+                )}
+              </div>
+            );
+          })
+        ) : (
+          <div className="empty">Отчётов пока нет</div>
+        )}
+
+        <div className="report-form">
+          {task.status !== "completed" && (
+            <div className="report-form">
+              <h4>Создать новый отчёт</h4>
+              <button className="add-btn" onClick={() => setShowReportModal(true)}>
+                📝 Добавить отчёт
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
           </div>
         </div>
       </div>

@@ -177,8 +177,9 @@ def get_s3_client() -> S3Client:
         _default_s3_client = S3Client(
             access_key=ACCESS_KEY_S3,
             secret_key=SECRET_KEY_S3,
-            endpoint_url=ENDPOINT_URL_S3,
-            bucket_name=BUCKET_NAME_S3,
+            endpoint_url=ENDPOINT_URL_S3,  
+            bucket_name=BUCKET_NAME_S3,    
+            region_name="ru-1",            
             part_size=DEFAULT_PART_SIZE,
         )
     return _default_s3_client

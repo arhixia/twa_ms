@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Body, Depends, HTTPException, BackgroundTasks, UploadFile, File, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
@@ -6,14 +7,16 @@ from sqlalchemy import select
 from datetime import datetime, timezone
 from back.db.database import get_db
 from back.auth.auth import get_current_user
-from back.db.models import Task, TaskAttachment, Role
+from back.db.models import Task, TaskAttachment, Role, TaskReport, TaskWork
 from back.utils.selectel import get_s3_client
 from back.users.users_schemas import require_roles
 from back.db.models import FileType
 import aiofiles
 import hashlib
-
+from sqlalchemy.orm import selectinload
 from back.files.handlers import delete_object_from_s3, validate_and_process_attachment
+from fastapi import Path
+
 
 router = APIRouter()
 
@@ -63,7 +66,6 @@ async def init_multipart(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # Проверки прав: пользователь должен быть логист/монтажник/tech/admin в зависимости от контекста.
     user_role = getattr(current_user, "role", None)
     if user_role not in (Role.logist, Role.montajnik, Role.tech_supp, Role.admin):
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -75,12 +77,30 @@ async def init_multipart(
         raise HTTPException(status_code=400, detail="Unsupported content_type")
 
     s3 = get_s3_client()
-    
+
+    # --- НОВОЕ: Проверка report_id ---
+    if payload.report_id:
+        # Загрузить отчёт и проверить, что он принадлежит задаче и автор - текущий пользователь
+        report_res = await db.execute(
+            select(TaskReport)
+            .where(TaskReport.id == payload.report_id, TaskReport.task_id == payload.task_id)
+        )
+        report = report_res.scalars().first()
+        if not report:
+            raise HTTPException(status_code=404, detail="Отчёт не найден или не принадлежит задаче")
+        if report.author_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Только автор отчёта может добавлять к нему вложения")
+        # Убедиться, что текущий пользователь - монтажник
+        if current_user.role != Role.montajnik:
+            raise HTTPException(status_code=403, detail="Только монтажник может добавлять вложения к отчёту")
+
     # Генерируем ключ в зависимости от наличия report_id
     if payload.report_id:
         key = s3.key_for_report_attachment(payload.task_id or 0, payload.report_id, payload.filename)
+    else:
+        # Если report_id нет, используем старую логику
+        key = s3.key_for_task(payload.task_id or 0, payload.filename)
 
-    
     upload_id = await s3.create_multipart_upload(key, content_type=payload.content_type)
     parts_info = s3.compute_parts(payload.size)
     return InitMultipartOut(
@@ -117,6 +137,18 @@ async def complete_multipart(
     except Exception:
         meta = {}
 
+    # --- НОВОЕ: Проверка report_id перед созданием записи ---
+    report = None
+    if payload.report_id:
+        # Загрузить отчёт и проверить, что он принадлежит задаче и автор - текущий пользователь
+        report_res = await db.execute(
+            select(TaskReport)
+            .where(TaskReport.id == payload.report_id, TaskReport.task_id == payload.task_id)
+        )
+        report = report_res.scalars().first()
+        if not report or report.author_id != current_user.id or current_user.role != Role.montajnik:
+            raise HTTPException(status_code=403, detail="Недостаточно прав для добавления вложения к отчёту")
+
     # Создаём запись TaskAttachment
     attach = TaskAttachment(
         task_id=payload.task_id if payload.task_id is not None else 0,
@@ -135,10 +167,76 @@ async def complete_multipart(
     await db.commit()
     await db.refresh(attach)
 
+    # --- НОВОЕ: Обновить photos_json у отчёта ---
+    if attach.report_id and report: # report уже загружен выше
+        # Получить все storage_key вложений этого отчёта
+        attachments_res = await db.execute(
+            select(TaskAttachment.storage_key)
+            .where(TaskAttachment.report_id == attach.report_id)
+        )
+        keys = [row[0] for row in attachments_res.fetchall()]
+        report.photos_json = json.dumps(keys)
+        await db.flush()
+        await db.commit()
+
     # запуск обработки: thumbnail, checksum, validation
     background_tasks.add_task(validate_and_process_attachment, attach.id)
     return {"attachment_id": attach.id, "storage_key": attach.storage_key}
 
+
+
+@router.get("/attachments/{storage_key:path}")
+async def get_attachment(
+    storage_key: str = Path(..., description="Storage key в S3"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    # Проверить, что пользователь может получить этот файл
+    res = await db.execute(
+        select(TaskAttachment)
+        .where(TaskAttachment.storage_key == storage_key, TaskAttachment.deleted_at.is_(None))
+    )
+    attachment = res.scalars().first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Вложение не найдено")
+
+    # Проверить права доступа
+    allowed = False
+    if attachment.uploader_id == getattr(current_user, "id", None):
+        allowed = True
+    # Проверить, связан ли пользователь с задачей (логист, монтажник, админ, тех.спец)
+    task_res = await db.execute(select(Task).where(Task.id == attachment.task_id))
+    task = task_res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача вложения не найдена")
+
+    if task.created_by == getattr(current_user, "id", None): # логист
+        allowed = True
+    elif task.assigned_user_id == getattr(current_user, "id", None): # монтажник
+        allowed = True
+    elif getattr(current_user, "role", None) == Role.admin:
+        allowed = True
+    elif getattr(current_user, "role", None) == Role.tech_supp:
+        # Проверим, требуется ли тех.проверка для задачи
+        task_works_res = await db.execute(
+            select(TaskWork).where(TaskWork.task_id == task.id).options(selectinload(TaskWork.work_type))
+        )
+        task_works = task_works_res.scalars().all()
+        requires_tech_review = any(tw.work_type and tw.work_type.tech_supp_require for tw in task_works)
+        if requires_tech_review:
+            allowed = True
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    s3 = get_s3_client()
+    try:
+        url = await s3.presign_get(storage_key, expires=3600)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Ошибка получения файла из S3")
+    
 
 @router.post("/upload-fallback")
 async def upload_fallback_report(
@@ -161,13 +259,30 @@ async def upload_fallback_report(
     if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
         raise HTTPException(status_code=400, detail="Unsupported content_type")
 
+    # --- НОВОЕ: Проверка report_id ---
+    report = None
+    if report_id:
+        # Загрузить отчёт и проверить, что он принадлежит задаче и автор - текущий пользователь
+        report_res = await db.execute(
+            select(TaskReport)
+            .where(TaskReport.id == report_id, TaskReport.task_id == task_id)
+        )
+        report = report_res.scalars().first()
+        if not report:
+            raise HTTPException(status_code=404, detail="Отчёт не найден или не принадлежит задаче")
+        if report.author_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Только автор отчёта может добавлять к нему вложения")
+        # Убедиться, что текущий пользователь - монтажник
+        if current_user.role != Role.montajnik:
+            raise HTTPException(status_code=403, detail="Только монтажник может добавлять вложения к отчёту")
+
     # Чтение файла
     data = await file.read()
     if len(data) > 10 * 1024 ** 3:
         raise HTTPException(status_code=400, detail="File too large")
 
     s3 = get_s3_client()
-    
+
     # Генерируем ключ с учётом report_id
     if report_id:
         key = s3.key_for_report_attachment(task_id, report_id, file.filename)
@@ -186,7 +301,7 @@ async def upload_fallback_report(
     # Создаем запись в БД
     attach = TaskAttachment(
         task_id=task_id,
-        report_id=report_id,  # Указываем report_id если есть
+        report_id=report_id,  
         storage_key=key,
         file_type=FileType.photo,
         original_name=file.filename,
@@ -201,11 +316,21 @@ async def upload_fallback_report(
     await db.commit()
     await db.refresh(attach)
 
+    # --- НОВОЕ: Обновить photos_json у отчёта ---
+    if attach.report_id and report:
+        attachments_res = await db.execute(
+            select(TaskAttachment.storage_key)
+            .where(TaskAttachment.report_id == attach.report_id)
+        )
+        keys = [row[0] for row in attachments_res.fetchall()]
+        report.photos_json = json.dumps(keys)
+        await db.flush()
+        await db.commit()
+
     # Фоновая обработка
     background_tasks.add_task(validate_and_process_attachment, attach.id)
 
     return {"attachment_id": attach.id, "storage_key": key}
-
 
 # Список вложений задачи
 @router.get("/attachments/tasks/{task_id}/attachments", response_model=List[AttachmentOut])
@@ -239,6 +364,75 @@ async def list_attachments(
             id=it.id,
             storage_key=it.storage_key,
             presigned_url=url,  # ✅ Включаем предварительный URL
+            thumb_key=it.thumb_key,
+            uploader_id=it.uploader_id,
+            uploaded_at=it.uploaded_at,
+            size=it.size,
+            original_name=it.original_name,
+        ))
+    return out
+
+
+@router.get("/reports/{report_id}/attachments", response_model=List[AttachmentOut])
+async def list_report_attachments(
+    report_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    # Загрузить отчёт и связанную задачу, чтобы проверить права
+    report_res = await db.execute(
+        select(TaskReport)
+        .options(selectinload(TaskReport.task))
+        .where(TaskReport.id == report_id)
+    )
+    report = report_res.scalars().first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Отчёт не найден")
+
+    task = report.task
+
+    # Проверить права доступа: автор отчёта, создатель задачи (логист), исполнитель (монтажник), админ
+    allowed = False
+    if report.author_id == getattr(current_user, "id", None):
+        allowed = True
+    elif task.created_by == getattr(current_user, "id", None): # логист
+        allowed = True
+    elif task.assigned_user_id == getattr(current_user, "id", None): # монтажник
+        allowed = True
+    elif getattr(current_user, "role", None) == Role.admin:
+        allowed = True
+    elif getattr(current_user, "role", None) == Role.tech_supp: # тех.спец может смотреть, если его просят
+        # Проверим, требуется ли тех.проверка для задачи
+        # Загрузим работы задачи
+        task_works_res = await db.execute(
+            select(TaskWork).where(TaskWork.task_id == task.id).options(selectinload(TaskWork.work_type))
+        )
+        task_works = task_works_res.scalars().all()
+        requires_tech_review = any(tw.work_type and tw.work_type.tech_supp_require for tw in task_works)
+        if requires_tech_review:
+            allowed = True
+
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    # Загрузить вложения отчёта
+    res = await db.execute(
+        select(TaskAttachment)
+        .where(TaskAttachment.report_id == report_id, TaskAttachment.deleted_at.is_(None), TaskAttachment.processed == True)
+    )
+    items = res.scalars().all()
+    s3 = get_s3_client()
+    out = []
+    for it in items:
+        url = None
+        try:
+            url = await s3.presign_get(it.storage_key, expires=15000)  # 1 час
+        except Exception:
+            url = None
+        out.append(AttachmentOut(
+            id=it.id,
+            storage_key=it.storage_key,
+            presigned_url=url,
             thumb_key=it.thumb_key,
             uploader_id=it.uploader_id,
             uploaded_at=it.uploaded_at,
