@@ -131,6 +131,9 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // --- НОВОЕ: Состояния для отслеживания загрузки вложений ---
+  const [uploadedAttachments, setUploadedAttachments] = useState([]); // [{ id, storage_key, uploading: true/false, error: null/string }]
+
   useEffect(() => {
     setSelectedWorkTypes(taskWorkTypes);
   }, [taskWorkTypes]);
@@ -143,7 +146,58 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
     );
   };
 
+  // --- НОВОЕ: Функция onUploaded для FileUploader ---
+  const handleAttachmentUploaded = (attachmentData) => {
+  setUploadedAttachments(prev => [
+    ...prev.filter(att => att.id !== attachmentData.tmpId),
+    { 
+      id: attachmentData.id,
+      storage_key: attachmentData.storage_key,
+      uploading: false,
+      error: null
+    }
+  ]);
+};
+
+
+  // --- НОВОЕ: Функция для удаления вложения из состояния ---
+  const handleAttachmentRemoved = (storageKey) => {
+    console.log(`[DEBUG] handleAttachmentRemoved called for storage_key: ${storageKey}`);
+    setUploadedAttachments(prev => prev.filter(att => att.storage_key !== storageKey));
+  };
+
+  // --- НОВОЕ: Функция onUploading для FileUploader ---
+  const handleAttachmentUploading = (fileId) => {
+    setUploadedAttachments(prev => [
+      ...prev.filter(att => att.id !== fileId),
+      { id: fileId, uploading: true, error: null }
+    ]);
+  };
+
+  // --- НОВОЕ: Функция onUploadError для FileUploader ---
+  const handleAttachmentUploadError = (fileId, error) => {
+    setUploadedAttachments(prev => [
+      ...prev.filter(att => att.id !== fileId),
+      { id: fileId, uploading: false, error: error }
+    ]);
+  };
+
   const handleSubmit = async () => {
+    // --- НОВОЕ: Проверка на незавершённые загрузки ---
+    const pendingUploads = uploadedAttachments.filter(att => att.uploading);
+    if (pendingUploads.length > 0) {
+      alert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
+      return;
+    }
+
+    // --- НОВОЕ: Проверка на ошибки загрузки ---
+    const failedUploads = uploadedAttachments.filter(att => att.error);
+    if (failedUploads.length > 0) {
+      alert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
+      console.error("Failed uploads:", failedUploads);
+      return;
+    }
+
     // Формируем текст отчёта
     const performedWorksText = selectedWorkTypes
       .map(id => allWorkTypes.find(wt => wt.id === id)?.name || `ID ${id}`)
@@ -164,11 +218,10 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
 
     setSubmitting(true);
     try {
-      // Создаём отчёт без photos - вложения будут привязаны внутри
-      const createRes = await createReport(taskId, fullComment);
+      const attachmentKeysToBind = uploadedAttachments.map(att => att.storage_key);
+      const createRes = await createReport(taskId, fullComment, attachmentKeysToBind);
       const reportId = createRes.report_id;
 
-      // Отправляем на проверку
       await submitReportForReview(taskId, reportId);
 
       alert("Отчёт создан и отправлен на проверку!");
@@ -182,6 +235,11 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
       setSubmitting(false);
     }
   };
+
+  // --- НОВОЕ: Вычисляем статус загрузки ---
+  const pendingUploads = uploadedAttachments.filter(att => att.uploading);
+  const hasErrors = uploadedAttachments.some(att => att.error);
+  const successfulUploadsCount = uploadedAttachments.filter(att => !att.uploading && !att.error).length;
 
   const relevantWorkTypes = allWorkTypes.filter(wt => taskWorkTypes.includes(wt.id));
 
@@ -234,24 +292,49 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
 
           <div className="section">
             <label style={{ color: 'white' }}>Фото:</label>
-            {/* FileUploader теперь загружает файлы к задаче (reportId = null) */}
+            {/* FileUploader теперь загружает файлы к задаче (reportId = null) и обновляет список ключей */}
             <FileUploader 
-              onUploaded={() => {}} 
+              onUploaded={handleAttachmentUploaded}
+              onUploading={handleAttachmentUploading}
+              onUploadError={handleAttachmentUploadError}
+              onRemoved={handleAttachmentRemoved}
               taskId={taskId} 
-              reportId={null} // Файлы привязываются к задаче до создания отчёта
+              reportId={null}
             />
             <p style={{ color: 'orange', fontSize: '0.9em', marginTop: '5px' }}>
               ⚠️ Фото будут привязаны к отчёту при его создании.
             </p>
+            {/* --- Индикаторы загрузки --- */}
+            {pendingUploads.length > 0 && (
+              <p style={{ color: 'yellow', fontSize: '0.9em', marginTop: '5px' }}>
+                🔄 Загружается вложений: {pendingUploads.length}
+              </p>
+            )}
+            {hasErrors && (
+              <p style={{ color: 'red', fontSize: '0.9em', marginTop: '5px' }}>
+                ❗ Обнаружены ошибки загрузки.
+              </p>
+            )}
+            {successfulUploadsCount > 0 && (
+              <p style={{ color: '#4caf50', fontSize: '0.9em', marginTop: '5px' }}>
+                ✅ Загружено вложений: {successfulUploadsCount}
+              </p>
+            )}
           </div>
 
         </div>
         <div className="modal-actions">
-          <button className="primary" onClick={handleSubmit} disabled={submitting}>
-            {submitting ? 'Создание...' : 'Создать отчёт'}
-          </button>
-          <button onClick={onClose}>Отмена</button>
-        </div>
+  <button
+    className="primary"
+    onClick={handleSubmit}
+    disabled={submitting || pendingUploads.length > 0 || hasErrors}
+  >
+    {submitting ? 'Создание...' : 'Создать отчёт'}
+  </button>
+
+  <button onClick={onClose}>Отмена</button>
+</div>
+
       </div>
     </div>
   );

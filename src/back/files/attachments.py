@@ -16,7 +16,7 @@ import hashlib
 from sqlalchemy.orm import selectinload
 from back.files.handlers import delete_object_from_s3, validate_and_process_attachment
 from fastapi import Path
-
+from back.files.handlers import delete_object_from_s3
 
 router = APIRouter()
 
@@ -397,35 +397,40 @@ class DeleteOut(BaseModel):
     detail: str
 
 
-@router.delete("/tasks/{task_id}/attachments/{attachment_id}", response_model=DeleteOut)
-async def delete_attachment(task_id: int, attachment_id: int, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    res = await db.execute(select(TaskAttachment).where(TaskAttachment.id == attachment_id, TaskAttachment.task_id == task_id))
-    att = res.scalars().first()
-    if not att:
-        raise HTTPException(status_code=404, detail="Attachment not found")
 
-    # Права: uploader OR task.creator(logist) OR admin
-    allowed = False
-    if att.uploader_id and att.uploader_id == getattr(current_user, "id", None):
-        allowed = True
-    # проверяем создателя задачи
-    t_res = await db.execute(select(Task).where(Task.id == task_id))
-    task = t_res.scalars().first()
-    if task and task.created_by == getattr(current_user, "id", None):
-        allowed = True
-    if getattr(current_user, "role", None) == Role.admin:
-        allowed = True
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Forbidden")
+# --- ЭНДПОИНТ: Удаление вложения по storage_key ---
+@router.delete("/pending/{storage_key:path}") # Новый маршрут
+async def delete_pending_attachment(
+    background_tasks: BackgroundTasks,
+    storage_key: str = Path(..., description="Storage key в S3"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    """
+    Удаляет вложение, которое ещё не привязано к отчёту (report_id = null).
+    Используется для отмены загрузки вложений перед созданием отчёта.
+    """
+    # Найти вложение по storage_key, которое НЕ привязано к отчёту, принадлежит задаче пользователя и ему же загружено
+    res = await db.execute(
+        select(TaskAttachment)
+        .where(
+            TaskAttachment.storage_key == storage_key,
+            TaskAttachment.report_id.is_(None), # Только непривязанные
+            TaskAttachment.uploader_id == current_user.id, # Только загруженные текущим пользователем
+        )
+    )
+    attachment = res.scalars().first()
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Вложение не найдено или не может быть удалено")
 
-    att.deleted_at = datetime.now(timezone.utc)
-    await db.flush()
+    # Удаляем запись из БД
+    await db.delete(attachment)
     await db.commit()
 
-    # запланировать удаление из S3
-    background_tasks.add_task(delete_object_from_s3, att.storage_key)
-    return DeleteOut(detail="Deleted")
+    # Запланировать удаление из S3 в фоне
+    background_tasks.add_task(delete_object_from_s3, attachment.storage_key)
 
+    return {"detail": "Вложение удалено"}
 
 
 @router.get("/{full_path:path}")

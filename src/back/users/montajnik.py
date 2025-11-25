@@ -827,8 +827,8 @@ async def create_report(
     current_user=Depends(get_current_user),
 ):
     """
-    Создать черновой отчёт монтажника (text). Возвращает report_id.
-    payload: {"text": "..."} # photos больше нет
+    Создать черновой отчёт монтажника (text, список storage_key вложений). Возвращает report_id.
+    payload: {"text": "...", "attachment_storage_keys": ["..."]}
     """
     # Проверка, что пользователь - монтажник
     if getattr(current_user, "role", None) != Role.montajnik:
@@ -853,12 +853,15 @@ async def create_report(
         raise HTTPException(status_code=403, detail="Задача не назначена вам")
 
     text = payload.get("text")
+    # Получаем список storage_key вложений, которые нужно привязать
+    attachment_storage_keys = payload.get("attachment_storage_keys", []) or []
 
-    # --- НОВОЕ: Найти вложения пользователя, привязанные к задаче, но НЕ к отчёту ---
+    # --- НОВОЕ: Найти ТОЛЬКО УКАЗАННЫЕ вложения пользователя, привязанные к задаче, но НЕ к отчёту ---
     attachments_res = await db.execute(
         select(TaskAttachment)
         .where(
             TaskAttachment.task_id == task_id,
+            TaskAttachment.storage_key.in_(attachment_storage_keys), # <--- Только указанные ключи
             TaskAttachment.report_id.is_(None),  # Не привязаны к отчёту
             TaskAttachment.uploader_id == current_user.id,
             TaskAttachment.processed == True,  # Только обработанные
@@ -866,6 +869,12 @@ async def create_report(
         )
     )
     user_attachments = attachments_res.scalars().all()
+
+    # Проверим, все ли переданные ключи были найдены
+    found_keys = {att.storage_key for att in user_attachments}
+    missing_keys = set(attachment_storage_keys) - found_keys
+    if missing_keys:
+        raise HTTPException(status_code=400, detail=f"Вложения не найдены или недоступны для привязки: {list(missing_keys)}")
 
     # Создаём отчёт
     report = TaskReport(task_id=task.id, author_id=current_user.id, text=text, photos_json=json.dumps([]))
@@ -923,6 +932,7 @@ async def create_report(
     await db.refresh(report) # Обновляем объект, чтобы получить актуальные данные
 
     return {"report_id": report.id}
+
 
 @router.post("/tasks/{task_id}/report/{report_id}/submit", dependencies=[Depends(require_roles(Role.montajnik))])
 async def submit_report_for_review(

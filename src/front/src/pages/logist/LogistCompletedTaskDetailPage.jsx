@@ -1,8 +1,47 @@
 // front/src/pages/logist/LogistCompletedTaskDetailPage.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { logistCompletedTaskDetail, getEquipmentList, getWorkTypes } from "../../api"; // Добавляем импорты справочников
+import {
+  logistCompletedTaskDetail,
+  getEquipmentList,
+  getWorkTypes,
+  // --- НОВОЕ: Импорты для вложений отчётов ---
+  listReportAttachments,
+  getAttachmentUrl,
+} from "../../api"; // Добавляем импорты справочников
 import "../../styles/LogistPage.css";
+import ImageModal  from "../../components/ImageModal"; // <--- Импортируем компонент
+
+// --- НОВОЕ: Хук для загрузки вложений отчёта ---
+function useReportAttachments(reportId) {
+  const [attachments, setAttachments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!reportId) {
+      setAttachments([]);
+      return;
+    }
+    const fetchAttachments = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await listReportAttachments(reportId);
+        setAttachments(data);
+      } catch (err) {
+        console.error("Ошибка загрузки вложений отчёта:", err);
+        setError(err.response?.data?.detail || "Ошибка загрузки вложений");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAttachments();
+  }, [reportId]);
+
+  return { attachments, loading, error };
+}
 
 export default function LogistCompletedTaskDetailPage() {
   const { id } = useParams(); // ID задачи из URL
@@ -14,10 +53,29 @@ export default function LogistCompletedTaskDetailPage() {
   const [equipmentList, setEquipmentList] = useState([]);
   const [workTypesList, setWorkTypesList] = useState([]);
 
+  // --- НОВОЕ: Состояние для вложений отчётов ---
+  const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
+
+  // --- НОВОЕ: Состояние для открытого изображения ---
+  const [openImage, setOpenImage] = useState(null);
+
   useEffect(() => {
     loadRefs(); // Загружаем справочники
     loadTask();
   }, [id]);
+
+  // --- Функция для загрузки вложений отчётов ---
+  const loadReportAttachments = async (reportId) => {
+    try {
+      const data = await listReportAttachments(reportId);
+      setReportAttachmentsMap(prev => ({
+        ...prev,
+        [reportId]: data
+      }));
+    } catch (err) {
+      console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
+    }
+  };
 
   // --- НОВАЯ ФУНКЦИЯ: Загрузка справочников ---
   async function loadRefs() {
@@ -38,7 +96,26 @@ export default function LogistCompletedTaskDetailPage() {
     setError(null);
     try {
       const data = await logistCompletedTaskDetail(id); // Вызываем новый API метод
-      setTask(data);
+
+      // Обработка данных, если нужно (например, для equipment и work_types)
+      // const processedEquipment = (data.equipment || []).map(e => ({ ... }));
+      // const processedWorkTypes = (data.work_types || []).map(wt => ({ ... }));
+      const t = {
+        ...data,
+        // equipment: processedEquipment,
+        // work_types: processedWorkTypes,
+        reports: data.reports || [],
+      };
+
+      setTask(t);
+
+      // --- НОВОЕ: Загрузка вложений для всех отчётов ---
+      if (t.reports) {
+        t.reports.forEach(r => {
+          loadReportAttachments(r.id);
+        });
+      }
+
     } catch (err) {
       console.error("Ошибка загрузки завершенной задачи логиста:", err);
       setError(err.response?.data?.detail || err.message || "Ошибка загрузки задачи");
@@ -50,6 +127,15 @@ export default function LogistCompletedTaskDetailPage() {
       setLoading(false);
     }
   }
+
+  // --- НОВОЕ: Обработчики для модального окна ---
+  const handleImageClick = (imageUrl) => {
+    setOpenImage(imageUrl);
+  };
+
+  const closeModal = () => {
+    setOpenImage(null);
+  };
 
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
@@ -142,45 +228,102 @@ export default function LogistCompletedTaskDetailPage() {
 
             {/* === Отчёты === */}
             <div className="section">
-  <h3>Отчёты монтажника</h3>
-  {(task.reports && task.reports.length > 0) ? (
-    task.reports.map(r => (
-      <div key={r.id} className="report">
-        <p>#{r.id}: {r.text || "—"}</p>
-        <p>
-          <b>Логист:</b>{" "}
-          <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
-            {r.approval_logist || "—"}
-          </span>
-          {task.requires_tech_supp && (
-            <>
-              {" | "}
-              <b>Тех. спец:</b>{" "}
-              <span style={{ color: r.approval_tech === "approved" ? "green" : r.approval_tech === "rejected" ? "red" : "orange" }}>
-                {r.approval_tech || "—"}
-              </span>
-            </>
-          )}
-        </p>
-        {r.photos && r.photos.length > 0 && (
-          <div className="attached-list">
-            {r.photos.map((photoUrl, idx) => (
-              <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                <img src={photoUrl} alt={`Report photo ${idx}`} style={{ maxHeight: 100 }} />
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-    ))
-  ) : (
-    <div className="empty">Отчётов нет</div>
-  )}
-</div>
+              <h3>Отчёты монтажника</h3>
+              {(task.reports && task.reports.length > 0) ? (
+                task.reports.map(r => {
+                  // --- ИЗМЕНЕНО: Извлечение выполненных работ и комментария ---
+                  let performedWorks = "";
+                  let comment = "";
+                  if (r.text) {
+                    const lines = r.text.split("\n\n");
+                    if (lines[0].startsWith("Выполнено: ")) {
+                      performedWorks = lines[0].substring("Выполнено: ".length);
+                    }
+                    if (lines.length > 1) {
+                      comment = lines.slice(1).join("\n\n");
+                    } else if (!r.text.startsWith("Выполнено: ")) {
+                      comment = r.text;
+                    }
+                  }
+
+                  // --- ИЗМЕНЕНО: Получение вложений из reportAttachmentsMap ---
+                  const reportAttachments = reportAttachmentsMap[r.id] || [];
+                  const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
+
+                  return (
+                    <div key={r.id} className="report">
+                      {/* #37: Выполнено: {типы работ} */}
+                      <p>
+                        <b>#{r.id}:</b> {performedWorks ? `Выполнено: ${performedWorks}` : "Нет выполненных работ"}
+                      </p>
+                      {/* С новой строки — комментарий монтажника */}
+                      {comment && (
+                        <p>{comment}</p>
+                      )}
+                      <p>
+                        <b>Логист:</b>{" "}
+                        <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
+                          {r.approval_logist || "—"}
+                        </span>
+                        {task.requires_tech_supp && (
+                          <>
+                            {" | "}
+                            <b>Тех. спец:</b>{" "}
+                            <span style={{ color: r.approval_tech === "approved" ? "green" : r.approval_tech === "rejected" ? "red" : "orange" }}>
+                              {r.approval_tech || "—"}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                      {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
+                      {reportAttachmentsLoading ? (
+                        <p>Загрузка вложений...</p>
+                      ) : reportAttachments.length > 0 ? (
+                        <div className="attached-list">
+                          {reportAttachments.map((att, idx) => {
+                            const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+                            const thumbUrl = att.thumb_key
+                              ? getAttachmentUrl(att.thumb_key)
+                              : originalUrl;
+
+                            return (
+                              // --- ИЗМЕНЕНО: Убираем <a> и оборачиваем img в div с onClick ---
+                              <div
+                                key={att.id}
+                                style={{ cursor: 'zoom-in' }} // Меняем курсор
+                                onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                              >
+                                <img
+                                  src={thumbUrl}
+                                  alt={`Report attachment ${idx}`}
+                                  style={{ maxHeight: 100 }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p>Вложений нет</p>
+                      )}
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="empty">Отчётов нет</div>
+              )}
+            </div>
 
           </div>
         </div>
       </div>
+
+      {/* --- НОВОЕ: Рендерим модальное окно --- */}
+      <ImageModal
+        isOpen={!!openImage} // Передаём true/false
+        onClose={closeModal}
+        imageUrl={openImage} // Передаём URL изображения
+        altText="Вложение отчёта" // Опционально: текст по умолчанию
+      />
     </div>
   );
 }

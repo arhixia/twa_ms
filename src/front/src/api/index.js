@@ -232,6 +232,9 @@ export async function uploadFallback(file, taskId, reportId = null) {
   return res.data; 
 }
 
+export async function deletePendingAttachment(storageKey) {
+  return (await api.delete(`/attachments/pending/${storageKey}`)).data;
+}
 
 export async function listReportAttachments(reportId) {
   return (await api.get(`/attachments/reports/${reportId}/attachments`)).data;
@@ -541,8 +544,15 @@ export async function changeTaskStatus(taskId, statusPayload) {
 }
 
 // ✅ Создать отчёт
-export async function createReport(taskId, text) {
-  return (await api.post(`/montajnik/tasks/${taskId}/report`, { text})).data;
+export async function createReport(taskId, text, attachmentStorageKeys = []) {
+  const payload = {
+    text,
+    // --- НОВОЕ: Передаём список storage_key ---
+    attachment_storage_keys: attachmentStorageKeys,
+  };
+
+  const res = await api.post(`/montajnik/tasks/${taskId}/report`, payload); // <--- Путь не меняется
+  return res.data; // { report_id }
 }
 
 export async function getMontajnikEarningsByPeriod(startYear, startMonth, endYear, endMonth) {
