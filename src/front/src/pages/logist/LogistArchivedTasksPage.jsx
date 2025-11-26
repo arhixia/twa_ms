@@ -1,7 +1,7 @@
 // front/src/pages/logist/LogistArchivedTasksPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchLogistArchivedTasks, deleteArchivedTask } from "../../api";
+import { fetchLogistArchivedTasks, deleteArchivedTask, unarchiveTask } from "../../api"; // <--- Импортируем unarchiveTask
 import "../../styles/LogistPage.css";
 
 export default function LogistArchivedTasksPage() {
@@ -49,6 +49,22 @@ export default function LogistArchivedTasksPage() {
     } catch (err) {
       console.error("Ошибка удаления архивной задачи:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу из архива.";
+      alert(`Ошибка: ${errorMsg}`);
+    }
+  }
+
+  // --- НОВОЕ: Функция для разархивации ---
+  async function handleUnarchive(taskId) {
+    if (!window.confirm(`Вы уверены, что хотите убрать задачу #${taskId} из архива и перевести в черновики?`)) return;
+    try {
+      await unarchiveTask(taskId); // <--- Вызываем API
+      alert("✅ Задача убрана из архива и переведена в черновики");
+      // Удаляем задачу из списка архивных
+      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+      // Опционально: обновить счётчики задач в сторе (useAuthStore.getState().updateDraftTasksCount())
+    } catch (err) {
+      console.error("Ошибка разархивации задачи:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось убрать задачу из архива.";
       alert(`Ошибка: ${errorMsg}`);
     }
   }
@@ -104,18 +120,25 @@ export default function LogistArchivedTasksPage() {
                   <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>
                 </div>
 
-                <div className="card-actions" style={{ display: "flex", gap: "8px" }}>
+                <div className="card-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button
                     className="add-btn"
                     onClick={() => navigate(`/logist/archived-tasks/${task.id}`)}
-                    style={{ backgroundColor: "#2196f3", color: "white" }}
+                    style={{ backgroundColor: "#2196f3", color: "white", flex: 1, minWidth: "120px" }}
                   >
                     📋 Подробнее
                   </button>
                   <button
                     className="add-btn"
+                    onClick={() => handleUnarchive(task.id)} // <--- Новая кнопка
+                    style={{ backgroundColor: "#4caf50", color: "white", flex: 1, minWidth: "120px" }}
+                  >
+                    📄 В черновики
+                  </button>
+                  <button
+                    className="add-btn"
                     onClick={() => handleDeleteArchived(task.id)}
-                    style={{ backgroundColor: "#ef4444", color: "white" }}
+                    style={{ backgroundColor: "#ef4444", color: "white", flex: 1, minWidth: "120px" }}
                   >
                     🗑 Удалить
                   </button>

@@ -205,15 +205,13 @@ export default function LogistProfilePage() {
       <div className="page">
         <div className="page-header">
           <h1>Личный кабинет</h1>
-          {/* Кнопки для добавления */}
-          <div>
-            <button className="add-btn" onClick={() => setShowAddCompanyModal(true)}>+ Добавить компанию</button>
-            <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Добавить контакт</button>
-            {/* ✅ НОВАЯ КНОПКА: Архивные задачи */}
-            <button className="add-btn" onClick={goToArchivedTasks}>
-              🗃 Архивные задачи
-            </button>
-          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <button className="add-btn" onClick={() => setShowAddCompanyModal(true)}>+ Добавить компанию</button>
+          <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Добавить контакт</button>
+          <button className="add-btn" onClick={goToArchivedTasks}>
+            🗃 Архивные задачи
+          </button>
         </div>
 
         <div className="profile-overview">
@@ -233,26 +231,35 @@ export default function LogistProfilePage() {
 
         {/* --- Модальное окно добавления компании --- */}
         {showAddCompanyModal && (
-          <div className="modal-backdrop">
-            <div className="modal" style={{ maxWidth: '500px' }}>
+          <div className="modal-backdrop" onClick={() => setShowAddCompanyModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
               <div className="modal-header">
-                <h2>Добавить компанию</h2>
-                <button className="close" onClick={() => setShowAddCompanyModal(false)}>×</button>
+                <h3>Добавить компанию</h3>
+                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <label>
-                  Название:
+                <label className="dark-label">
+                  Название
                   <input
                     type="text"
                     value={newCompanyName}
                     onChange={(e) => setNewCompanyName(e.target.value)}
                     placeholder="Введите название"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                      appearance: 'none', // Убирает стрелочки
+                    }}
                   />
                 </label>
               </div>
-              <div className="modal-actions">
-                <button className="primary" onClick={handleAddCompany}>Добавить</button>
-                <button onClick={() => setShowAddCompanyModal(false)}>Отмена</button>
+              <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>Отмена</button>
+                <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddCompany(); }}>Сохранить</button>
               </div>
             </div>
           </div>
@@ -260,36 +267,60 @@ export default function LogistProfilePage() {
 
         {/* --- Модальное окно добавления контактного лица --- */}
         {showAddContactModal && (
-          <div className="modal-backdrop">
-            <div className="modal" style={{ maxWidth: '500px' }}>
+          <div className="modal-backdrop" onClick={() => setShowAddContactModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
               <div className="modal-header">
-                <h2>Добавить контактное лицо</h2>
-                <button className="close" onClick={() => setShowAddContactModal(false)}>×</button>
+                <h3>Добавить контактное лицо</h3>
+                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <label>
-                  ФИО:
+                <label className="dark-label">
+                  ФИО
                   <input
                     type="text"
                     value={newContactName}
                     onChange={(e) => setNewContactName(e.target.value)}
                     placeholder="Введите ФИО"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
                   />
                 </label>
-                <label>
-                  Телефон:
+                <label className="dark-label">
+                  Телефон
                   <input
                     type="text"
                     value={newContactPhone}
                     onChange={(e) => setNewContactPhone(e.target.value)}
                     placeholder="Введите телефон (необязательно)"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
                   />
                 </label>
-                <label>
-                  Компания:
+                <label className="dark-label">
+                  Компания
                   <select
                     value={selectedCompanyId}
                     onChange={(e) => setSelectedCompanyId(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
                   >
                     <option value="">Выберите компанию</option>
                     {companies.map(c => (
@@ -298,9 +329,9 @@ export default function LogistProfilePage() {
                   </select>
                 </label>
               </div>
-              <div className="modal-actions">
-                <button className="primary" onClick={handleAddContact}>Добавить</button>
-                <button onClick={() => setShowAddContactModal(false)}>Отмена</button>
+              <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>Отмена</button>
+                <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddContact(); }}>Сохранить</button>
               </div>
             </div>
           </div>

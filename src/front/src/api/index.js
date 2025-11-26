@@ -171,6 +171,11 @@ export async function fetchLogistArchivedTaskDetail(taskId) {
 }
 
 
+export async function unarchiveTask(taskId) {
+  return (await api.post(`/logist/tasks/${taskId}/unarchive`)).data;
+}
+
+
 // ---------- REPORTS ----------
 
 export async function reviewReport(taskId, reportId, payload) {

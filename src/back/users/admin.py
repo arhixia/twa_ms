@@ -1021,20 +1021,34 @@ async def admin_add_work_type_no_schema(
 
     name = payload.get("name")
     price = payload.get("price")
+    tech_supp_require = payload.get("tech_supp_require", False) # По умолчанию False
 
     if not name or price is None:
         raise HTTPException(status_code=400, detail="Не все поля переданы")
 
+    if not isinstance(tech_supp_require, bool):
+        if isinstance(tech_supp_require, str):
+            tech_supp_require = tech_supp_require.lower() in ('true', '1', 'yes', 'on')
+        else:
+            tech_supp_require = False
+
     work_type = WorkType(
         name=name,
-        price=price
+        price=price,
+        tech_supp_require=tech_supp_require 
     )
     db.add(work_type)
     await db.flush()
     await db.commit()
     await db.refresh(work_type)
 
-    return {"id": work_type.id, "name": work_type.name, "price": str(work_type.price)}
+    return {
+        "id": work_type.id,
+        "name": work_type.name,
+        "price": str(work_type.price),
+        "tech_supp_require": work_type.tech_supp_require 
+    }
+
 
 
 @router.post("/equipment", dependencies=[Depends(require_roles(Role.admin,Role.logist))])

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['sealed-achieve-bears-aud.trycloudflare.com']
+    allowedHosts: ['nine-python-shannon-hiv.trycloudflare.com']
   },
 })
 

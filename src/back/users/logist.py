@@ -2469,14 +2469,11 @@ async def get_active_montajniks(db: AsyncSession = Depends(get_db)):
 
 @router.patch("/tasks/{task_id}/archive", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
 async def archive_task(
-    background_tasks: BackgroundTasks, # Добавим, если нужно уведомлять
     task_id: int,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
   
-    logger.info(f"archive_task вызван для задачи ID: {task_id}")
-
     _ensure_logist_or_403(current_user)
 
     # Загружаем задачу с контактным лицом и компанией для истории
@@ -2550,6 +2547,41 @@ async def archive_task(
         raise HTTPException(status_code=500, detail="Failed to archive task")
 
     return {"detail": "Archived"}
+
+
+@router.post("/tasks/{task_id}/unarchive", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
+async def unarchive_task(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    _ensure_logist_or_403(current_user)
+
+    res = await db.execute(
+        select(Task)
+        .where(Task.id == task_id, Task.status == TaskStatus.archived) 
+  
+    )
+    task = res.scalars().first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена или не архивирована")
+
+    task.is_draft = True
+    task.status = TaskStatus.assigned if task.assigned_user_id else TaskStatus.new
+
+    try:
+        await db.commit() 
+    except Exception as e:
+        try:
+            await db.rollback()
+        except Exception:
+            logger.exception("rollback failed")
+        raise HTTPException(status_code=500, detail="Failed to unarchive task")
+
+    return {"detail": "Unarchived and moved to drafts"}
+
+
+
 
 
 @router.delete("/tasks/{task_id}/archive", dependencies=[Depends(require_roles(Role.logist, Role.admin))])

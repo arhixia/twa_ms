@@ -146,6 +146,7 @@ export default function AdminProfilePage() {
 
   const [newWorkTypeName, setNewWorkTypeName] = useState("");
   const [newWorkTypePrice, setNewWorkTypePrice] = useState("");
+  const [newWorkTypeTechSupp, setNewWorkTypeTechSupp] = useState(false);
 
   // Состояния для истории задач
   const [historyTasks, setHistoryTasks] = useState([]);
@@ -314,7 +315,7 @@ export default function AdminProfilePage() {
     }
   };
 
-  const handleAddWorkType = async () => {
+    const handleAddWorkType = async () => {
     if (!newWorkTypeName.trim() || !newWorkTypePrice.trim()) return alert("Заполните все поля");
     const priceNum = parseFloat(newWorkTypePrice);
     if (isNaN(priceNum) || priceNum <= 0) return alert("Цена должна быть положительной");
@@ -322,10 +323,12 @@ export default function AdminProfilePage() {
       const result = await adminAddWorkType({
         name: newWorkTypeName.trim(),
         price: priceNum,
+        tech_supp_require: newWorkTypeTechSupp, 
       });
       alert(`Вид работы "${result.name}" добавлен`);
       setNewWorkTypeName("");
       setNewWorkTypePrice("");
+      setNewWorkTypeTechSupp(false); 
       setShowAddWorkTypeModal(false);
     } catch (err) {
       alert(err.response?.data?.detail || "Ошибка добавления вида работы");
@@ -340,12 +343,12 @@ export default function AdminProfilePage() {
       <div className="page">
         <div className="page-header">
           <h1>Личный кабинет</h1>
-          <div>
-            <button onClick={() => setShowAddCompanyModal(true)}>+ Компания</button>
-            <button onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
-            <button onClick={() => setShowAddEquipmentModal(true)}>+ Оборудование</button>
-            <button onClick={() => setShowAddWorkTypeModal(true)}>+ Вид работ</button>
-          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          <button className="add-btn" onClick={() => setShowAddCompanyModal(true)}>+ Компания</button>
+          <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
+          <button className="add-btn" onClick={() => setShowAddEquipmentModal(true)}>+ Оборудование</button>
+          <button className="add-btn" onClick={() => setShowAddWorkTypeModal(true)}>+ Вид работ</button>
         </div>
 
         <div className="profile-overview">
@@ -476,31 +479,71 @@ export default function AdminProfilePage() {
         </div>
 
         {/* === Добавить компанию === */}
+                {/* === Добавить компанию === */}
         {showAddCompanyModal && (
           <div className="modal-backdrop">
             <div className="modal">
               <div className="modal-header">
-                <h2>Добавить компанию</h2>
-                <button className="close" onClick={() => setShowAddCompanyModal(false)}>
-                  ×
-                </button>
+                <h3>Добавить компанию</h3>
+                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={() => setShowAddCompanyModal(false)}>×</button>
               </div>
-
               <div className="modal-body">
-                <input
-                  type="text"
-                  value={newCompanyName}
-                  onChange={(e) => setNewCompanyName(e.target.value)}
-                  placeholder="Название компании"
-                  className="input"
-                />
+                <label className="dark-label">
+                  Название
+                  <input
+                    type="text"
+                    value={newCompanyName}
+                    onChange={(e) => setNewCompanyName(e.target.value)}
+                    placeholder="Введите название"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={() => setShowAddCompanyModal(false)}>Отмена</button>
+                  <button className="add-btn" onClick={handleAddCompany}>Сохранить</button>
+                </div>
               </div>
+            </div>
+          </div>
+        )}
 
-              <div className="modal-actions">
-                <button className="primary" onClick={handleAddCompany}>
-                  Добавить
-                </button>
-                <button onClick={() => setShowAddCompanyModal(false)}>Отмена</button>
+               {/* === Добавить компанию === */}
+        {showAddCompanyModal && (
+          <div className="modal-backdrop" onClick={() => setShowAddCompanyModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Добавить компанию</h3>
+                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>×</button>
+              </div>
+              <div className="modal-body">
+                <label className="dark-label">
+                  Название
+                  <input
+                    type="text"
+                    value={newCompanyName}
+                    onChange={(e) => setNewCompanyName(e.target.value)}
+                    placeholder="Введите название"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>Отмена</button>
+                  <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddCompany(); }}>Сохранить</button>
+                </div>
               </div>
             </div>
           </div>
@@ -508,49 +551,73 @@ export default function AdminProfilePage() {
 
         {/* === Добавить контакт === */}
         {showAddContactModal && (
-          <div className="modal-backdrop">
-            <div className="modal">
+          <div className="modal-backdrop" onClick={() => setShowAddContactModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Добавить контакт</h2>
-                <button className="close" onClick={() => setShowAddContactModal(false)}>
-                  ×
-                </button>
+                <h3>Добавить контакт</h3>
+                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>×</button>
               </div>
-
               <div className="modal-body">
-                <input
-                  type="text"
-                  placeholder="ФИО"
-                  value={newContactName}
-                  onChange={(e) => setNewContactName(e.target.value)}
-                  className="input"
-                />
-                <input
-                  type="text"
-                  placeholder="Телефон"
-                  value={newContactPhone}
-                  onChange={(e) => setNewContactPhone(e.target.value)}
-                  className="input"
-                />
-                <select
-                  value={selectedCompanyId}
-                  onChange={(e) => setSelectedCompanyId(e.target.value)}
-                  className="input"
-                >
-                  <option value="">Выберите компанию</option>
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="modal-actions">
-                <button className="primary" onClick={handleAddContact}>
-                  Добавить
-                </button>
-                <button onClick={() => setShowAddContactModal(false)}>Отмена</button>
+                <label className="dark-label">
+                  ФИО
+                  <input
+                    type="text"
+                    placeholder="Введите ФИО"
+                    value={newContactName}
+                    onChange={(e) => setNewContactName(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <label className="dark-label">
+                  Телефон
+                  <input
+                    type="text"
+                    placeholder="Введите телефон"
+                    value={newContactPhone}
+                    onChange={(e) => setNewContactPhone(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <label className="dark-label">
+                  Компания
+                  <select
+                    value={selectedCompanyId}
+                    onChange={(e) => setSelectedCompanyId(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  >
+                    <option value="">Выберите компанию</option>
+                    {companies.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>Отмена</button>
+                  <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddContact(); }}>Сохранить</button>
+                </div>
               </div>
             </div>
           </div>
@@ -558,86 +625,133 @@ export default function AdminProfilePage() {
 
         {/* === Добавить оборудование === */}
         {showAddEquipmentModal && (
-          <div className="modal-backdrop">
-            <div className="modal">
+          <div className="modal-backdrop" onClick={() => setShowAddEquipmentModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Добавить оборудование</h2>
-                <button className="close" onClick={() => setShowAddEquipmentModal(false)}>×</button>
+                <h3>Добавить оборудование</h3>
+                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>×</button>
               </div>
-
               <div className="modal-body">
-                <input
-                  type="text"
-                  value={newEquipmentName}
-                  onChange={(e) => setNewEquipmentName(e.target.value)}
-                  placeholder="Название"
-                  className="input"
-                />
-
-                {/* Выбор категории как у компании */}
-                <select
-                  value={newEquipmentCategory}
-                  onChange={(e) => setNewEquipmentCategory(e.target.value)}
-                  className="input"
-                >
-                  <option value="">Выберите категорию</option>
-                  {categories.map((cat, i) => (
-                    <option key={i} value={cat}>{cat}</option>
-                  ))}
-                </select>
-
-                <input
-                  type="number"
-                  step="0.01"
-                  value={newEquipmentPrice}
-                  onChange={(e) => setNewEquipmentPrice(e.target.value)}
-                  placeholder="Цена"
-                  className="input"
-                />
-              </div>
-
-              <div className="modal-actions">
-                <button className="primary" onClick={handleAddEquipment}>Добавить</button>
-                <button onClick={() => setShowAddEquipmentModal(false)}>Отмена</button>
+                <label className="dark-label">
+                  Название
+                  <input
+                    type="text"
+                    value={newEquipmentName}
+                    onChange={(e) => setNewEquipmentName(e.target.value)}
+                    placeholder="Введите название"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <label className="dark-label">
+                  Категория
+                  <select
+                    value={newEquipmentCategory}
+                    onChange={(e) => setNewEquipmentCategory(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  >
+                    <option value="">Выберите категорию</option>
+                    {categories.map((cat, i) => (
+                      <option key={i} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="dark-label">
+                  Цена
+                  <input
+                    type="number"
+                    value={newEquipmentPrice}
+                    onChange={(e) => setNewEquipmentPrice(e.target.value)}
+                    placeholder="Введите цену"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>Отмена</button>
+                  <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddEquipment(); }}>Сохранить</button>
+                </div>
               </div>
             </div>
           </div>
         )}
 
         {/* === Добавить вид работ === */}
+                {/* === Добавить вид работ === */}
         {showAddWorkTypeModal && (
-          <div className="modal-backdrop">
-            <div className="modal">
+          <div className="modal-backdrop" onClick={() => setShowAddWorkTypeModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Добавить вид работ</h2>
-                <button className="close" onClick={() => setShowAddWorkTypeModal(false)}>
-                  ×
-                </button>
+                <h3>Добавить вид работ</h3>
+                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>×</button>
               </div>
-
               <div className="modal-body">
-                <input
-                  type="text"
-                  value={newWorkTypeName}
-                  onChange={(e) => setNewWorkTypeName(e.target.value)}
-                  placeholder="Название"
-                  className="input"
-                />
-                <input
-                  type="number"
-                  step="0.01"
-                  value={newWorkTypePrice}
-                  onChange={(e) => setNewWorkTypePrice(e.target.value)}
-                  placeholder="Цена"
-                  className="input"
-                />
-              </div>
-
-              <div className="modal-actions">
-                <button className="primary" onClick={handleAddWorkType}>
-                  Добавить
-                </button>
-                <button onClick={() => setShowAddWorkTypeModal(false)}>Отмена</button>
+                <label className="dark-label">
+                  Название
+                  <input
+                    type="text"
+                    value={newWorkTypeName}
+                    onChange={(e) => setNewWorkTypeName(e.target.value)}
+                    placeholder="Введите название"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <label className="dark-label">
+                  Цена
+                  <input
+                    type="number"
+                    value={newWorkTypePrice}
+                    onChange={(e) => setNewWorkTypePrice(e.target.value)}
+                    placeholder="Введите цену"
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "4px",
+                      border: "1px solid #444",
+                      backgroundColor: "#1a1a1a",
+                      color: "#e0e0e0",
+                    }}
+                  />
+                </label>
+                <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={newWorkTypeTechSupp}
+                    onChange={(e) => setNewWorkTypeTechSupp(e.target.checked)}
+                    style={{ margin: 0 }}
+                  />
+                  Требуется проверка тех.специалиста?
+                </label>
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>Отмена</button>
+                  <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddWorkType(); }}>Сохранить</button>
+                </div>
               </div>
             </div>
           </div>
