@@ -1,3 +1,4 @@
+// front/src/components/MultiSelectFilter.jsx
 import React, { useState, useRef, useEffect } from "react";
 
 export default function MultiSelectFilter({
@@ -10,29 +11,27 @@ export default function MultiSelectFilter({
   width = "150px" // Фиксируем ширину по умолчанию
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef(null);
 
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    }
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  // --- НОВОЕ: Фильтрация опций на основе searchTerm ---
+  const filteredOptions = options.filter(opt =>
+    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const toggleOption = (value) => {
     const newSelected = selectedValues.includes(value)
       ? selectedValues.filter(v => v !== value)
       : [...selectedValues, value];
-    
     onChange(newSelected);
   };
 
   const clearSelection = () => {
     onChange([]);
+  };
+
+  const clearSearch = () => {
+    setSearchTerm("");
   };
 
   const getDisplayText = () => {
@@ -44,21 +43,43 @@ export default function MultiSelectFilter({
     return `${selectedValues.length} выбрано`;
   };
 
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+        // --- НОВОЕ: Очищаем поисковый термин при закрытии ---
+        setSearchTerm("");
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleTriggerClick = () => {
+    setIsOpen(!isOpen);
+    if (!isOpen) {
+      setSearchTerm(""); // Очищаем при открытии
+    }
+  };
+
   return (
-    <div 
-      className="multi-select-filter" 
-      ref={dropdownRef} 
-      style={{ 
-        position: 'relative', 
+    <div
+      className="multi-select-filter"
+      ref={dropdownRef}
+      style={{
+        position: 'relative',
         width: width,
-        minWidth: width, // Фиксируем минимальную ширину
-        maxWidth: width, // Фиксируем максимальную ширину
+        minWidth: width,
+        maxWidth: width,
         boxSizing: 'border-box'
       }}
     >
+      {label && <label style={{ color: 'white', display: 'block', marginBottom: '4px' }}>{label}</label>}
+
       <div
         className="multi-select-trigger"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleTriggerClick}
         style={{
           padding: '8px 12px',
           border: '1px solid #444',
@@ -72,24 +93,26 @@ export default function MultiSelectFilter({
           width: '100%',
           boxSizing: 'border-box',
           overflow: 'hidden',
-          height: '40px', // Фиксируем высоту
-          minHeight: '40px' // Убедимся, что высота не уменьшается
+          height: '40px',
+          minHeight: '40px'
         }}
       >
-        <span style={{ 
-          overflow: 'hidden', 
-          textOverflow: 'ellipsis', 
+        <span style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           flex: 1,
-          fontSize: '14px' // Фиксируем размер шрифта
+          fontSize: '14px'
         }}>
           {getDisplayText()}
         </span>
-        <span style={{ 
+        <span style={{
           marginLeft: '8px',
           flexShrink: 0,
-          fontSize: '12px' // Фиксируем размер шрифта для стрелки
-        }}>▼</span>
+          fontSize: '12px'
+        }}>
+          ▼
+        </span>
       </div>
 
       {isOpen && (
@@ -109,67 +132,132 @@ export default function MultiSelectFilter({
             marginTop: '2px',
             width: '100%',
             boxSizing: 'border-box',
-            minWidth: width, // Сохраняем ширину такой же как у триггера
+            minWidth: width,
             maxWidth: width,
-            fontSize: '14px' // Фиксируем размер шрифта в выпадающем списке
+            fontSize: '14px',
+            display: 'flex',
+            flexDirection: 'column',
           }}
         >
-          {selectedValues.length > 0 && (
-            <div
+          {/* --- НОВОЕ: Обёртка для поиска с позиционированием --- */}
+          <div style={{ padding: '4px', backgroundColor: '#2a2a2a', borderBottom: '1px solid #444', position: 'relative' }}>
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="🔍 Поиск..."
               style={{
-                padding: '8px',
-                borderBottom: '1px solid #444',
-                backgroundColor: '#2a2a2a',
-                cursor: 'pointer',
-                fontSize: '12px'
+                width: '100%', // Полностью заполняет родителя
+                padding: '4px 28px 4px 8px', // paddingLeft для текста, paddingRight для кнопки "×"
+                border: '1px solid #555',
+                borderRadius: '4px',
+                backgroundColor: '#1a1a1a',
+                color: '#e0e0e0',
+                fontSize: '13px',
+                boxSizing: 'border-box', // padding входит в width
               }}
-              onClick={clearSelection}
-            >
-              Очистить все
+              autoFocus
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* --- КНОПКА "×" ПОЗИЦИОНИРУЕТСЯ СПРАВА ВНУТРИ ПОЛЯ ВВОДА --- */}
+            {searchTerm && (
+              <button
+                onClick={clearSearch}
+                style={{
+                  position: 'absolute',
+                  right: '8px', // Расстояние от правого края родителя (div с position: relative)
+                  top: '50%',
+                  transform: 'translateY(-50%)', // Центрируем по вертикали
+                  padding: '2px 6px',
+                  border: '1px solid #777',
+                  borderRadius: '4px',
+                  backgroundColor: '#3a3a3a',
+                  color: '#e0e0e0',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  zIndex: 1, // Поверх текста
+                }}
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* --- Кнопка "Очистить всё" --- */}
+          {selectedValues.length > 0 && (
+            <div style={{ padding: '4px', backgroundColor: '#2a2a2a', borderBottom: '1px solid #444' }}>
+              <button
+                type="button"
+                onClick={clearSelection}
+                style={{
+                  padding: '4px 8px',
+                  border: '1px solid #777',
+                  borderRadius: '4px',
+                  backgroundColor: '#3a3a3a',
+                  color: '#e0e0e0',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  width: '100%',
+                }}
+              >
+                🗑 Очистить всё
+              </button>
             </div>
           )}
-          
-          {options.map(option => (
-            <div
-              key={option.value}
-              style={{
-                padding: '8px 12px',
-                backgroundColor: selectedValues.includes(option.value) ? '#3a3a3a' : 'transparent',
-                borderBottom: '1px solid #3a3a3a',
-                fontSize: '14px' // Фиксируем размер шрифта
-              }}
-            >
-              <label style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                margin: 0, 
-                cursor: 'pointer', 
-                width: '100%',
-                fontSize: '14px' // Фиксируем размер шрифта
-              }}>
-                <input
-                  type="checkbox"
-                  checked={selectedValues.includes(option.value)}
-                  onChange={() => toggleOption(option.value)}
-                  style={{ 
-                    marginRight: '8px', 
+
+          {/* --- Список опций --- */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map(option => (
+                <div
+                  key={option.value}
+                  style={{
+                    padding: '8px 12px',
+                    backgroundColor: selectedValues.includes(option.value) ? '#bb86fc' : 'transparent',
+                    borderBottom: '1px solid #3a3a3a',
+                    fontSize: '14px',
                     cursor: 'pointer',
-                    width: '16px', // Фиксируем размер чекбокса
-                    height: '16px'
                   }}
-                />
-                <span style={{ 
-                  flex: 1, 
-                  overflow: 'hidden', 
-                  textOverflow: 'ellipsis', 
-                  whiteSpace: 'nowrap',
-                  fontSize: '14px' // Фиксируем размер шрифта
-                }}>
-                  {option.label}
-                </span>
-              </label>
-            </div>
-          ))}
+                  onClick={() => toggleOption(option.value)}
+                >
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    margin: 0,
+                    cursor: 'pointer',
+                    width: '100%',
+                    fontSize: '14px'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedValues.includes(option.value)}
+                      onChange={() => {}}
+                      style={{
+                        marginRight: '8px',
+                        cursor: 'pointer',
+                        width: '16px',
+                        height: '16px',
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <span style={{
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      fontSize: '14px'
+                    }}>
+                      {option.label}
+                    </span>
+                  </label>
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic', textAlign: 'center' }}>
+                Ничего не найдено
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

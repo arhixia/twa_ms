@@ -912,28 +912,43 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
                   }}
               />
             </label>
-            <label>
-              Место/адрес
-              <textarea value={form.location || ""} onChange={(e) => setField("location", e.target.value)} rows="3" style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}/>
-            </label>
-            <label>
-              Комментарий
-              <textarea value={form.comment || ""} onChange={(e) => setField("comment", e.target.value)} rows="3" style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}/>
-            </label>
+            <label style={{ display: "block", marginTop: "12px", color: "#e0e0e0" }}>
+  Место/адрес
+  <textarea
+    value={form.location || ""}
+    onChange={(e) => setField("location", e.target.value)}
+    rows="3"
+    style={{
+      width: "100%",
+      resize: "vertical",        // <-- только вертикальное растягивание
+      padding: "8px",
+      borderRadius: "4px",
+      border: "1px solid #444",
+      backgroundColor: "#1a1a1a",
+      color: "#e0e0e0",
+      marginTop: "4px"
+    }}
+  />
+</label>
+
+<label style={{ display: "block", marginTop: "12px", color: "#e0e0e0" }}>
+  Комментарий
+  <textarea
+    value={form.comment || ""}
+    onChange={(e) => setField("comment", e.target.value)}
+    rows="3"
+    style={{
+      width: "100%",
+      resize: "vertical",        // <-- только вниз тянуть
+      padding: "8px",
+      borderRadius: "4px",
+      border: "1px solid #444",
+      backgroundColor: "#1a1a1a",
+      color: "#e0e0e0",
+      marginTop: "4px"
+    }}
+  />
+</label>
             
             <label>
                 Тип назначения

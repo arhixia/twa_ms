@@ -121,28 +121,29 @@ export default function LogistArchivedTasksPage() {
                 </div>
 
                 <div className="card-actions" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    className="add-btn"
-                    onClick={() => navigate(`/logist/archived-tasks/${task.id}`)}
-                    style={{ backgroundColor: "#2196f3", color: "white", flex: 1, minWidth: "120px" }}
-                  >
-                    📋 Подробнее
-                  </button>
-                  <button
-                    className="add-btn"
-                    onClick={() => handleUnarchive(task.id)} // <--- Новая кнопка
-                    style={{ backgroundColor: "#4caf50", color: "white", flex: 1, minWidth: "120px" }}
-                  >
-                    📄 В черновики
-                  </button>
-                  <button
-                    className="add-btn"
-                    onClick={() => handleDeleteArchived(task.id)}
-                    style={{ backgroundColor: "#ef4444", color: "white", flex: 1, minWidth: "120px" }}
-                  >
-                    🗑 Удалить
-                  </button>
-                </div>
+  <button
+    className="add-btn"
+    onClick={() => navigate(`/logist/archived-tasks/${task.id}`)}
+    style={{ backgroundColor: "#2196f3", color: "white", minWidth: "120px" }}
+  >
+    📋 Подробнее
+  </button>
+  <button
+    className="add-btn"
+    onClick={() => handleUnarchive(task.id)}
+    style={{ backgroundColor: "#4caf50", color: "white", minWidth: "120px" }}
+  >
+    📄 В черновики
+  </button>
+  <button
+    className="add-btn"
+    onClick={() => handleDeleteArchived(task.id)}
+    style={{ backgroundColor: "#ef4444", color: "white", minWidth: "120px" }}
+  >
+    🗑 Удалить
+  </button>
+</div>
+
               </div>
             ))
           ) : (

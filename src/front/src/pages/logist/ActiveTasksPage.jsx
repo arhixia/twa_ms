@@ -153,7 +153,7 @@ export default function ActiveTasksPage() {
                 </div>
 
                 {/* Компания */}
-                <div style={{ minWidth: '150px' }}>
+                 <div style={{ minWidth: '150px' }}>
                     <label className="dark-label">Компания</label>
                     <MultiSelectFilter
                         options={companyOptions}
@@ -161,6 +161,7 @@ export default function ActiveTasksPage() {
                         onChange={(values) => handleFilterChange("company_id", values)}
                         placeholder="Все компании"
                         maxHeight={200}
+                        width="100%"
                     />
                 </div>
 
@@ -173,6 +174,7 @@ export default function ActiveTasksPage() {
                         onChange={(values) => handleFilterChange("assigned_user_id", values)}
                         placeholder="Все монтажники"
                         maxHeight={200}
+                        width="100%"
                     />
                 </div>
 
@@ -185,6 +187,7 @@ export default function ActiveTasksPage() {
                         onChange={(values) => handleFilterChange("work_type_id", values)}
                         placeholder="Все типы работ"
                         maxHeight={200}
+                        width="100%"
                     />
                 </div>
 
@@ -197,6 +200,7 @@ export default function ActiveTasksPage() {
                         onChange={(values) => handleFilterChange("equipment_id", values)}
                         placeholder="Все оборудование"
                         maxHeight={200}
+                        width="100%"
                     />
                 </div>
             </div>

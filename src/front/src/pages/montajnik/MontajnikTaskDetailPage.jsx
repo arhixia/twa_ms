@@ -277,18 +277,28 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
             </div>
           </div>
 
-          <div className="section">
-            <label style={{ color: 'white' }}>
-              Комментарий:
-              <textarea
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                rows="4"
-                placeholder="Дополнительная информация..."
-                style={{ backgroundColor: '#1a1a1a', color: 'white', border: '1px solid #555' }}
-              />
-            </label>
-          </div>
+          <div className="section" style={{ marginTop: '20px' }}>
+  <label style={{ color: 'white', display: 'block', marginBottom: '6px' }}>
+    Комментарий:
+  </label>
+
+  <textarea
+    value={comment}
+    onChange={(e) => setComment(e.target.value)}
+    rows="4"
+    placeholder="Дополнительная информация..."
+    style={{
+      width: '100%',            // <-- растягиваем по горизонтали
+      resize: 'vertical',       // <-- можно тянуть только вниз
+      padding: '8px',
+      backgroundColor: '#1a1a1a',
+      color: 'white',
+      border: '1px solid #555',
+      borderRadius: '4px'
+    }}
+  />
+</div>
+
 
           <div className="section">
             <label style={{ color: 'white' }}>Фото:</label>

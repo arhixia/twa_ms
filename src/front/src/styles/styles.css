@@ -35,9 +35,21 @@ body{background:linear-gradient(180deg,var(--bg),#081019);color:#e6eef8}
 .modal-backdrop{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:16px}
 .modal{width:100%;max-width:900px;background:var(--card);border-radius:12px;padding:12px}
 .modal-header{display:flex;justify-content:space-between;align-items:center}
-.modal-body{margin-top:8px}
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;      /* фикс ширина формы */
+  margin: 0 auto;        /* выравнивание по центру */
+}
+
 .close{background:transparent;border:none;color:var(--muted)}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .form-grid label{display:flex;flex-direction:column}
 .form-grid input, .form-grid textarea, .form-grid select{padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit}
 .form-grid .full-row{grid-column:1/-1}
@@ -94,5 +106,31 @@ body{background:linear-gradient(180deg,var(--bg),#081019);color:#e6eef8}
   align-items: center;
   justify-content: center;
   padding: 0;
+}
+
+
+.logout-btn {
+  background-color: #cf6679; /* розово-красный как в Material Dark */
+  color: #000;               /* контрастный текст */
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px; /* расстояние между 🚪 и текстом */
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.logout-btn:hover {
+  background-color: #d97786; /* светлее при наведении */
+  transform: translateY(-1px); /* лёгкий подъём */
+}
+
+.logout-btn:active {
+  background-color: #b65b68; /* темнее при нажатии */
+  transform: translateY(0);  /* сброс */
 }
 

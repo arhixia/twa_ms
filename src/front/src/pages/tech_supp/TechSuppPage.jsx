@@ -43,7 +43,7 @@ export default function TechSuppPage() {
     <div className="logist-app">
       <header className="logist-header">
         <div className="fullname">{fullname || "Тех.спец"}</div>
-        <button className="logout-btn" onClick={handleLogout}>🚪 Выйти</button>
+        <button className="logout-btn" onClick={handleLogout}>Выйти</button>
       </header>
 
       <nav className="logist-nav">

@@ -26,7 +26,7 @@ export default function LogistPage() {
     <div className="logist-app">
       <header className="logist-header">
         <div className="fullname">{fullname || "Логист"}</div>
-        <button className="logout-btn" onClick={handleLogout}>🚪 Выйти</button>
+        <button className="logout-btn" onClick={handleLogout}>Выйти</button>
       </header>
 
       <nav className="logist-nav">

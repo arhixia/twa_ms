@@ -43,7 +43,7 @@ export default function AdminPage() {
       {/* Шапка: имя слева, кнопка "выйти" справа */}
       <header className="logist-header">
         <div className="fullname">{fullname || "Админ"}</div>
-        <button className="logout-btn" onClick={handleLogout}>🚪 Выйти</button>
+        <button className="logout-btn" onClick={handleLogout}>Выйти</button>
       </header>
 
       {/* Навигация: Пользователи / Задачи */}
@@ -66,6 +66,3 @@ export default function AdminPage() {
   );
 }
 
-//фильтры по id 
-//админ лк 
-//уведы

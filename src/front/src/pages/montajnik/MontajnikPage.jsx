@@ -52,7 +52,7 @@ export default function MontajnikPage() {
     <div className="logist-app"> 
       <header className="logist-header"> 
         <div className="fullname">{fullname || "Монтажник"}</div> 
-        <button className="logout-btn" onClick={handleLogout}>🚪 Выйти</button>
+        <button className="logout-btn" onClick={handleLogout}>Выйти</button>
       </header>
 
       <nav className="logist-nav"> 

@@ -64,6 +64,7 @@ export default function LogistProfilePage() {
   const [historyTasks, setHistoryTasks] = useState([]);
 
   // Дебаунс для поиска
+  const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebounce(selectedFilters.search, 500);
 
   useEffect(() => {
@@ -170,6 +171,8 @@ export default function LogistProfilePage() {
     }
   };
 
+  
+
   const handleAddContact = async () => {
     if (!newContactName.trim() || !selectedCompanyId) {
       alert("Заполните ФИО и выберите компанию");
@@ -189,6 +192,8 @@ export default function LogistProfilePage() {
       alert(`Ошибка: ${errorMsg}`);
     }
   };
+
+  
 
   // Преобразование опций для MultiSelectFilter
   const companyOptions = companies.map(c => ({ value: c.id, label: c.name }));
@@ -372,6 +377,7 @@ export default function LogistProfilePage() {
         onChange={(values) => handleFilterChange("company_id", values)}
         placeholder="Все компании"
         maxHeight={200}
+        width="100%" 
       />
     </div>
 
