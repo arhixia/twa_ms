@@ -405,6 +405,34 @@ export default function TaskDetailPage() {
     }
   }
 
+  const STATUS_TRANSLATIONS = {
+  new: "Создана",
+  accepted: "Принята монтажником",
+  on_the_road: "Выехал на работу",
+  started: "В процессе выполнения",
+  on_site: "Прибыл на место",
+  completed: "Завершена",
+  inspection: "На проверке",
+  returned: "Возвращена на доработку",
+  archived: "В архиве",
+  assigned: "Назначена",
+};
+
+// --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
+function getStatusDisplayName(statusKey) {
+  return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
+}
+
+const REPORT_APPROVAL_TRANSLATIONS = {
+  waiting: "Проверяется",
+  approved: "Принято",
+  rejected: "Отклонено",
+  // Если есть другие статусы, добавьте их сюда
+};
+
+  function getReportApprovalDisplayName(approvalKey) {
+  return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
+}
 
   async function loadRefs() {
     try {
@@ -1296,7 +1324,7 @@ export default function TaskDetailPage() {
               <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
               <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
               <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
-              <p><b>Статус:</b> {task.status || "—"}</p>
+              <p><b>Статус:</b> {getStatusDisplayName(task.status)}</p>
               <p>
                 <b>Место/Адрес:</b>{" "}
                 {task.location ? (
@@ -1323,7 +1351,7 @@ export default function TaskDetailPage() {
                 {(task.equipment || [])
                   .map((e) => {
                     const eqName = equipmentList.find((eq) => eq.id === e.equipment_id)?.name;
-                    return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+                    return `${eqName || e.equipment_id}${e.serial_number ? ` (СН: ${e.serial_number})` : ''} x${e.quantity}`;
                   })
                   .join(", ") || "—"}
               </p>
@@ -1418,27 +1446,14 @@ export default function TaskDetailPage() {
                     ) : (
                       <p>Вложений нет</p>
                     )}
-                    {/* СО СЛЕДУЮЩЕЙ СТРОКИ — статусы проверки */}
                     <p>
-                      <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
-                        {r.approval_logist || "waiting"}
-                      </span>
-                      {task.requires_tech_supp === true && (
-                        <>
-                          {" | "}
-                          <b>Тех.спец:</b>{" "}
-                          <span style={{
-                            color: r.approval_tech === "approved"
-                              ? "green"
-                              : r.approval_tech === "rejected"
-                              ? "red"
-                              : "orange"
-                          }}>
-                            {r.approval_tech || "waiting"}
-                          </span>
-                        </>
-                      )}
-                    </p>
+        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"} {/* <--- Используем новую функцию */}
+        {task.requires_tech_supp === true && (
+          <>
+            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"} {/* <--- Используем новую функцию */}
+          </>
+        )}
+      </p>
                     {/* Комментарий отклонения */}
                     {r.review_comment && (
                       <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>

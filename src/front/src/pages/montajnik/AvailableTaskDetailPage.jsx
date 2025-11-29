@@ -40,6 +40,24 @@ export default function AvailableTaskDetailPage() {
     }
   }
 
+  const STATUS_TRANSLATIONS = {
+  new: "Создана",
+  accepted: "Принята монтажником",
+  on_the_road: "Выехал на работу",
+  started: "В процессе выполнения",
+  on_site: "Прибыл на место",
+  completed: "Завершена",
+  inspection: "На проверке",
+  returned: "Возвращена на доработку",
+  archived: "В архиве",
+  assigned: "Назначена",
+};
+
+// --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
+function getStatusDisplayName(statusKey) {
+  return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
+}
+
   async function loadTask() {
     setLoading(true);
     setError(null);
@@ -191,7 +209,7 @@ export default function AvailableTaskDetailPage() {
                   </a>
                 ) : "—"}
               </p>
-            <p><b>Статус:</b> {task.status || "—"}</p>
+            <p><b>Статус:</b> {getStatusDisplayName(task.status)}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Награда за работу:</b> {task.montajnik_reward || "—"}</p>
@@ -202,7 +220,7 @@ export default function AvailableTaskDetailPage() {
                 .map((e) => {
                   const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
                   // ✅ Отображаем serial_number и quantity
-                  return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+                  return `${eqName || e.equipment_id}${e.serial_number ? ` (СН: ${e.serial_number})` : ''} x${e.quantity}`;
                 })
                 .join(", ") || "—"}
             </p>

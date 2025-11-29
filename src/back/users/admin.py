@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from typing import Any, Counter, Dict, Optional
 from sqlalchemy.orm import selectinload
-
+from back.users.logist import FIELD_TRANSLATIONS_RU,format_value_rus,build_changes_summary_ru
 import logging
 from typing import Any, Dict, List
 
@@ -166,168 +166,185 @@ async def admin_update_task(
     if task.is_draft:
         raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
 
-    # Сохраняем *старые* значения связей для истории
-    # ✅ Обновляем получение старых данных с учетом quantity
+    # --- СОХРАНЯЕМ СТАРЫЕ ЗНАЧЕНИЯ ---
     old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
-    # ✅ Обновляем получение старых данных оборудования с serial_number и quantity
     old_equipment_with_sn_qty = [
         (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
     ]
     old_contact_person_name = task.contact_person.name if task.contact_person else None
     old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-    # ✅ Сохраняем старый телефон
     old_contact_person_phone = task.contact_person.phone if task.contact_person else None
-    # ✅ Сохраняем старые цены для проверки изменений
     old_client_price = task.client_price
     old_montajnik_reward = task.montajnik_reward
-    old_assigned_user_id = task.assigned_user_id # <--- Добавлено
+    old_assigned_user_id = task.assigned_user_id
     old_assignment_type = task.assignment_type
-    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}, client_price={old_client_price}, montajnik_reward={old_montajnik_reward}")
+
+    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
 
     incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
     logger.info(f"Полный incoming dict: {incoming}")
-    changed = []
 
     # --- normalize assigned_user_id ---
     if "assigned_user_id" in incoming:
         incoming["assigned_user_id"] = _normalize_assigned_user_id(incoming["assigned_user_id"])
 
-    # --- извлекаем equipment/work_types (если пришли) ---
     equipment_data: List[TaskEquipmentItem] = incoming.pop("equipment", None)
-    # ✅ work_types_data - список ID
     work_types_data = incoming.pop("work_types", None)
-    assigned_user_id_from_payload = incoming.pop("assigned_user_id", None)
     logger.info(f"equipment_data: {equipment_data}, work_types_data: {work_types_data}")
 
+    payload_dict = patch.model_dump() # Это включает null-значения
+
+    incoming_with_nulls = {}
+    for k, v in payload_dict.items():
+        if k not in {"equipment", "work_types"}:
+            incoming_with_nulls[k] = v
+
+    # --- Обработка assigned_user_id (может быть null) ---
     assigned_user_id_changed = False
     assignment_type_changed = False
-
-# Проверяем, пришло ли поле вообще
-    if "assigned_user_id" in patch.model_dump():
-        new_assigned_user_id = patch.assigned_user_id
-        old_assigned_user_id_in_task = task.assigned_user_id
-        old_assignment_type_in_task = task.assignment_type
+    if "assigned_user_id" in incoming_with_nulls:
+        new_assigned_user_id = incoming_with_nulls["assigned_user_id"]
 
         if new_assigned_user_id is None:
-            # Сброс монтажника
+            old_val = task.assigned_user_id
             setattr(task, "assigned_user_id", None)
-            assigned_user_id_changed = True
-            changed.append(("assigned_user_id", old_assigned_user_id_in_task, None))
-            logger.info(f"assigned_user_id сброшен: {old_assigned_user_id_in_task} -> None")
 
-            # Если тип назначения индивидуальный — меняем на broadcast
-            if task.assignment_type == AssignmentType.individual:
+            if task.assignment_type != AssignmentType.broadcast:
                 old_assignment_type_val = task.assignment_type
-                task.assignment_type = AssignmentType.broadcast
+                setattr(task, "assignment_type", AssignmentType.broadcast)
                 assignment_type_changed = True
+
+            # статус assigned → new
+            if task.status == TaskStatus.assigned:
+                task.status = TaskStatus.new
+
+            if old_val is not None:
+                changed.append(("assigned_user_id", old_val, None))
+                assigned_user_id_changed = True
+            if assignment_type_changed:
                 changed.append(("assignment_type", old_assignment_type_val, task.assignment_type))
-                logger.info(f"assignment_type изменён с {old_assignment_type_val.value} на {task.assignment_type.value}")
+
+            logger.info("assigned_user_id сброшен → статус возвращен в new")
+
         else:
-            # Назначаем нового монтажника
+            old_val = task.assigned_user_id
+            old_assignment_type_val = task.assignment_type
             setattr(task, "assigned_user_id", new_assigned_user_id)
-            assigned_user_id_changed = True
-            changed.append(("assigned_user_id", old_assigned_user_id_in_task, new_assigned_user_id))
-            logger.info(f"assigned_user_id изменён: {old_assigned_user_id_in_task} -> {new_assigned_user_id}")         
-    
-    assigned_user_id_changed = True # <--- Добавлено
-    changed.append(("assigned_user_id", old_assigned_user_id_in_task, new_assigned_user_id)) # <--- Добавлено в changed для истории
-    logger.info(f"assigned_user_id изменён: {old_assigned_user_id_in_task} -> {new_assigned_user_id}, assigned_user_id_changed={assigned_user_id_changed}")
-    
-    # --- Обновление основных полей задачи ---
+            setattr(task, "assignment_type", AssignmentType.individual)
+            assignment_type_changed = True
+
+            # статус new → assigned
+            if task.status == TaskStatus.new:
+                task.status = TaskStatus.assigned
+
+            if old_val != new_assigned_user_id:
+                changed.append(("assigned_user_id", old_val, new_assigned_user_id))
+                assigned_user_id_changed = True
+            if old_assignment_type_val != AssignmentType.individual:
+                changed.append(("assignment_type", old_assignment_type_val, AssignmentType.individual))
+                assignment_type_changed = True
+
+            logger.info("Назначен монтажник → статус переведен в assigned")
+
+    incoming_with_nulls.pop("assigned_user_id", None)
+
+    changed = [] # <--- Список изменений
+
     for field, value in incoming.items():
-        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types", "assigned_user_id"}: # <--- assigned_user_id добавлено в исключения
+        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
             continue
-        old = getattr(task, field)
-        old_cmp = old.value if hasattr(old, "value") else old
+
+        old_val = getattr(task, field)
+        old_cmp = old_val.value if hasattr(old_val, "value") else old_val
         new_cmp = value.value if hasattr(value, "value") else value
+
         logger.debug(f"Сравнение поля '{field}': DB={old_cmp}, Payload={new_cmp}")
+        # --- СРАВНЕНИЕ: Проверяем, изменилось ли значение ---
         if str(old_cmp) != str(new_cmp):
-            # конвертация assignment_type из строки (если не было обработано выше)
             if field == "assignment_type" and isinstance(value, str):
                 try:
                     value = AssignmentType(value)
                 except Exception:
                     raise HTTPException(status_code=400, detail="Invalid assignment_type")
             setattr(task, field, value)
-            changed.append((field, old, value))
+            changed.append((field, old_val, value))
             logger.info(f"Поле '{field}' помечено как изменённое: {old_cmp} -> {new_cmp}")
 
     # --- Обновление contact_person_id, company_id и contact_person_phone ---
-    contact_person_id = incoming.get("contact_person_id")
-    if contact_person_id is not None:
+    contact_person_changed = False
+    if "contact_person_id" in incoming_with_nulls:
+        contact_person_id = incoming_with_nulls["contact_person_id"]
+        old_cp_id = task.contact_person_id
+        old_co_id = task.company_id
+        old_cp_phone = task.contact_person_phone
+
         if contact_person_id:
             cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
             contact_person = cp_res.scalars().first()
             if not contact_person:
                 raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
-            old_cp_id = task.contact_person_id
-            old_co_id = task.company_id
-            old_cp_phone = task.contact_person_phone # <--- Сохраняем старый телефон
-            setattr(task, "contact_person_id", contact_person_id)
-            setattr(task, "company_id", contact_person.company_id)
-            setattr(task, "contact_person_phone", contact_person.phone) # <--- Установка телефона из CP
-            changed.append(("contact_person_id", old_cp_id, contact_person_id))
-            changed.append(("company_id", old_co_id, contact_person.company_id))
-            changed.append(("contact_person_phone", old_cp_phone, contact_person.phone)) # <--- Добавляем телефон в изменения
-            logger.info(f"Поле 'contact_person_id', 'company_id', 'contact_person_phone' помечены как изменённые: {old_cp_id}->{contact_person_id}, {old_co_id}->{contact_person.company_id}, {old_cp_phone}->{contact_person.phone}")
+
+            task.contact_person_id = contact_person_id
+            task.company_id = contact_person.company_id
+            task.contact_person_phone = contact_person.phone
         else:
-            old_cp_id = task.contact_person_id
-            old_co_id = task.company_id
-            old_cp_phone = task.contact_person_phone # <--- Сохраняем старый телефон
-            setattr(task, "contact_person_id", None)
-            setattr(task, "company_id", None)
-            setattr(task, "contact_person_phone", None) # <--- Сброс телефона
-            changed.append(("contact_person_id", old_cp_id, None))
-            changed.append(("company_id", old_co_id, None))
-            changed.append(("contact_person_phone", old_cp_phone, None)) # <--- Добавляем телефон в изменения
-            logger.info(f"Поле 'contact_person_id', 'company_id', 'contact_person_phone' сброшены: {old_cp_id}->{None}, {old_co_id}->{None}, {old_cp_phone}->{None}")
+            task.contact_person_id = None
+            task.company_id = None
+            task.contact_person_phone = None
+
+        # --- СРАВНЕНИЕ: Проверяем, изменились ли значения ---
+        if old_cp_id != task.contact_person_id or old_co_id != task.company_id or old_cp_phone != task.contact_person_phone:
+            changed.append(("contact_person_id", old_cp_id, task.contact_person_id))
+            changed.append(("company_id", old_co_id, task.company_id))
+            changed.append(("contact_person_phone", old_cp_phone, task.contact_person_phone))
+            contact_person_changed = True
+
+        logger.info(f"Поле 'contact_person_id', 'company_id', 'contact_person_phone' обновлены")
 
     # --- Обновление оборудования ---
-    # ✅ НОВАЯ ЛОГИКА обновления оборудования
+    equipment_changed = False
     if equipment_data is not None:
         # 1. Получаем существующие записи TaskEquipment для этой задачи
         existing_te_res = await db.execute(
             select(TaskEquipment).where(TaskEquipment.task_id == task.id)
         )
         existing_te_list = existing_te_res.scalars().all()
-        existing_te_map = {te.id: te for te in existing_te_list} # Map для быстрого поиска
+        existing_te_map = {te.id: te for te in existing_te_list}
 
-        incoming_te_ids = set() # Будем собирать ID пришедших записей для сравнения
+        incoming_te_ids = set()
 
         # 2. Обрабатываем каждый пришедший элемент
         for item_data_dict in equipment_data:
-            # Pydantic автоматически преобразует dict в TaskEquipmentItem
             item_data: TaskEquipmentItem = item_data_dict if isinstance(item_data_dict, TaskEquipmentItem) else TaskEquipmentItem(**item_data_dict)
-            
+
             item_id = item_data.id
             equipment_id = item_data.equipment_id
             serial_number = item_data.serial_number
             quantity = item_data.quantity
 
-            # Проверяем, существует ли оборудование
             eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
             equipment_obj = eq_res.scalars().first()
             if not equipment_obj:
                 raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
 
             if item_id:
-                # 2a. Обновление существующей записи
                 if item_id in existing_te_map:
                     te_record = existing_te_map[item_id]
-                    # Проверка, что запись принадлежит этой задаче
                     if te_record.task_id != task.id:
                         raise HTTPException(status_code=400, detail=f"Запись оборудования id={item_id} не принадлежит задаче {task.id}")
-                    
-                    te_record.equipment_id = equipment_id
-                    te_record.serial_number = serial_number
-                    te_record.quantity = quantity
-                    # db.add(te_record) # Не обязательно, если объект уже отслеживается
+
+                    # --- СРАВНЕНИЕ: Проверяем, изменились ли значения ---
+                    if te_record.equipment_id != equipment_id or te_record.serial_number != serial_number or te_record.quantity != quantity:
+                        te_record.equipment_id = equipment_id
+                        te_record.serial_number = serial_number
+                        te_record.quantity = quantity
+                        equipment_changed = True
+
                     incoming_te_ids.add(item_id)
                     logger.info(f"Обновлена запись TaskEquipment id={item_id}")
                 else:
                     raise HTTPException(status_code=400, detail=f"Запись TaskEquipment id={item_id} не найдена для задачи {task.id}")
             else:
-                # 2b. Создание новой записи
                 new_te = TaskEquipment(
                     task_id=task.id,
                     equipment_id=equipment_id,
@@ -335,8 +352,9 @@ async def admin_update_task(
                     quantity=quantity
                 )
                 db.add(new_te)
-                await db.flush() # Нужно для получения new_te.id
-                incoming_te_ids.add(new_te.id) # Добавляем ID новой записи
+                await db.flush()
+                incoming_te_ids.add(new_te.id)
+                equipment_changed = True
                 logger.info(f"Создана новая запись TaskEquipment id={new_te.id}")
 
         # 3. Удаление записей, которых нет во входящих данных
@@ -344,70 +362,72 @@ async def admin_update_task(
         if ids_to_delete:
             delete_stmt = delete(TaskEquipment).where(TaskEquipment.id.in_(ids_to_delete))
             await db.execute(delete_stmt)
+            equipment_changed = True
             logger.info(f"Удалены записи TaskEquipment ids={ids_to_delete}")
 
-        changed.append(("equipment", "old_equipment_set", equipment_data))
-        logger.info("Оборудование помечено как изменённое")
+        if equipment_changed:
+            changed.append(("equipment", "old_equipment_set", equipment_data))
+            logger.info("Оборудование помечено как изменённое")
 
-
-   
+    # --- Обновление work_types ---
+    work_types_changed = False
     if work_types_data is not None:
-         # Подсчитываем количество для каждого типа работ
-         from collections import Counter
-         work_type_counts = Counter(work_types_data)
-         
-         # 1. Удаляем все старые записи TaskWork
-         await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-         
-         # 2. Создаем новые записи с учетом количества
-         for wt_id, count in work_type_counts.items():
-             res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-             wt = res.scalars().first()
-             if not wt:
-                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-             db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
-         
-         changed.append(("work_types", "old_work_set", work_types_data))
-         logger.info("Типы работ помечены как изменённые")
+        # Подсчитываем количество для каждого типа работ
+        work_type_counts = Counter(work_types_data)
 
+        # 1. Удаляем все старые записи TaskWork
+        await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
+        work_types_changed = True
 
-    # --- НОВАЯ ЛОГИКА РАСЧЁТА ЦЕН ---
+        # 2. Создаем новые записи с учетом количества
+        for wt_id, count in work_type_counts.items():
+            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            wt = res.scalars().first()
+            if not wt:
+                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+            db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
+
+        changed.append(("work_types", "old_work_set", work_types_data))
+        logger.info("Типы работ помечены как изменённые")
+
+    # --- Пересчёт цен ---
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
 
-    # 1. Рассчитываем стоимость оборудования (для клиента и монтажника)
     equipment_res = await db.execute(
         select(TaskEquipment)
-        .options(selectinload(TaskEquipment.equipment)) # Загрузим оборудование для получения цены
+        .options(selectinload(TaskEquipment.equipment))
         .where(TaskEquipment.task_id == task.id)
     )
     task_equipment_list = equipment_res.scalars().all()
     for te in task_equipment_list:
-        equipment_unit_price = te.equipment.price or Decimal('0') # 
+        equipment_unit_price = te.equipment.price or Decimal('0')
         calculated_client_price += equipment_unit_price * te.quantity
 
     work_res = await db.execute(
         select(TaskWork)
-        .options(selectinload(TaskWork.work_type)) 
+        .options(selectinload(TaskWork.work_type))
         .where(TaskWork.task_id == task.id)
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0') # 
+        work_unit_price = tw.work_type.price or Decimal('0')
         calculated_client_price += work_unit_price * tw.quantity
         calculated_montajnik_reward += work_unit_price * tw.quantity
 
-        
-    task.client_price = calculated_client_price
-    task.montajnik_reward = calculated_montajnik_reward
-    logger.info(f"Рассчитанные цены: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
+    prices_changed = False
+    if task.client_price != calculated_client_price or task.montajnik_reward != calculated_montajnik_reward:
+        old_client_price = task.client_price
+        old_montajnik_reward = task.montajnik_reward
+        task.client_price = calculated_client_price
+        task.montajnik_reward = calculated_montajnik_reward
+        prices_changed = True
+        logger.info(f"Цены пересчитаны: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
 
     logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
-    has_changes = bool(changed)
-    logger.info(f"'has_changes' рассчитано как: {has_changes}")
 
-    # Проверяем, изменились ли цены (даже если другие поля не изменились)
-    prices_changed = (task.client_price != old_client_price) or (task.montajnik_reward != old_montajnik_reward)
+    # --- ПРОВЕРКА: Были ли изменения? ---
+    has_changes = bool(changed)
 
     if not has_changes and not prices_changed:
         logger.info("Нет изменений (включая цены) для сохранения, возвращаем 'Без изменений'")
@@ -416,113 +436,103 @@ async def admin_update_task(
         logger.info("Обнаружены изменения (или изменились цены), продолжаем выполнение")
 
     try:
+        # --- ПОЛУЧАЕМ НОВЫЕ ЗНАЧЕНИЯ ДЛЯ СНИМКОВ ---
         res_works = await db.execute(
             select(TaskWork)
-            .options(selectinload(TaskWork.work_type)) # Загрузить work_type для каждой TaskWork
+            .options(selectinload(TaskWork.work_type))
             .where(TaskWork.task_id == task.id)
         )
         full_works_list = res_works.scalars().all()
-        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in full_works_list] # <- Теперь .name доступно синхронно
+        new_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in full_works_list]
 
-        # 2. Получить полные данные по оборудованию (включая equipment.name)
         res_equip = await db.execute(
             select(TaskEquipment)
-            .options(selectinload(TaskEquipment.equipment)) # Загрузить equipment для каждого TaskEquipment
+            .options(selectinload(TaskEquipment.equipment))
             .where(TaskEquipment.task_id == task.id)
         )
         full_equip_list = res_equip.scalars().all()
         new_equipment_with_sn_qty = [
-            (te.equipment.name, te.serial_number, te.quantity) for te in full_equip_list # <- Теперь .name доступно синхронно
+            (te.equipment.name, te.serial_number, te.quantity) for te in full_equip_list
         ]
 
         new_contact_person_name = None
         new_company_name = None
-        if task.contact_person_id: # Если контактное лицо установлено
+        if task.contact_person_id:
             res_cp = await db.execute(
                 select(ContactPerson)
-                .options(selectinload(ContactPerson.company)) # Загрузить компанию для контактного лица
+                .options(selectinload(ContactPerson.company))
                 .where(ContactPerson.id == task.contact_person_id)
             )
             new_contact_person_obj = res_cp.scalars().first()
-            if new_contact_person_obj: # Убедимся, что объект найден
+            if new_contact_person_obj:
                 new_contact_person_name = new_contact_person_obj.name
                 new_company_name = new_contact_person_obj.company.name if new_contact_person_obj.company else None
-        # Если task.contact_person_id == None, то и имена останутся None
 
         logger.info(f"Новые связи для задачи {task_id}: equipment={new_equipment_with_sn_qty}, work_types={new_works_with_qty}, contact_person={new_contact_person_name}, company={new_company_name}")
 
-        # Собираем *все* изменения, включая equipment и work_types
+        # --- СОБИРАЕМ ВСЕ ИЗМЕНЕНИЯ ---
         all_changes = []
         for f, o, n in changed:
-            # ✅ Обрабатываем equipment и work_types отдельно
-            if f not in ["equipment", "work_types", "contact_person_id", "company_id", "contact_person_phone","assigned_user_id","assignment_type"]:
-                all_changes.append({"field": f, "old": str(o), "new": str(n)})
+            if f not in ["equipment", "work_types", "contact_person_id", "company_id", "contact_person_phone"]:
+                all_changes.append({"field": f, "old": o, "new": n})
 
-        # ✅ Проверяем и добавляем изменения equipment
-        if old_equipment_with_sn_qty != new_equipment_with_sn_qty:
-            # Можно сделать более детализированное сравнение, но для простоты просто запишем весь список
+        # Проверяем и добавляем изменения equipment
+        if equipment_changed:
             all_changes.append({
-                "field": "equipment", 
-                "old": old_equipment_with_sn_qty, 
+                "field": "equipment",
+                "old": old_equipment_with_sn_qty,
                 "new": new_equipment_with_sn_qty
             })
-            
-        # ✅ Проверяем и добавляем изменения work_types
-        if old_works_with_qty != new_works_with_qty:
-            # Можно сделать более детализированное сравнение, но для простоты просто запишем весь список
+
+        # Проверяем и добавляем изменения work_types
+        if work_types_changed:
             all_changes.append({
-                "field": "work_types", 
-                "old": old_works_with_qty, 
+                "field": "work_types",
+                "old": old_works_with_qty,
                 "new": new_works_with_qty
             })
 
-       
         # Проверяем изменения contact_person и company
-        old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
-        new_cp_co = f"{new_contact_person_name} ({new_company_name})" if new_contact_person_name and new_company_name else "—"
-        if old_cp_co != new_cp_co:
+        if contact_person_changed:
+            old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
+            new_cp_co = f"{new_contact_person_name} ({new_company_name})" if new_contact_person_name and new_company_name else "—"
             all_changes.append({"field": "contact_person", "old": old_cp_co, "new": new_cp_co})
-        
-        # Обработка изменения contact_person_phone отдельно, если оно произошло
-        cp_phone_change = next((item for item in changed if item[0] == "contact_person_phone"), None)
-        if cp_phone_change:
-            all_changes.append({"field": "contact_person_phone", "old": str(cp_phone_change[1]), "new": str(cp_phone_change[2])})
 
-        if assigned_user_id_changed: # <--- Добавлено
+        # Проверяем изменения assigned_user_id и assignment_type
+        if assigned_user_id_changed:
             all_changes.append({
                 "field": "assigned_user_id",
-                "old": str(old_assigned_user_id), # Используем старое значение из начала функции
-                "new": str(task.assigned_user_id)
+                "old": old_assigned_user_id,
+                "new": task.assigned_user_id
             })
-        
-        # ✅ Проверяем и добавляем изменения assignment_type
-        if assignment_type_changed: # <--- Добавлено
+        if assignment_type_changed:
             all_changes.append({
                 "field": "assignment_type",
-                "old": old_assignment_type.value if old_assignment_type else None, # Используем старое значение из начала функции
+                "old": old_assignment_type.value if old_assignment_type else None,
                 "new": task.assignment_type.value if task.assignment_type else None
             })
 
-        # ✅ Добавляем изменения цен в историю, если они произошли
+        # Проверяем изменения цен
         if prices_changed:
             all_changes.append({
                 "field": "client_price",
-                "old": str(old_client_price),
-                "new": str(task.client_price)
+                "old": old_client_price,
+                "new": task.client_price
             })
             all_changes.append({
                 "field": "montajnik_reward",
-                "old": str(old_montajnik_reward),
-                "new": str(task.montajnik_reward)
+                "old": old_montajnik_reward,
+                "new": task.montajnik_reward
             })
 
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
-        # Создаём комментарий с *всеми* изменениями
-        comment = json.dumps(all_changes, ensure_ascii=False)
-        logger.info(f"Комментарий для истории (JSON): {comment}")
+
+        # --- ФОРМИРУЕМ РУССКИЙ КОММЕНТАРИЙ ---
+        changes_summary_ru = build_changes_summary_ru(all_changes)
+        comment = changes_summary_ru
+        logger.info(f"Комментарий для истории (русский): {comment}")
 
         # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ ---
-        # Формируем снимки *после* обновления связей, но *до* commit
         equipment_snapshot_for_history = [
             {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
             for te in full_equip_list
@@ -537,26 +547,24 @@ async def admin_update_task(
             task_id=task.id,
             user_id=getattr(admin_user, "id", None),
             action=task.status,
-            comment=comment,
-            event_type=TaskHistoryEventType.updated, # ✅ Новый тип
-            # --- Сохраняем все основные поля задачи ---
-            company_id=task.company_id,  # ✅ Заменено
-            contact_person_id=task.contact_person_id,  # ✅ Заменено
+            comment=comment, 
+            event_type=TaskHistoryEventType.updated,
+            company_id=task.company_id,
+            contact_person_id=task.contact_person_id,
             contact_person_phone=task.contact_person_phone,
             vehicle_info=task.vehicle_info,
+            gos_number=task.gos_number,
             scheduled_at=task.scheduled_at,
             location=task.location,
             comment_field=task.comment,
             status=task.status.value if task.status else None,
             assigned_user_id=task.assigned_user_id,
-            client_price=str(task.client_price), # <--- Сохраняем новую рассчитанную цену
-            montajnik_reward=str(task.montajnik_reward), # <--- Сохраняем новую рассчитанную награду
+            client_price=str(task.client_price),
+            montajnik_reward=str(task.montajnik_reward),
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
-            gos_number = task.gos_number,
-            # --- НОВЫЕ ПОЛЯ: Снимки ---
-            equipment_snapshot=equipment_snapshot_for_history, # <--- Добавлено
-            work_types_snapshot=work_types_snapshot_for_history, # <--- Добавлено
+            equipment_snapshot=equipment_snapshot_for_history,
+            work_types_snapshot=work_types_snapshot_for_history,
         )
         db.add(hist)
         await db.flush()
@@ -564,6 +572,7 @@ async def admin_update_task(
 
         await db.commit()
         logger.info("Транзакция успешно зафиксирована")
+
     except Exception as e:
         logger.exception("Failed to update task: %s", e)
         try:
@@ -574,8 +583,8 @@ async def admin_update_task(
 
     if task.assigned_user_id:
         background_tasks.add_task(
-            notify_user, 
-            task.assigned_user_id, 
+            notify_user,
+            task.assigned_user_id,
             f"Задача #{task_id} была обновлена"
         )
 

@@ -100,6 +100,35 @@ export default function TechTaskDetailPage() {
     }
   };
 
+    const STATUS_TRANSLATIONS = {
+    new: "Создана",
+    accepted: "Принята монтажником",
+    on_the_road: "Выехал на работу",
+    started: "В процессе выполнения",
+    on_site: "Прибыл на место",
+    completed: "Завершена",
+    inspection: "На проверке",
+    returned: "Возвращена на доработку",
+    archived: "В архиве",
+    assigned: "Назначена",
+  };
+
+  // --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
+  function getStatusDisplayName(statusKey) {
+    return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
+}
+
+const REPORT_APPROVAL_TRANSLATIONS = {
+  waiting: "Проверяется",
+  approved: "Принято",
+  rejected: "Отклонено",
+};
+
+  function getReportApprovalDisplayName(approvalKey) {
+  return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
+}
+
+
   async function loadTask() {
     setLoading(true);
     setError(null);
@@ -271,7 +300,7 @@ export default function TechTaskDetailPage() {
                   </a>
                 ) : "—"}
               </p>
-            <p><b>Статус:</b> {task.status || "—"}</p>
+            <p><b>Статус:</b> {getStatusDisplayName(task.status)}</p>
             <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
@@ -283,7 +312,7 @@ export default function TechTaskDetailPage() {
                 .map((e) => {
                   const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
                   // ✅ Отображаем serial_number и quantity
-                  return `${eqName || e.equipment_id}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`;
+                  return `${eqName || e.equipment_id}${e.serial_number ? ` (СН: ${e.serial_number})` : ''} x${e.quantity}`;
                 })
                 .join(", ") || "—"}
             </p>
@@ -373,17 +402,15 @@ export default function TechTaskDetailPage() {
                       <p>Вложений нет</p>
                     )}
                     {/* СО СЛЕДУЮЩЕЙ СТРОКИ — статусы проверки */}
-                    <p>
-                      logist: <b>{r.approval_logist || "—"}</b> | tech:{" "}
-                      <b>{r.approval_tech || "—"}</b>
-                    </p>
-                    {/* Отображаем статус и комментарий другого проверяющего, если он не waiting и не текущий */}
-                    {/* В данном случае, тех.спец видит статус логиста */}
-                    {(r.approval_logist !== "waiting" && r.approval_logist !== "rejected") && (
-                      <p style={{ color: r.approval_logist === "approved" ? "green" : "orange" }}>
-                        <b>Логист:</b> {r.approval_logist} {r.review_comment && r.approval_logist === "rejected" && ` - ${r.review_comment}`}
-                      </p>
-                    )}
+                     <p>
+        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"} {/* <--- Используем новую функцию */}
+        {task.requires_tech_supp === true && (
+          <>
+            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"} {/* <--- Используем новую функцию */}
+          </>
+        )}
+      </p>
+                    
                     <div className="report-actions">
                       {r.approval_tech === "waiting" && (
                         <button onClick={() => handleTechApprove(task.id, r.id)}>✅ Принять (Тех)</button>

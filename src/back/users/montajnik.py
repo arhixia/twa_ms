@@ -42,21 +42,23 @@ def _now_utc():
     return datetime.now(timezone.utc)
 
 
+STATUS_TRANSLATIONS_RU = {
+    TaskStatus.new: "Создана",
+    TaskStatus.accepted: "Принята монтажником",
+    TaskStatus.on_the_road: "Выехал на работу",
+    TaskStatus.started: "В процессе выполнения",
+    TaskStatus.on_site: "Прибыл на место",
+    TaskStatus.completed: "Завершена",
+    TaskStatus.inspection: "На проверке логистом/тех поддержкой",
+    TaskStatus.returned: "Возвращена на доработку",
+    TaskStatus.archived: "Архивирована",
+    TaskStatus.assigned: "Назначена",
+}
+
+
 def _ensure_montajnik_or_403(user: User):
     if getattr(user, "role", None) != Role.montajnik:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
-
-
-# --- Helpers ---------------------------------------------------------------
-
-async def _add_history(db: AsyncSession, task: Task, user: User, action: TaskStatus, comment: Optional[str] = None):
-    h = TaskHistory(task_id=task.id, user_id=getattr(user, "id", None), action=action, comment=comment)
-    db.add(h)
-    try:
-        await db.flush()
-    except Exception:
-        logger.exception("Failed to flush history")
-
 
 # --- Endpoints -------------------------------------------------------------
 
@@ -775,15 +777,19 @@ async def change_status(
             for tw in task.works
         ]
 
+        # --- ФОРМИРОВАНИЕ РУССКОГО КОММЕНТАРИЯ ---
+        old_status_ru = STATUS_TRANSLATIONS_RU.get(old_status, old_status.value if old_status else 'None')
+        new_status_ru = STATUS_TRANSLATIONS_RU.get(new_status_enum, new_status_enum.value)
+
         hist = TaskHistory(
             task_id=task.id,
             user_id=getattr(current_user, "id", None),
             action=task.status, # action - статус задачи *после* изменения
             event_type=TaskHistoryEventType.status_changed, # ✅ Новый тип
-            comment=f"Статус изменён с {old_status.value if old_status else 'None'} на {new_status_enum.value}",
+            comment=f"Статус изменён с {old_status_ru} на {new_status_ru}", # <--- Используем русские названия
             field_name="status", # Поле, которое изменилось
-            old_value=old_status.value if old_status else None, # Старое значение статуса
-            new_value=new_status_enum.value, # Новое значение (запрашиваемое)
+            old_value=old_status_ru, # <--- Старое значение статуса (русское)
+            new_value=new_status_ru, # <--- Новое значение (русское)
             # --- Сохраняем все основные поля задачи ---
             company_id=task.company_id,  # ✅ Заменено
             contact_person_id=task.contact_person_id,  # ✅ Заменено

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['salt-tvs-sports-replied.trycloudflare.com']
+    allowedHosts: ['charging-mardi-document-script.trycloudflare.com']
   },
 })
 

@@ -226,7 +226,7 @@ async def tech_review_report(
                 action=TaskStatus.completed, # action - новый статус
                 event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
                 # ✅ Комментарий для истории, когда оба одобрены
-                comment=f"Tech review: approved. Both approvals -> completed by tech.",
+                comment=f"Задача проверена тех.специалистом.",
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,
                 contact_person_id=task.contact_person_id,
@@ -257,7 +257,7 @@ async def tech_review_report(
             # if tech approved, but logist hasn't reviewed yet -> keep task in inspection state; add history entry for tech approval
             action = TaskStatus.inspection # Статус задачи не изменился, но отчёт проверялся
             # ✅ Комментарий для истории, когда только тех.спец одобрил
-            hist_comment = f"Tech review: approved."
+            hist_comment = f"Задача проверена тех.специалистом"
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта тех.специалистом) ---
             # Так как связи уже загружены через options в t_res, мы можем их использовать

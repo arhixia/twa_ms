@@ -34,6 +34,37 @@ export default function LogistArchivedTaskDetailPage() {
     }
   }
 
+  const STATUS_TRANSLATIONS = {
+  new: "Создана",
+  accepted: "Принята монтажником",
+  on_the_road: "Выехал на работу",
+  started: "В процессе выполнения",
+  on_site: "Прибыл на место",
+  completed: "Завершена",
+  inspection: "На проверке",
+  returned: "Возвращена на доработку",
+  archived: "В архиве",
+  assigned: "Назначена",
+};
+
+// --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
+function getStatusDisplayName(statusKey) {
+  return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
+}
+
+const REPORT_APPROVAL_TRANSLATIONS = {
+  waiting: "Проверяется",
+  approved: "Принято",
+  rejected: "Отклонено",
+};
+
+  function getReportApprovalDisplayName(approvalKey) {
+  return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
+}
+
+
+
+
   async function loadTask() {
     setLoading(true);
     setError(null);
@@ -86,7 +117,7 @@ export default function LogistArchivedTaskDetailPage() {
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
             <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
-            <p><b>Статус:</b> {task.status || "—"}</p>
+            <p><b>Статус:</b> {getStatusDisplayName(task.status)}</p>
             <p>
                 <b>Место/Адрес:</b>{" "}
                 {task.location ? (
@@ -117,7 +148,7 @@ export default function LogistArchivedTaskDetailPage() {
                 .map((e) => {
                   const eqName = getEquipmentNameById(e.equipment_id);
                   // ✅ Отображаем serial_number и quantity
-                  return `${eqName} x${e.quantity} (SN: ${e.serial_number || 'N/A'})`;
+                  return `${eqName} x${e.quantity} (СН: ${e.serial_number || 'N/A'})`;
                 })
                 .join(", ") || "—"}
             </p>
@@ -152,14 +183,14 @@ export default function LogistArchivedTaskDetailPage() {
                 task.reports.map(r => (
                   <div key={r.id} className="report">
                     <p>#{r.id}: {r.text || "—"}</p>
-                    <p>
-                      <b>Логист:</b> <span style={{ color: r.approval_logist === "approved" ? "green" : r.approval_logist === "rejected" ? "red" : "orange" }}>
-                        {r.approval_logist || "—"}
-                      </span> |
-                      <b>Тех.спец:</b> <span style={{ color: r.approval_tech === "approved" ? "green" : r.approval_tech === "rejected" ? "red" : "orange" }}>
-                        {r.approval_tech || "—"}
-                      </span>
-                    </p>
+                     <p>
+        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"} {/* <--- Используем новую функцию */}
+        {task.requires_tech_supp === true && (
+          <>
+            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"} {/* <--- Используем новую функцию */}
+          </>
+        )}
+      </p>
                     {r.photos && r.photos.length > 0 && (
                       <div className="attached-list">
                         {r.photos.map((photoUrl, idx) => (

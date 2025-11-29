@@ -49,6 +49,25 @@ export default function TechTaskHistoryPage() {
     }
   }
 
+   const STATUS_TRANSLATIONS = {
+  new: "Создана",
+  accepted: "Принята монтажником",
+  on_the_road: "Выехал на работу",
+  started: "В процессе выполнения",
+  on_site: "Прибыл на место",
+  completed: "Завершена",
+  inspection: "На проверке",
+  returned: "Возвращена на доработку",
+  archived: "В архиве",
+  assigned: "Назначена",
+};
+
+// --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
+function getStatusDisplayName(statusKey) {
+  return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
+}
+
+
   // ✅ Функция для получения имени компании по ID
   function getCompanyNameById(companyId) {
     if (!companyId) return "—";
@@ -216,19 +235,7 @@ export default function TechTaskHistoryPage() {
                     })()}
                   </div>
 
-                  {/* --- Изменённое поле (если есть) --- */}
-                  {(h.field_name || h.old_value || h.new_value) && (
-                    <div style={{ marginTop: '8px', fontSize: '0.9em' }}>
-                      <b>Поле:</b> {fieldNameStr} | <b>Старое:</b> {oldValueStr} | <b>Новое:</b> {newValueStr}
-                    </div>
-                  )}
-
-                  {/* --- Связанная сущность (если есть) --- */}
-                  {(h.related_entity_type || h.related_entity_id) && (
-                    <div style={{ marginTop: '4px', fontSize: '0.9em' }}>
-                      <b>Сущность:</b> {relatedEntityTypeStr} (ID: {relatedEntityIdStr})
-                    </div>
-                  )}
+  
 
                   {/* --- Все поля задачи на момент события --- */}
                   <div style={{ marginTop: '12px', padding: '8px', backgroundColor: '#161b22', borderRadius: '4px', color: '#e6eef8' }}>
@@ -276,7 +283,7 @@ export default function TechTaskHistoryPage() {
                   </a>
                 ) : "—"}
               </p>
-                      <div><b>Статус:</b> {h.status || "—"}</div>
+                     <p><b>Статус:</b> {getStatusDisplayName(h.status)}</p>
                       <div><b>Монтажник:</b> {h.assigned_user_name || "—"}</div>
                       <div><b>Комментарий:</b> {h.comment_field || "—"}</div>
                       <div><b>Цена клиента:</b> {h.client_price || "—"}</div>
