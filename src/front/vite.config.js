@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['charging-mardi-document-script.trycloudflare.com']
+    allowedHosts: ['microphone-chairman-identifying-conclusion.trycloudflare.com']
   },
 })
 
