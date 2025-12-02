@@ -20,38 +20,7 @@ import {
 } from "../../api";
 import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
-
-
-
-function useReportAttachments(reportId) {
-  const [attachments, setAttachments] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    if (!reportId) {
-      setAttachments([]);
-      return;
-    }
-    const fetchAttachments = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await listReportAttachments(reportId);
-        setAttachments(data);
-      } catch (err) {
-        console.error("Ошибка загрузки вложений отчёта:", err);
-        setError(err.response?.data?.detail || "Ошибка загрузки вложений");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAttachments();
-  }, [reportId]);
-
-  return { attachments, loading, error };
-}
+import ImageModal  from "../../components/ImageModal"; // <--- Импортируем компонент
 
 
 // --- Новый компонент: Модальное окно изменения статуса ---
@@ -373,8 +342,31 @@ export default function MontajnikTaskDetailPage() {
   const [rejectComment, setRejectComment] = useState("");
   const [attachments, setAttachments] = useState([]); // Состояние для вложений
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
-
+  const [openImage, setOpenImage] = useState(null);
   
+
+ const isReportInReview = (report) => {
+    const logistWaiting = report.approval_logist === null || report.approval_logist === 'waiting';
+    const techWaiting = report.approval_tech === null || report.approval_tech === 'waiting';
+    const logistApproved = report.approval_logist === 'approved';
+    const techApproved = report.approval_tech === 'approved';
+
+    if (logistApproved && techApproved) {
+      return false; // Принят
+    }
+    if (report.approval_logist === 'rejected' || report.approval_tech === 'rejected') {
+      return false; // Отклонён
+    }
+    // Если не принят и не отклонён, но есть хотя бы один waiting/null - значит проверяется
+    return logistWaiting || techWaiting;
+  };
+
+  const isReportRejected = (report) => {
+    return report.approval_logist === 'rejected' || report.approval_tech === 'rejected';
+  };
+
+
+
 
   useEffect(() => {
     loadRefs();
@@ -391,8 +383,6 @@ export default function MontajnikTaskDetailPage() {
       setReportReviews(taskReviews);
     } catch (err) {
       console.error("Ошибка загрузки отзывов на отчёты:", err);
-      // alert("Ошибка загрузки отзывов на отчёты");
-      // Не критично, можно не показывать алерт
     }
   }
 
@@ -440,7 +430,7 @@ export default function MontajnikTaskDetailPage() {
 }
 
 
-
+  
 
   async function loadTask() {
     setLoading(true);
@@ -460,40 +450,45 @@ export default function MontajnikTaskDetailPage() {
 
       // Извлекаем ID для редактирования, как в TaskDetailPage
       t.equipment_ids = t.equipment.map((e) => e.equipment_id);
-      // t.work_types_ids = t.work_types; // <-- НЕПРАВИЛЬНО
-      t.work_types_ids = t.work_types.map(wt => wt.work_type_id); // <-- ПРАВИЛЬНО: извлекаем work_type_id
+      t.work_types_ids = t.work_types.map(wt => wt.work_type_id); 
 
       setTask(t);
       setAttachments(t.attachments || []);
 
-      // При загрузке задачи, устанавливаем form в состояние задачи (включая *_ids)
-      // setForm(t); // Убираем, так как у монтажника нет редактирования задачи
-
-      // ✅ Загружаем телефон контактного лица, если contact_person_id есть в данных задачи
       if (data.contact_person_id) {
          try {
-            const { phone } = await getMontContactPersonPhone(data.contact_person_id); // <--- Вызываем эндпоинт
-            setContactPersonPhone(phone); // <--- Устанавливаем телефон
+            const { phone } = await getMontContactPersonPhone(data.contact_person_id); 
+            setContactPersonPhone(phone); 
          } catch (err) {
             console.error("Ошибка загрузки телефона контактного лица:", err);
-            setContactPersonPhone(null); // <--- Сброс при ошибке
+            setContactPersonPhone(null); 
          }
       } else {
-        setContactPersonPhone(null); // <--- Сброс если contact_person_id нет
+        setContactPersonPhone(null);
       }
 
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       setError(err.response?.data?.detail || err.message || "Ошибка загрузки задачи");
       if (err.response?.status === 403 || err.response?.status === 404) {
-        // Перенаправляем на "Мои задачи" если доступа нет или задача не найдена
-        // (возможно, задача была завершена или отозвана)
         navigate("/montajnik/tasks/mine");
       }
     } finally {
       setLoading(false);
     }
   }
+
+
+
+
+  const handleImageClick = (imageUrl) => {
+    setOpenImage(imageUrl);
+  };
+
+  const closeModal = () => {
+    setOpenImage(null);
+  };
+  
 
   const loadReportAttachments = async (reportId) => {
   try {
@@ -546,9 +541,16 @@ export default function MontajnikTaskDetailPage() {
       </div>
     );
 
-  // Получаем ID назначенных работ для задачи
-  // const taskWorkTypeIds = (task.work_types || []).map(wt => wt); // <-- НЕПРАВИЛЬНО: извлекает объекты
-  const taskWorkTypeIds = (task?.work_types || []).map(wt => wt.work_type_id); // <-- ПРАВИЛЬНО: извлекает work_type_id
+
+    const showAddReportButton = task.status !== "completed" && (() => {
+    const hasReportInReview = task.reports && task.reports.some(r => isReportInReview(r));
+    const hasRejectedReport = task.reports && task.reports.some(r => isReportRejected(r));
+
+    return !hasReportInReview;
+  })();
+
+
+  const taskWorkTypeIds = (task?.work_types || []).map(wt => wt.work_type_id); 
 
   return (
     <div className="logist-main">
@@ -657,44 +659,96 @@ export default function MontajnikTaskDetailPage() {
             </div>
 
             {/* --- НОВАЯ СЕКЦИЯ: Отзывы на отчёты по этой задаче --- */}
-            <div className="section">
-              <h3>Ответы на отчёты</h3>
-              {reportReviews.length > 0 ? (
-                reportReviews.map((review, index) => (
-                  <div key={`${review.report_id}-${review.reviewer_role}-${index}`} className="report-review">
-                    <p><b>Отчёт #{review.report_id} (от {new Date(review.reviewed_at || review.created_at).toLocaleString()})</b></p>
-                    <p><b>Проверяющий:</b> {review.reviewer_role === 'logist' ? 'Логист' : 'Тех.спец'}</p>
-                    <p><b>Статус:</b> <span style={{ color: review.approval_status === "approved" ? "green" : review.approval_status === "rejected" ? "red" : "orange" }}>
-                      {review.approval_status}
-                    </span></p>
-                    {review.review_comment && (
-                      <p><b>Комментарий:</b> <span style={{ color: "white" }}>{review.review_comment}</span></p>
-                    )}
+    <div className="section">
+  <h3>Ответы на отчеты</h3>
+  {reportReviews.length > 0 ? (
+    (() => {
+      const groupedReviews = reportReviews.reduce((acc, review) => {
+        if (!acc[review.report_id]) {
+          acc[review.report_id] = {};
+        }
+        // Используем 'tech_supp' как ключ, если на бэкенде так
+        acc[review.report_id][review.reviewer_role] = review;
+        return acc;
+      }, {});
 
-                    <details>
-                      <summary>Оригинальный отчёт</summary>
-                      <p>{review.original_report_text || "—"}</p>
-                      {review.original_report_photos && review.original_report_photos.length > 0 && (
-                        <div className="attached-list">
-                          {review.original_report_photos.map((photoUrl, idx) => (
-                            <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                              <img src={photoUrl} alt={`Original report photo ${idx}`} style={{ maxHeight: 100 }} />
-                            </a>
-                          ))}
-                        </div>
+      // 2. Преобразуем объект в массив и сортируем по report_id
+      const sortedReportIds = Object.keys(groupedReviews).sort((a, b) => parseInt(a) - parseInt(b));
+
+      return sortedReportIds.map((reportId, reportIndex) => {
+        const reportGroup = groupedReviews[reportId];
+        const logistReview = reportGroup.logist;
+        const techReview = reportGroup.tech_supp; // <--- Убедитесь, что ключ правильный
+
+        // 3. Определяем, показывать ли разделительную линию
+        const showDivider = reportIndex > 0;
+
+        return (
+          <React.Fragment key={reportId}>
+            {/* Разделительная линия между отчётами */}
+            {showDivider && <hr style={{ borderTop: '1px dashed #555', margin: '16px 0' }} />}
+            
+            <div className="report-review-group">
+    
+              <p><b>Отчёт #{reportId} </b></p>
+
+              {/* Контейнер для ответов от логиста и тех.спеца */}
+              <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
+                
+                {/* Ответ логиста */}
+                <div className="reviewer-response" style={{ flex: 1, border: '1px solid #444', borderRadius: '4px', padding: '8px', backgroundColor: '#1a1a1a' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '1em', color: '#e0e0e0' }}>Логист</h4>
+                  {logistReview ? (
+                    <>
+                      <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#888' }}>
+                        <b>Время ответа:</b> {new Date(logistReview.reviewed_at_logist).toLocaleString()}
+                      </p>
+                      <p style={{ margin: '4px 0' }}>
+                        <b>Статус:</b> <span style={{ color: logistReview.approval_status === "approved" ? "green" : logistReview.approval_status === "rejected" ? "red" : "orange" }}>
+                          {logistReview.approval_status}
+                        </span>
+                      </p>
+                      {logistReview.review_comment && (
+                        <p style={{ margin: '4px 0' }}><b>Комментарий:</b> <span style={{ color: "white" }}>{logistReview.review_comment}</span></p>
                       )}
-                    </details>
-                  </div>
-                ))
-              ) : (
-                <div className="empty">Ответов на отчёты пока нет</div>
-              )}
-            </div>
-            {/* --- КОНЕЦ НОВОЙ СЕКЦИИ --- */}
+                    </>
+                  ) : (
+                    <p style={{ margin: '4px 0', fontStyle: 'italic', color: '#888' }}>Ответ отсутствует</p>
+                  )}
+                </div>
 
-            {/* Отчёты */}
+                {/* Ответ тех.спеца */}
+                <div className="reviewer-response" style={{ flex: 1, border: '1px solid #444', borderRadius: '4px', padding: '8px', backgroundColor: '#1a1a1a' }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '1em', color: '#e0e0e0' }}>Тех.спец</h4>
+                  {techReview ? (
+                    <>
+                      <p style={{ margin: '4px 0', fontSize: '0.9em', color: '#888' }}>
+                        <b>Время ответа:</b> {new Date(techReview.reviewed_at_tech_supp ).toLocaleString()}
+                      </p>
+                      <p style={{ margin: '4px 0' }}>
+                        <b>Статус:</b> <span style={{ color: techReview.approval_status === "approved" ? "green" : techReview.approval_status === "rejected" ? "red" : "orange" }}>
+                          {techReview.approval_status}
+                        </span>
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ margin: '4px 0', fontStyle: 'italic', color: '#888' }}>Ответ отсутствует</p>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          </React.Fragment>
+        );
+      });
+    })()
+  ) : (
+    <div className="empty">Ответов на отчёты пока нет</div>
+  )}
+</div>
+
             <div className="section">
-  <h3>Отчёты</h3>
+  <h3>Отчеты</h3>
   {(task.reports && task.reports.length > 0) ? (
     task.reports.map(r => {
       const reportAttachments = reportAttachmentsMap[r.id] || [];
@@ -715,7 +769,6 @@ export default function MontajnikTaskDetailPage() {
           comment = r.text;
         }
       }
-      // --- КОНЕЦ НОВОГО ---
 
       return (
         <div key={r.id} className="report">
@@ -743,19 +796,20 @@ export default function MontajnikTaskDetailPage() {
                 console.log(`[DEBUG] Att ${att.id}: thumbUrl = ${thumbUrl}, originalUrl = ${originalUrl}`);
 
                 return (
-                  <a
-                    key={att.id}
-                    href={originalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img
-                      src={thumbUrl}
-                      alt={`Report attachment ${idx}`}
-                      style={{ maxHeight: 100 }}
-                    />
-                  </a>
-                );
+                   <div
+                                key={att.id}
+                                style={{ cursor: 'zoom-in' }} // Меняем курсор
+                                onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                              >
+                                <img
+                                  src={thumbUrl}
+                                  alt={`Report attachment ${idx}`}
+                                  style={{ maxHeight: 100 }}
+                                />
+
+                              </div>
+
+                            );
               })}
             </div>
           ) : (
@@ -783,16 +837,23 @@ export default function MontajnikTaskDetailPage() {
     <div className="empty">Отчётов пока нет</div>
   )}
 
-  <div className="report-form">
-    {task.status !== "completed" && (
-      <div className="report-form">
-        <h4>Создать новый отчёт</h4>
-        <button className="add-btn" onClick={() => setShowReportModal(true)}>
-          📝 Добавить отчёт
-        </button>
-      </div>
-    )}
-  </div>
+              {showAddReportButton && (
+                <div className="report-form">
+                  <h4>Создать новый отчёт</h4>
+                  <button className="add-btn" onClick={() => setShowReportModal(true)}>
+                    📝 Добавить отчёт
+                  </button>
+                </div>
+              )}
+
+              {!showAddReportButton && task.status !== "completed" && (() => {
+                const reportInReview = task.reports && task.reports.find(r => isReportInReview(r));
+                if (reportInReview) {
+                  return <p style={{ color: 'orange' }}>⚠️ Отчёт #{reportInReview.id} находится на проверке.</p>;
+                }
+                return null;
+              })()}
+
 </div>
 
           </div>
@@ -831,6 +892,13 @@ export default function MontajnikTaskDetailPage() {
     );
   })()}
 </div>
+
+  <ImageModal
+        isOpen={!!openImage} // Передаём true/false
+        onClose={closeModal}
+        imageUrl={openImage} // Передаём URL изображения
+        altText="Вложение отчёта" // Опционально: текст по умолчани
+      />
 
       {showStatusModal && (
         <ChangeStatusModal

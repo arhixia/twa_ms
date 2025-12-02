@@ -198,7 +198,8 @@ class MontajnikReportReview(BaseModel):
     review_photos: List[str]  # Список URL фото
     reviewer_role: str  # 'logist' или 'tech_supp'
     approval_status: str  # 'approved', 'rejected', 'waiting'
-    reviewed_at: Optional[datetime] = None
+    reviewed_at_logist: Optional[datetime] = None
+    reviewed_at_tech_supp: Optional[datetime] = None
     original_report_text: Optional[str] = None
     original_report_photos: List[str]  # Список URL фото из оригинального отчёта
 

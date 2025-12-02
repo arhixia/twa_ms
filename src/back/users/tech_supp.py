@@ -199,7 +199,7 @@ async def tech_review_report(
     old_approval = report.approval_tech
     # ✅ УБИРАЕМ возможность установить rejected
     report.approval_tech = ReportApproval.approved # <--- Всегда approved, если пришло "approved"
-    report.reviewed_at = datetime.now(timezone.utc)
+    report.reviewed_at_tech_supp = datetime.now(timezone.utc)
 
     try:
         # if both approved -> finalize task

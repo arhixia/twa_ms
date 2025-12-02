@@ -499,6 +499,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
         contact_person_phone: t.contact_person_phone || null,
         assignment_type: t.assignment_type,
         assigned_user_id: t.assigned_user_id || null,
+        photo_required: true,
       };
 
       setForm(initialForm);
@@ -1273,15 +1274,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
                   />
                 </div>
               )}
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  checked={form.photo_required || false}
-                  onChange={(e) => setField("photo_required", e.target.checked)}
-                />{" "}
-                Фото обязательно
-              </label>
 
             </div>
           ) : (

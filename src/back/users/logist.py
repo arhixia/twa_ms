@@ -762,42 +762,37 @@ async def publish_task(
     draft_id = data.get("draft_id")
 
     if draft_id:
-        # --- Публикация из черновика (НОВАЯ ЛОГИКА) ---
-        res = await db.execute(
-            select(Task)
-            .where(Task.id == draft_id, Task.is_draft == True)
-            # Загружаем связи, чтобы скопировать их
-            .options(
-                selectinload(Task.works).selectinload(TaskWork.work_type),
-                selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment)
-            )
-        )
-        draft_task = res.scalars().first()
-        if not draft_task:
+        # --- Публикация из черновика ---
+        res = await db.execute(select(Task).where(Task.id == draft_id, Task.is_draft == True))
+        task = res.scalars().first()
+        if not task:
             raise HTTPException(status_code=404, detail="Черновик не найден")
 
-        # --- 1. Подготовка данных для новой задачи ---
-        # Берём все атрибуты черновика
-        task_attrs = {column.name: getattr(draft_task, column.name) for column in Task.__table__.columns}
-        # Исключаем id и is_draft
-        task_attrs.pop("id", None)
-        task_attrs.pop("is_draft", None)
-        # Перезаписываем поля из payload (например, если пользователь что-то изменил перед публикацией)
+        # Обновляем поля, кроме связей и рассчитанных цен (цены пересчитаем ниже)
         for key, value in data.items():
-            if key in {"draft_id", "equipment", "work_types"}: # Исключаем специальные поля
-                continue
+            if key in {"draft_id", "equipment", "work_types", "client_price", "montajnik_reward"}:
+                continue # Пропускаем специальные поля
             if value is not None:
-                task_attrs[key] = value
+                setattr(task, key, value)
 
-        # --- 2. Пересчёт цен для новой задачи ---
-        # Используем те же логики, что и в прямой публикации
-        current_work_items = draft_task.works
-        current_equipment_items = draft_task.equipment_links
+        current_wt_res = await db.execute(
+            select(TaskWork)
+            .options(selectinload(TaskWork.work_type)) # <--- ЗАГРУЖАЕМ work_type
+            .where(TaskWork.task_id == task.id)
+        )
+        current_work_items = current_wt_res.scalars().all()
+
+        current_eq_res = await db.execute(
+            select(TaskEquipment)
+            .options(selectinload(TaskEquipment.equipment)) # <--- ЗАГРУЖАЕМ equipment
+            .where(TaskEquipment.task_id == task.id)
+        )
+        current_equipment_items = current_eq_res.scalars().all()
 
         # --- Пересчёт Work Types ---
         work_types_ids_for_calc = []
         for tw in current_work_items:
-            work_types_ids_for_calc.extend([tw.work_type_id] * tw.quantity)
+            work_types_ids_for_calc.extend([tw.work_type_id] * tw.quantity) # Воссоздаём плоский список
 
         work_type_counts = Counter(work_types_ids_for_calc)
         work_types_ids_unique = list(work_type_counts.keys())
@@ -838,81 +833,49 @@ async def publish_task(
                 calculated_equipment_cost += (eq.price or Decimal('0')) * qty
 
         # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
-        final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
-        final_montajnik_reward = calculated_works_cost_for_client
+        # Клиент платит за работы + за оборудование
+        task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
+        # Монтажник получает только за оборудование
+        task.montajnik_reward = calculated_works_cost_for_client
 
-        # Устанавливаем рассчитанные цены
-        task_attrs["client_price"] = final_client_price
-        task_attrs["montajnik_reward"] = final_montajnik_reward
-        # Устанавливаем is_draft в False для новой задачи
-        task_attrs["is_draft"] = False
-        # Устанавливаем created_by
-        task_attrs["created_by"] = int(current_user.id)
+        task.is_draft = False # Меняем статус на опубликованную задачу
 
-        # --- 3. Создание новой задачи ---
-        new_task = Task(**task_attrs)
-        db.add(new_task)
-        await db.flush() # flush, чтобы получить new_task.id
+        # --- СОЗДАНИЕ СНИМКОВ ОБОРУДОВАНИЯ И ВИДОВ РАБОТ ДЛЯ ИСТОРИИ (на основе current_work_items и current_equipment_items) ---
+        equipment_snapshot_for_history = [
+            {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+            for te in current_equipment_items
+        ]
 
-        # --- 4. Копирование связей (TaskWork, TaskEquipment) ---
-        equipment_snapshot_for_history = []
-        for te in current_equipment_items:
-            new_te = TaskEquipment(
-                task_id=new_task.id,
-                equipment_id=te.equipment_id,
-                serial_number=te.serial_number,
-                quantity=te.quantity
-            )
-            db.add(new_te)
-            # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
-            equipment_snapshot_for_history.append({
-                "name": te.equipment.name,
-                "serial_number": te.serial_number,
-                "quantity": te.quantity
-            })
+        work_types_snapshot_for_history = [
+            {"name": tw.work_type.name, "quantity": tw.quantity}
+            for tw in current_work_items
+        ]
 
-        work_types_snapshot_for_history = []
-        for tw in current_work_items:
-            new_tw = TaskWork(
-                task_id=new_task.id,
-                work_type_id=tw.work_type_id,
-                quantity=tw.quantity
-            )
-            db.add(new_tw)
-            # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
-            work_types_snapshot_for_history.append({
-                "name": tw.work_type.name,
-                "quantity": tw.quantity
-            })
-
-        # --- 5. Создание записи в истории для новой задачи ---
+        # Добавляем запись в историю
         db.add(TaskHistory(
-            task_id=new_task.id,
+            task_id=task.id,
             user_id=current_user.id,
-            action=new_task.status,
+            action=task.status,
             event_type=TaskHistoryEventType.published,
-            comment=f"Задача #{new_task.id} опубликована",
-            company_id=new_task.company_id,
-            contact_person_id=new_task.contact_person_id,
-            contact_person_phone=new_task.contact_person_phone,
-            vehicle_info=new_task.vehicle_info,
-            scheduled_at=new_task.scheduled_at,
-            location=new_task.location,
-            comment_field=new_task.comment,
-            status=new_task.status.value if new_task.status else None,
-            assigned_user_id=new_task.assigned_user_id,
-            client_price=str(new_task.client_price) if new_task.client_price is not None else None,
-            montajnik_reward=str(new_task.montajnik_reward) if new_task.montajnik_reward is not None else None,
-            photo_required=new_task.photo_required,
-            assignment_type=new_task.assignment_type.value if new_task.assignment_type else None,
-            gos_number=new_task.gos_number,
+            comment="Задача #{task.id} опубликована",
+            company_id=task.company_id,
+            contact_person_id=task.contact_person_id,
+            contact_person_phone=task.contact_person_phone,
+            vehicle_info=task.vehicle_info,
+            scheduled_at=task.scheduled_at,
+            location=task.location,
+            comment_field=task.comment,
+            status=task.status.value if task.status else None,
+            assigned_user_id=task.assigned_user_id,
+            client_price=str(task.client_price) if task.client_price is not None else None,
+            montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+            photo_required=task.photo_required,
+            assignment_type=task.assignment_type.value if task.assignment_type else None,
+            gos_number = task.gos_number,
             # --- НОВЫЕ ПОЛЯ ---
             equipment_snapshot=equipment_snapshot_for_history,
             work_types_snapshot=work_types_snapshot_for_history,
         ))
-
-        # Для отправки уведомлений используем новую задачу
-        task_to_notify = new_task
 
     else:
         # --- Прямая публикация (без черновика) ---
@@ -974,7 +937,7 @@ async def publish_task(
         final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
         final_montajnik_reward = calculated_works_cost_for_client
 
-        task_to_notify = Task(
+        task = Task(
             contact_person_id=contact_person_id,
             company_id=company_id,
             contact_person_phone=contact_person_phone,
@@ -997,11 +960,11 @@ async def publish_task(
             gos_number=gos_number,
         )
 
-        db.add(task_to_notify)
+        db.add(task)
         await db.flush() # flush, чтобы получить task.id
 
         # --- SAVE EQUIPMENT для новой задачи ---
-        equipment_snapshot_for_history = []
+        equipment_snapshot_for_history = [] # <--- Собираем снимок
         for eq_item in equipment_data_raw:
             equipment_id = eq_item.get("equipment_id")
             serial_number = eq_item.get("serial_number")
@@ -1020,14 +983,14 @@ async def publish_task(
             })
 
             db.add(TaskEquipment(
-                task_id=task_to_notify.id,
+                task_id=task.id,
                 equipment_id=equipment_id,
                 serial_number=serial_number,
                 quantity=quantity
             ))
 
         # --- SAVE WORK TYPES для новой задачи ---
-        work_types_snapshot_for_history = []
+        work_types_snapshot_for_history = [] # <--- Собираем снимок
         for wt_id, count in work_type_counts.items():
             wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
             wt = wt_res.scalars().first()
@@ -1041,53 +1004,55 @@ async def publish_task(
             })
 
             db.add(TaskWork(
-                task_id=task_to_notify.id,
+                task_id=task.id,
                 work_type_id=wt_id,
                 quantity=count
             ))
 
         # Добавляем запись в историю для новой задачи
         db.add(TaskHistory(
-            task_id=task_to_notify.id,
+            task_id=task.id,
             user_id=current_user.id,
-            action=task_to_notify.status,
+            action=task.status,
             event_type=TaskHistoryEventType.created, # или published
-            comment=f"Задача #{task_to_notify.id} опубликована",
-            company_id=task_to_notify.company_id,
-            contact_person_id=task_to_notify.contact_person_id,
-            contact_person_phone=task_to_notify.contact_person_phone,
-            vehicle_info=task_to_notify.vehicle_info,
-            scheduled_at=task_to_notify.scheduled_at,
-            location=task_to_notify.location,
-            comment_field=task_to_notify.comment,
-            status=task_to_notify.status.value if task_to_notify.status else None,
-            assigned_user_id=task_to_notify.assigned_user_id,
-            client_price=str(task_to_notify.client_price) if task_to_notify.client_price is not None else None,
-            montajnik_reward=str(task_to_notify.montajnik_reward) if task_to_notify.montajnik_reward is not None else None,
-            photo_required=task_to_notify.photo_required,
-            assignment_type=task_to_notify.assignment_type.value if task_to_notify.assignment_type else None,
-            gos_number = task_to_notify.gos_number,
+            comment=f"Задача #{task.id} опубликована",
+            company_id=task.company_id,
+            contact_person_id=task.contact_person_id,
+            contact_person_phone=task.contact_person_phone,
+            vehicle_info=task.vehicle_info,
+            scheduled_at=task.scheduled_at,
+            location=task.location,
+            comment_field=task.comment,
+            status=task.status.value if task.status else None,
+            assigned_user_id=task.assigned_user_id,
+            client_price=str(task.client_price) if task.client_price is not None else None,
+            montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+            photo_required=task.photo_required,
+            assignment_type=task.assignment_type.value if task.assignment_type else None,
+            gos_number = task.gos_number,
             # --- НОВЫЕ ПОЛЯ ---
             equipment_snapshot=equipment_snapshot_for_history,
             work_types_snapshot=work_types_snapshot_for_history,
         ))
 
-    await db.commit()
 
-    # --- УВЕДОМЛЕНИЯ ---
+
+    await db.commit()
+    await db.refresh(task)
+
     montajniks_res = await db.execute(
         select(User.id).where(User.role == 'montajnik', User.is_active == True)
     )
     montajnik_ids = [row[0] for row in montajniks_res.fetchall()]
-
+    
     for montajnik_id in montajnik_ids:
         background_tasks.add_task(
-            notify_user,
-            montajnik_id,
-            f"Новая задача #{task_to_notify.id} опубликована"
+            notify_user, 
+            montajnik_id, 
+            f"Новая задача #{task.id} опубликована"
         )
 
-    return {"id": task_to_notify.id}
+    return {"id": task.id}
 
 
 @router.patch("/tasks/{task_id}", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
@@ -1606,7 +1571,7 @@ async def review_report(
     elif getattr(current_user, "role", None) == Role.tech_supp:
         report.approval_tech = ReportApproval.approved if approval == "approved" else ReportApproval.rejected
     report.review_comment = comment
-    report.reviewed_at = datetime.now(timezone.utc)
+    report.reviewed_at_logist = datetime.now(timezone.utc)
 
     try:
         # if both approved -> finalize task

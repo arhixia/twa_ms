@@ -71,8 +71,6 @@ class User(AsyncAttrs, Base):
     reports = relationship("TaskReport", back_populates="author", cascade="all, delete-orphan")
     
 
-
-
 # TASKS
 
 
@@ -218,7 +216,9 @@ class TaskReport(AsyncAttrs, Base):
     approval_logist = Column(Enum(ReportApproval), default=ReportApproval.waiting, nullable=False)
     approval_tech = Column(Enum(ReportApproval), default=ReportApproval.waiting, nullable=False)
     review_comment = Column(Text, nullable=True)
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    reviewed_at_logist = Column(DateTime(timezone=True), nullable=True)
+    reviewed_at_tech_supp = Column(DateTime(timezone=True), nullable=True)
+    
 
     attachments = relationship("TaskAttachment", back_populates="report")
 

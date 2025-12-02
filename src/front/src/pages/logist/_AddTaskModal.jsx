@@ -26,7 +26,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     comment: "",
     assignment_type: "broadcast",
     assigned_user_id: null,
-    photo_required: false,
+    photo_required: true,
     gos_number: "",
     // ✅ equipment как массив объектов { equipment_id, serial_number }
     equipment: [],
@@ -917,16 +917,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </div>
         )}
 
-        
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <input
-            type="checkbox"
-            checked={form.photo_required}
-            onChange={(e) => setField("photo_required", e.target.checked)}
-          />
-          Фото обязательно
-        </label>
+      
       </div>
 
       <div className="modal-actions">

@@ -132,11 +132,6 @@ export default function LogistProfilePage() {
     }
   }
 
-  // ✅ Функция для перехода на страницу архивных задач
-  const goToArchivedTasks = () => {
-    navigate("/logist/archived-tasks"); // Предполагаем, что маршрут будет таким
-  };
-
   // Функция для перехода к деталям завершенной задачи (если используется в истории)
   const viewCompletedTask = (taskId) => {
     navigate(`/logist/completed-tasks/${taskId}`); // Новый маршрут
@@ -214,9 +209,6 @@ export default function LogistProfilePage() {
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
           <button className="add-btn" onClick={() => setShowAddCompanyModal(true)}>+ Добавить компанию</button>
           <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Добавить контакт</button>
-          <button className="add-btn" onClick={goToArchivedTasks}>
-            🗃 Архивные задачи
-          </button>
         </div>
 
         <div className="profile-overview">

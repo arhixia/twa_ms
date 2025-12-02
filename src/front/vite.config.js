@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['microphone-chairman-identifying-conclusion.trycloudflare.com']
+    allowedHosts: ['indicated-celtic-basin-aye.trycloudflare.com']
   },
 })
 

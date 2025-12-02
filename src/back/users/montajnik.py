@@ -993,7 +993,8 @@ async def submit_report_for_review(
         report.approval_tech = ReportApproval.waiting
         # notify_tech уже установлен на requires_tech_review выше
 
-    report.reviewed_at = None  # сброс reviewed time
+    report.reviewed_at_logist = None  # сброс reviewed time
+    report.reviewed_at_tech_supp = None
 
     try:
         full_t_res = await db.execute(
@@ -1494,7 +1495,7 @@ async def get_my_reports_reviews(
                 review_photos=review_photos if r.approval_logist == ReportApproval.rejected else [], # Фото только если rejected
                 reviewer_role="logist",
                 approval_status=r.approval_logist.value,
-                reviewed_at=r.reviewed_at,
+                reviewed_at_logist=r.reviewed_at_logist,
                 original_report_text=r.text,
                 original_report_photos=original_photos,
             )
@@ -1509,14 +1510,17 @@ async def get_my_reports_reviews(
                 review_photos=review_photos if r.approval_tech == ReportApproval.rejected else [], # Фото только если rejected
                 reviewer_role="tech_supp",
                 approval_status=r.approval_tech.value,
-                reviewed_at=r.reviewed_at,
+                reviewed_at_tech_supp=r.reviewed_at_tech_supp,
                 original_report_text=r.text,
                 original_report_photos=original_photos,
             )
             reviews_list.append(review_entry)
 
     
-    reviews_list.sort(key=lambda x: (x.reviewed_at or getattr(x, 'created_at', None), x.report_id))
+    reviews_list.sort(key=lambda x: (
+        x.reviewed_at_logist or x.reviewed_at_tech_supp or getattr(x, 'created_at', None), # Используем одно из новых полей
+        x.report_id
+    ))
 
     return reviews_list
 

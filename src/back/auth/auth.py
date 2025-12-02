@@ -40,6 +40,7 @@ oauth2_scheme = OAuth2PasswordBearer(
 router = APIRouter(
 )
 
+
 #
 # Утилитарные функции
 #
@@ -224,14 +225,10 @@ async def login_for_access_with_telegram(
         existing_user_with_tg_id = await db.execute(select(User).where(User.telegram_id == telegram_id))
         existing_user_with_tg_id = existing_user_with_tg_id.scalars().first()
         if existing_user_with_tg_id and existing_user_with_tg_id.id != user.id:
-            # По вашей логике - перезаписываем
-            # existing_user_with_tg_id.telegram_id = None # Опционально: сбросить у старого
-            # await db.flush() # Опционально
             logger.info(f"Telegram ID {telegram_id} был перезаписан с пользователя {existing_user_with_tg_id.id} на {user.id}")
 
         # Обновляем telegram_id и, возможно, chat_id у текущего пользователя
         user.telegram_id = telegram_id
-        # user.chat_id = telegram_id # Опционально: если вы хотите обновлять chat_id так же
 
         await db.commit()
         await db.refresh(user) # Обновляем объект, чтобы убедиться, что telegram_id установлен

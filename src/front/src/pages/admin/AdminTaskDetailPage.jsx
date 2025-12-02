@@ -546,6 +546,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         gos_number: t.gos_number || "",
         contact_person_phone: t.contact_person_phone || null,
         assigned_user_id: t.assigned_user_id || null,
+        photo_required: true,
       };
 
       setForm(initialForm); // <-- initialForm установлен
@@ -1138,14 +1139,6 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         selectedWorkTypeIds={form.work_types_ids} // <--- Передаём уже выбранные ID (не используется в фильтрации, т.к. разрешено дублирование)
       />
 
-       <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  checked={form.photo_required || false}
-                  onChange={(e) => setField("photo_required", e.target.checked)}
-                />{" "}
-                Фото обязательно
-              </label>
           </div>
         ) : (
           <div className="task-view">

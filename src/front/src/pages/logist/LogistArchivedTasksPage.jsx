@@ -88,9 +88,6 @@ export default function LogistArchivedTasksPage() {
       <div className="page">
         <div className="page-header">
           <h1>Архивные задачи</h1>
-          <button className="add-btn" onClick={() => navigate(-1)}>
-            ⬅️ Назад
-          </button>
         </div>
 
         {/* Всё строго в столбец */}

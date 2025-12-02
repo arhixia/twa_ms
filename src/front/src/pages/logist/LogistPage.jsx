@@ -37,6 +37,7 @@ export default function LogistPage() {
           )}
         </NavLink>
         <NavLink to="/logist/drafts">Черновики</NavLink>
+        <NavLink to="/logist/archived-tasks">Архивные задачи</NavLink>
         <NavLink to="/logist/me">Личный кабинет</NavLink>
       </nav>
       <main className="logist-main">
