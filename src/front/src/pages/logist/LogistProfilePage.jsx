@@ -59,6 +59,7 @@ export default function LogistProfilePage() {
   const [newContactName, setNewContactName] = useState("");
   const [newContactPhone, setNewContactPhone] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [newContactPosition, setNewContactPosition] = useState("")
 
   // Состояния для истории задач
   const [historyTasks, setHistoryTasks] = useState([]);
@@ -168,25 +169,31 @@ export default function LogistProfilePage() {
 
   
 
-  const handleAddContact = async () => {
+const handleAddContact = async () => {
     if (!newContactName.trim() || !selectedCompanyId) {
-      alert("Заполните ФИО и выберите компанию");
-      return;
+        alert("Заполните ФИО и выберите компанию");
+        return;
     }
     try {
-      const result = await addContactPerson(selectedCompanyId, { name: newContactName.trim(), phone: newContactPhone.trim() });
-      alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-      setNewContactName("");
-      setNewContactPhone("");
-      setSelectedCompanyId("");
-      setShowAddContactModal(false);
-      loadProfile(); // Перезагружаем профиль, если там отображаются контакты
+        // Передаём position в payload
+        const result = await addContactPerson(selectedCompanyId, { 
+            name: newContactName.trim(), 
+            phone: newContactPhone.trim(),
+            position: newContactPosition.trim() 
+        });
+        alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
+        setNewContactName("");
+        setNewContactPhone("");
+        setNewContactPosition(""); 
+        setSelectedCompanyId("");
+        setShowAddContactModal(false);
+        loadProfile(); 
     } catch (err) {
-      console.error("Ошибка добавления контактного лица:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
-      alert(`Ошибка: ${errorMsg}`);
+        console.error("Ошибка добавления контактного лица:", err);
+        const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
+        alert(`Ошибка: ${errorMsg}`);
     }
-  };
+};
 
   
 
@@ -263,76 +270,94 @@ export default function LogistProfilePage() {
         )}
 
         {/* --- Модальное окно добавления контактного лица --- */}
-        {showAddContactModal && (
-          <div className="modal-backdrop" onClick={() => setShowAddContactModal(false)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
-              <div className="modal-header">
+
+{showAddContactModal && (
+    <div className="modal-backdrop" onClick={() => setShowAddContactModal(false)}>
+        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
                 <h3>Добавить контактное лицо</h3>
                 <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>×</button>
-              </div>
-              <div className="modal-body">
+            </div>
+            <div className="modal-body">
                 <label className="dark-label">
-                  ФИО
-                  <input
-                    type="text"
-                    value={newContactName}
-                    onChange={(e) => setNewContactName(e.target.value)}
-                    placeholder="Введите ФИО"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  />
+                    ФИО
+                    <input
+                        type="text"
+                        value={newContactName}
+                        onChange={(e) => setNewContactName(e.target.value)}
+                        placeholder="Введите ФИО"
+                        style={{
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #444",
+                            backgroundColor: "#1a1a1a",
+                            color: "#e0e0e0",
+                        }}
+                    />
                 </label>
                 <label className="dark-label">
-                  Телефон
-                  <input
-                    type="text"
-                    value={newContactPhone}
-                    onChange={(e) => setNewContactPhone(e.target.value)}
-                    placeholder="Введите телефон (необязательно)"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  />
+                    Должность 
+                    <input
+                        type="text"
+                        value={newContactPosition} 
+                        onChange={(e) => setNewContactPosition(e.target.value)} 
+                        placeholder="Введите должность (необязательно)"
+                        style={{
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #444",
+                            backgroundColor: "#1a1a1a",
+                            color: "#e0e0e0",
+                        }}
+                    />
                 </label>
                 <label className="dark-label">
-                  Компания
-                  <select
-                    value={selectedCompanyId}
-                    onChange={(e) => setSelectedCompanyId(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  >
-                    <option value="">Выберите компанию</option>
-                    {companies.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                    Телефон
+                    <input
+                        type="text"
+                        value={newContactPhone}
+                        onChange={(e) => setNewContactPhone(e.target.value)}
+                        placeholder="Введите телефон (необязательно)"
+                        style={{
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #444",
+                            backgroundColor: "#1a1a1a",
+                            color: "#e0e0e0",
+                        }}
+                    />
                 </label>
-              </div>
-              <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
+                <label className="dark-label">
+                    Компания
+                    <select
+                        value={selectedCompanyId}
+                        onChange={(e) => setSelectedCompanyId(e.target.value)}
+                        style={{
+                            width: "100%",
+                            padding: "8px",
+                            borderRadius: "4px",
+                            border: "1px solid #444",
+                            backgroundColor: "#1a1a1a",
+                            color: "#e0e0e0",
+                        }}
+                    >
+                        <option value="">Выберите компанию</option>
+                        {companies.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                    </select>
+                </label>
+            </div>
+            <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
                 <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>Отмена</button>
                 <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddContact(); }}>Сохранить</button>
-              </div>
             </div>
-          </div>
-        )}
+        </div>
+    </div>
+)}
 
         <div className="section">
           <h3>История выполненных задач</h3>

@@ -297,6 +297,7 @@ async def available_task_detail(
     # --- company и contact_person ---
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
+    contact_person_position = task.contact_person.position if task.contact_person else None
 
     assigned_user_name = task.assigned_user.name if task.assigned_user else None
     assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
@@ -305,9 +306,10 @@ async def available_task_detail(
 
     return {
         "id": task.id,
-        "company_name": company_name,  # ✅ Новое
-        "contact_person_name": contact_person_name,  # ✅ Новое
+        "company_name": company_name,  
+        "contact_person_name": contact_person_name,  
         "contact_person_phone": task.contact_person_phone,
+        "contact_person_position": contact_person_position,
         "vehicle_info": task.vehicle_info or None,
         "gos_number": task.gos_number or None,
         "location" : task.location or None,
@@ -394,16 +396,19 @@ async def mont_task_detail(
 
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
+    contact_person_position = task.contact_person.position if task.contact_person else None
 
     assigned_user_name = task.assigned_user.name if task.assigned_user else None
     assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
     assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
+    
 
     return {
         "id": task.id,
         "company_name": company_name,  # ✅ Новое
         "contact_person_name": contact_person_name,  # ✅ Новое
         "contact_person_phone": task.contact_person_phone,
+        "contact_person_position": contact_person_position,
         "vehicle_info": task.vehicle_info or None,
         "gos_number": task.gos_number or None,
         "location": task.location or None,
@@ -1405,6 +1410,7 @@ async def mont_completed_task_detail(
 
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
+    contact_person_position = task.contact_person.position if task.contact_person else None
 
     assigned_user_name = task.assigned_user.name if task.assigned_user else None
     assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
@@ -1416,6 +1422,7 @@ async def mont_completed_task_detail(
         "company_name": company_name,
         "contact_person_name": contact_person_name,
         "contact_person_phone": task.contact_person_phone,
+        "contact_person_position": contact_person_position,
         "vehicle_info": task.vehicle_info or None,
         "gos_number": task.gos_number or None, # Если поле есть
         "location": task.location or None,

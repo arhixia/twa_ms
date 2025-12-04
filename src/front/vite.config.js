@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['indicated-celtic-basin-aye.trycloudflare.com']
+    allowedHosts: ['regulations-clinic-courier-decide.trycloudflare.com']
   },
 })
 

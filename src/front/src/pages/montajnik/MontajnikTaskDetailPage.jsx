@@ -565,8 +565,7 @@ export default function MontajnikTaskDetailPage() {
 
             {/* ✅ Добавляем строки с компанией и контактным лицом */}
             <p><b>Компания:</b> {task.company_name || "—"}</p>
-            <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
-            {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+            <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}{task.contact_person_position ? ` - ${task.contact_person_position}` : ""}</p>
 <p>
   <b>Телефон контактного лица:</b>{" "}
   {contactPersonPhone || task.contact_person_phone || "—"}

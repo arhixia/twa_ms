@@ -991,17 +991,19 @@ async def admin_add_company(payload: dict = Body(...), db: AsyncSession = Depend
 async def admin_add_contact_person(company_id: int, payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
     name = payload.get("name")
     phone = payload.get("phone") 
+    position = payload.get("position")
+
     if not name:
         raise HTTPException(status_code=400, detail="ФИО контактного лица обязательно")
     res = await db.execute(select(ClientCompany).where(ClientCompany.id == company_id))
     company = res.scalars().first()
     if not company:
         raise HTTPException(status_code=404, detail="Компания не найдена")
-    contact = ContactPerson(company_id=company_id, name=name, phone=phone) 
+    contact = ContactPerson(company_id=company_id, name=name, phone=phone, position = position) 
     db.add(contact)
     await db.commit()
     await db.refresh(contact)
-    return {"id": contact.id, "name": contact.name, "phone": contact.phone} 
+    return {"id": contact.id, "name": contact.name, "phone": contact.phone, "position": contact.position} 
 
 
 

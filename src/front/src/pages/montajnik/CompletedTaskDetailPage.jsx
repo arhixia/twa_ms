@@ -193,7 +193,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
         <div className="task-detail">
           <div className="task-view">
             <p><b>Компания:</b> {task.company_name || "—"}</p>
-            <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
+            <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}{task.contact_person_position ? ` - ${task.contact_person_position}` : ""}</p>
             <p><b>Телефон контактного лица:</b> {task.contact_person_phone || "—"}</p>
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
             <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>

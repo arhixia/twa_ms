@@ -194,6 +194,7 @@ class ContactPerson(AsyncAttrs, Base):
     id = Column(Integer, primary_key=True)
     company_id = Column(Integer, ForeignKey("client_companies.id", ondelete="CASCADE"), nullable=False)
     name = Column(String, nullable=False)
+    position = Column(String,nullable=True)
     phone = Column(String,nullable = False)
 
     

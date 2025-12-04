@@ -55,6 +55,8 @@ export default function AdminPage() {
             <span className="badge">{adminTasksCount}</span>
           )}
         </NavLink>
+        <NavLink to="/admin/work">Работы</NavLink>
+        <NavLink to="/admin/contacts">Контакты</NavLink>
          <NavLink to="/admin/me">Личный кабинет</NavLink>
       </nav>
 
