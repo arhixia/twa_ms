@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['regulations-clinic-courier-decide.trycloudflare.com']
+    allowedHosts: ['favorites-realized-alexander-gained.trycloudflare.com']
   },
 })
 

@@ -285,6 +285,7 @@ async def create_draft(
     work_types_ids_unique = list(work_type_counts.keys())
 
     calculated_works_cost_for_client = Decimal('0')
+    calculated_works_cost_for_mont = Decimal('0')
     if work_types_ids_unique:
         wt_res = await db.execute(
             select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
@@ -296,7 +297,8 @@ async def create_draft(
 
         for wt in work_types_from_db:
             count = work_type_counts[wt.id]
-            calculated_works_cost_for_client += (wt.price or Decimal('0')) * count # Цена за единицу * количество
+            calculated_works_cost_for_client += (wt.client_price or Decimal('0')) * count
+            calculated_works_cost_for_mont += (wt.mont_price or Decimal('0')) * count
 
     # --- Рассчёт по Equipment ---
     equipment_quantities = {}
@@ -322,7 +324,7 @@ async def create_draft(
 
     # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
     final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
-    final_montajnik_reward = calculated_works_cost_for_client
+    final_montajnik_reward = calculated_works_cost_for_mont
 
 
     task = Task(
@@ -576,8 +578,6 @@ async def patch_draft(
     if gos_number is not None: # Позволяем установить null
         setattr(task, "gos_number", gos_number)
 
-    # --- Обновление оборудования ---
-    # ✅ НОВАЯ ЛОГИКА обновления оборудования
     equipment_data = data.get("equipment", None) # Проверяем, передано ли оборудование
     if equipment_data is not None: # Если передано оборудование
         # 1. Получаем существующие записи TaskEquipment для этой задачи
@@ -645,8 +645,6 @@ async def patch_draft(
         logger.info("Оборудование помечено как изменённое")
 
 
-    # --- Обновление видов работ ---
-    # ✅ НОВАЯ ЛОГИКА обновления видов работ (учитываем quantity)
     work_types_data = data.get("work_types", None) # Проверяем, переданы ли work_types
     if work_types_data is not None: # Если переданы work_types
         # 1. Удаляем все старые записи TaskWork
@@ -679,8 +677,8 @@ async def patch_draft(
     )
     task_equipment_list = equipment_res.scalars().all()
     for te in task_equipment_list:
-        equipment_unit_price = te.equipment.price or Decimal('0') # Используем новое поле unit_price
-        calculated_client_price += equipment_unit_price * te.quantity # ✅ Учитываем количество
+        equipment_unit_price = te.equipment.price or Decimal('0') 
+        calculated_client_price += equipment_unit_price * te.quantity 
 
     # 2. Рассчитываем стоимость работ (только для клиента)
     work_res = await db.execute(
@@ -690,11 +688,11 @@ async def patch_draft(
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0') # Используем новое поле unit_price
-        calculated_client_price += work_unit_price * tw.quantity # ✅ Учитываем количество
-        calculated_montajnik_reward += work_unit_price * tw.quantity
+        work_client_unit_price = tw.work_type.client_price or Decimal('0') 
+        work_mont_unit_price = tw.work_type.mont_price or Decimal('0') 
+        calculated_client_price += work_client_unit_price * tw.quantity
+        calculated_montajnik_reward += work_mont_unit_price * tw.quantity
 
-        # montajnik_reward НЕ увеличивается за работы
 
     # 3. Устанавливаем рассчитанные цены в объект задачи
     task.client_price = calculated_client_price
@@ -798,6 +796,7 @@ async def publish_task(
         work_types_ids_unique = list(work_type_counts.keys())
 
         calculated_works_cost_for_client = Decimal('0')
+        calculated_works_cost_for_mont = Decimal('0')
         if work_types_ids_unique:
             wt_res = await db.execute(
                 select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
@@ -809,7 +808,8 @@ async def publish_task(
 
             for wt in work_types_from_db:
                 count = work_type_counts[wt.id]
-                calculated_works_cost_for_client += (wt.price or Decimal('0')) * count
+                calculated_works_cost_for_client += (wt.client_price or Decimal('0')) * count
+                calculated_works_cost_for_mont += (wt.mont_price or Decimal('0')) * count
 
         # --- Пересчёт Equipment ---
         equipment_quantities = {}
@@ -832,11 +832,9 @@ async def publish_task(
                 qty = equipment_quantities[eq.id]
                 calculated_equipment_cost += (eq.price or Decimal('0')) * qty
 
-        # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
-        # Клиент платит за работы + за оборудование
         task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
-        # Монтажник получает только за оборудование
-        task.montajnik_reward = calculated_works_cost_for_client
+        task.montajnik_reward = calculated_works_cost_for_mont
+
 
         task.is_draft = False # Меняем статус на опубликованную задачу
 
@@ -900,6 +898,7 @@ async def publish_task(
         work_types_ids_unique = list(work_type_counts.keys())
 
         calculated_works_cost_for_client = Decimal('0')
+        calculated_works_cost_for_mont = Decimal('0')
         if work_types_ids_unique:
             wt_res = await db.execute(
                 select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
@@ -911,7 +910,8 @@ async def publish_task(
 
             for wt in work_types_from_db:
                 count = work_type_counts[wt.id]
-                calculated_works_cost_for_client += (wt.price or Decimal('0')) * count
+                calculated_works_cost_for_client += (wt.client_price or Decimal('0')) * count
+                calculated_works_cost_for_mont += (wt.mont_price or Decimal('0')) * count
 
         equipment_quantities = {}
         for eq_item in equipment_data_raw:
@@ -920,6 +920,7 @@ async def publish_task(
             equipment_quantities[eq_id] = equipment_quantities.get(eq_id, 0) + qty
 
         calculated_equipment_cost = Decimal('0')
+        
         if equipment_quantities:
             eq_res = await db.execute(
                 select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
@@ -935,7 +936,7 @@ async def publish_task(
 
         # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
         final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
-        final_montajnik_reward = calculated_works_cost_for_client
+        final_montajnik_reward = calculated_works_cost_for_mont
 
         task = Task(
             contact_person_id=contact_person_id,
@@ -1330,9 +1331,11 @@ async def edit_task(
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0')
-        calculated_client_price += work_unit_price * tw.quantity
-        calculated_montajnik_reward += work_unit_price * tw.quantity
+        work_client_unit_price = tw.work_type.client_price or Decimal('0') 
+        work_mont_unit_price = tw.work_type.mont_price or Decimal('0') 
+        calculated_client_price += work_client_unit_price * tw.quantity
+        calculated_montajnik_reward += work_mont_unit_price * tw.quantity
+
 
     prices_changed = False
     if task.client_price != calculated_client_price or task.montajnik_reward != calculated_montajnik_reward:
@@ -2313,7 +2316,7 @@ async def get_equipment(db:AsyncSession = Depends(get_db), current_user=Depends(
 async def get_work_types(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     result = await db.execute(select(WorkType))
     work_types = result.scalars().all()
-    return [{"id": wt.id, "name": wt.name,} for wt in work_types]
+    return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price) , "mont_price": str(wt.mont_price)} for wt in work_types]
     
 
 

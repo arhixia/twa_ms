@@ -111,6 +111,57 @@ async def admin_delete_user(
     return UserResponse.model_validate(user)
 
 
+@router.patch("/users/{user_id}/deactivate", dependencies=[Depends(require_roles(Role.admin))])
+async def deactivate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """
+    Деактивировать пользователя (установить is_active = False).
+    """
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Нельзя деактивировать самого себя
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя изменить статус себе")
+
+    user.is_active = False
+    await db.commit()
+    await db.refresh(user)
+    return UserBase.model_validate(user)
+
+
+@router.patch("/users/{user_id}/activate", dependencies=[Depends(require_roles(Role.admin))])
+async def activate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """
+    Активировать пользователя (установить is_active = True).
+    """
+    stmt = select(User).where(User.id == user_id)
+    result = await db.execute(stmt)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    # Нельзя активировать самого себя (скорее всего не нужно, но для консистентности)
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Нельзя изменить статус себе")
+
+    user.is_active = True
+    await db.commit()
+    await db.refresh(user)
+    return UserBase.model_validate(user)
+
 @router.patch(
     "/users/{user_id}/role",
     response_model=UserResponse,
@@ -953,7 +1004,7 @@ async def admin_get_companies(db: AsyncSession = Depends(get_db)):
 async def admin_get_contact_persons(company_id: int, db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(ContactPerson).where(ContactPerson.company_id == company_id))
     contacts = res.scalars().all()
-    return [{"id": c.id, "name": c.name} for c in contacts]
+    return [{"id": c.id, "name": c.name, "phone": c.phone, "position":c.position} for c in contacts]
 
 
 @router.get("/contact-persons/{contact_person_id}/phone", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
@@ -1018,7 +1069,7 @@ async def admin_get_equipment_list(db: AsyncSession = Depends(get_db)):
 async def admin_get_work_types_list(db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(WorkType).where(WorkType.is_active == True).order_by(WorkType.name)) 
     work_types_list = res.scalars().all()
-    return [{"id": wt.id, "name": wt.name, "price": str(wt.price)} for wt in work_types_list] 
+    return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price), "mont_price": str(wt.mont_price),"tech_supp_require": wt.tech_supp_require} for wt in work_types_list] 
 
 
 @router.post("/work-types", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
@@ -1027,25 +1078,36 @@ async def admin_add_work_type_no_schema(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    if current_user.role != Role.admin:
+    # Проверка ролей
+    if current_user.role not in [Role.admin, Role.logist]:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     name = payload.get("name")
-    price = payload.get("price")
+    # Получаем новые цены
+    client_price = payload.get("client_price")
+    mont_price = payload.get("mont_price")
     tech_supp_require = payload.get("tech_supp_require", False) # По умолчанию False
 
-    if not name or price is None:
-        raise HTTPException(status_code=400, detail="Не все поля переданы")
+    if not name or client_price is None or mont_price is None:
+        raise HTTPException(status_code=400, detail="Не все поля переданы (name, client_price, mont_price обязательны)")
 
+    # Преобразуем tech_supp_require в boolean
     if not isinstance(tech_supp_require, bool):
         if isinstance(tech_supp_require, str):
             tech_supp_require = tech_supp_require.lower() in ('true', '1', 'yes', 'on')
         else:
             tech_supp_require = False
 
+    try:
+        client_price_decimal = Decimal(client_price)
+        mont_price_decimal = Decimal(mont_price)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Цены должны быть числами")
+
     work_type = WorkType(
         name=name,
-        price=price,
+        client_price=client_price_decimal, 
+        mont_price=mont_price_decimal,     
         tech_supp_require=tech_supp_require 
     )
     db.add(work_type)
@@ -1053,10 +1115,12 @@ async def admin_add_work_type_no_schema(
     await db.commit()
     await db.refresh(work_type)
 
+    # Возвращаем ответ с новыми полями
     return {
         "id": work_type.id,
         "name": work_type.name,
-        "price": str(work_type.price),
+        "client_price": str(work_type.client_price), 
+        "mont_price": str(work_type.mont_price),     
         "tech_supp_require": work_type.tech_supp_require 
     }
 

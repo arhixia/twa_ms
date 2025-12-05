@@ -96,7 +96,7 @@ async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
 async def authenticate_user(db: AsyncSession, login: str, password: str) -> Optional[User]:
     result = await db.execute(select(User).where(User.login == login))
     user = result.scalars().first()
-    if not user or not verify_password(password, user.hashed_password):
+    if not user or not verify_password(password, user.hashed_password) or not user.is_active:
         return None
     return user
 
@@ -123,17 +123,20 @@ async def verify_token(token: str) -> int:
 
 
 async def get_current_user(
-        db:AsyncSession = Depends(get_db),
+        db: AsyncSession = Depends(get_db),
         token: str = Depends(oauth2_scheme)
 ) -> User:
     """
     Зависимость для получения текущего пользователя по JWT.
+    Также проверяет, активен ли пользователь.
     """
     user_id = await verify_token(token)
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Аккаунт пользователя деактивирован")
     return user
 
 

@@ -17,6 +17,8 @@ export default function AdminContactsPage() {
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
   const [companies, setCompanies] = useState([]);
+  const [filteredCompanies, setFilteredCompanies] = useState([]); // Для поиска
+  const [companySearchTerm, setCompanySearchTerm] = useState(""); // Для поиска
 
   // Состояния для контактов
   const [showAddContactModal, setShowAddContactModal] = useState(false);
@@ -27,9 +29,24 @@ export default function AdminContactsPage() {
   const [contacts, setContacts] = useState({});
   const [loadingContacts, setLoadingContacts] = useState({});
 
+  // Состояния для отображения/скрытия контактов компании
+  const [expandedCompanyIds, setExpandedCompanyIds] = useState(new Set());
+
   useEffect(() => {
     loadCompanies();
   }, []);
+
+  useEffect(() => {
+    // Фильтрация компаний при изменении списка или поискового запроса
+    if (!companySearchTerm.trim()) {
+      setFilteredCompanies(companies);
+    } else {
+      const termLower = companySearchTerm.toLowerCase();
+      setFilteredCompanies(
+        companies.filter(company => company.name.toLowerCase().includes(termLower))
+      );
+    }
+  }, [companies, companySearchTerm]);
 
   async function loadCompanies() {
     try {
@@ -47,6 +64,21 @@ export default function AdminContactsPage() {
   async function loadContactsForCompany(companyId) {
     if (loadingContacts[companyId]) return; // Не грузим повторно, если уже грузим
 
+    // Проверяем, есть ли уже загруженные контакты для этой компании
+    if (contacts[companyId]) {
+      // Если уже загружены, просто переключаем видимость
+      setExpandedCompanyIds(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(companyId)) {
+          newSet.delete(companyId); // Скрываем
+        } else {
+          newSet.add(companyId); // Показываем
+        }
+        return newSet;
+      });
+      return;
+    }
+
     setLoadingContacts(prev => ({ ...prev, [companyId]: true }));
     try {
       const data = await getAdminContactPersonsByCompany(companyId);
@@ -54,12 +86,16 @@ export default function AdminContactsPage() {
         ...prev,
         [companyId]: data || [],
       }));
+      // После загрузки показываем контакты
+      setExpandedCompanyIds(prev => new Set(prev).add(companyId));
     } catch (err) {
       console.error(`Ошибка загрузки контактов для компании ${companyId}:`, err);
       setContacts(prev => ({
         ...prev,
         [companyId]: [],
       }));
+      // Показываем пустой список
+      setExpandedCompanyIds(prev => new Set(prev).add(companyId));
     } finally {
       setLoadingContacts(prev => ({ ...prev, [companyId]: false }));
     }
@@ -98,7 +134,7 @@ export default function AdminContactsPage() {
       setNewContactPosition("");
       setSelectedCompanyId("");
       setShowAddContactModal(false);
-      // Обновляем список контактов для выбранной компании
+      // Обновляем список контактов в состоянии
       if (contacts[selectedCompanyId]) {
         setContacts(prev => ({
           ...prev,
@@ -128,40 +164,84 @@ export default function AdminContactsPage() {
           <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
         </div>
 
+        {/* === Поиск по компаниям === */}
+        <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
+          <label className="dark-label">Поиск по компаниям</label>
+          <input
+            type="text"
+            className="dark-input"
+            placeholder="Поиск..."
+            value={companySearchTerm}
+            onChange={e => setCompanySearchTerm(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #444',
+              borderRadius: '4px',
+              backgroundColor: '#1a1a1a',
+              color: '#e0e0e0',
+              fontSize: '14px',
+              boxSizing: 'border-box'
+            }}
+          />
+        </div>
+
         {/* === Компании и их контакты === */}
         <div className="section">
           <h3>Компании и контакты</h3>
-          {companies.length > 0 ? (
+          {filteredCompanies.length > 0 ? (
             <div className="history-list">
-              {companies.map(company => (
-                <div key={company.id} className="history-item" style={{ padding: "12px", borderBottom: "1px solid #30363d" }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h4>{company.name}</h4>
-                    <button
-                      className="add-btn"
-                      style={{ padding: '4px 8px', fontSize: '0.8em' }}
+              {filteredCompanies.map(company => {
+                const isExpanded = expandedCompanyIds.has(company.id);
+                const companyContacts = contacts[company.id] || [];
+                const isLoading = loadingContacts[company.id];
+
+                return (
+                  <React.Fragment key={company.id}>
+                    <div
+                      className="history-item clickable-history-item"
+                      style={{
+                        padding: "8px",
+                        borderBottom: "1px solid #30363d",
+                        backgroundColor: "#0d1117",
+                        cursor: "pointer",
+                        borderRadius: "8px",
+                        transition: "background-color 0.2s ease",
+                      }}
                       onClick={() => loadContactsForCompany(company.id)}
-                      disabled={loadingContacts[company.id]}
                     >
-                      {loadingContacts[company.id] ? 'Загрузка...' : 'Показать контакты'}
-                    </button>
-                  </div>
-                  {contacts[company.id] && (
-                    <div style={{ marginTop: '8px' }}>
-                      {contacts[company.id].length > 0 ? (
-                        contacts[company.id].map(contact => (
-                          <div key={contact.id} style={{ padding: '4px 0', borderBottom: '1px solid #2a2a2a' }}>
-                            <p><b>{contact.name}</b>{contact.position ? ` - ${contact.position}` : ""}</p>
-                            <p>Телефон: {contact.phone || "—"}</p>
-                          </div>
-                        ))
-                      ) : (
-                        <p style={{ fontStyle: 'italic', color: '#888' }}>Контакты отсутствуют</p>
-                      )}
+                      <p style={{ margin: "0", fontWeight: "bold", fontSize: "0.9em" }}>{company.name}</p>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {isExpanded && (
+                      <div
+                        style={{
+                          padding: "8px",
+                          backgroundColor: "#161b22",
+                          border: "1px solid #30363d",
+                          borderRadius: "0 0 8px 8px",
+                          marginTop: "-1px", // Слияние границы с карточкой компании
+                        }}
+                      >
+                        {isLoading ? (
+                          <p style={{ margin: "0", fontStyle: "italic", color: "#888" }}>Загрузка...</p>
+                        ) : companyContacts.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {companyContacts.map(contact => (
+                              <div key={contact.id} style={{ padding: '6px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#1a1a1a' }}>
+                                <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', fontSize: '0.95em' }}>{contact.name}</p>
+                                <p style={{ margin: '0 0 2px 0', fontSize: '0.9em' }}><b>Должность:</b> {contact.position || "—"}</p>
+                                <p style={{ margin: '0', fontSize: '0.9em' }}><b>Телефон:</b> {contact.phone || "—"}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p style={{ margin: "0", fontStyle: "italic", color: "#888" }}>Контакты отсутствуют</p>
+                        )}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </div>
           ) : (
             <div className="empty">Список компаний пуст</div>

@@ -300,6 +300,15 @@ export async function adminDeleteUser(userId) {
   return (await api.delete(`/admin/users/${userId}`)).data;
 }
 
+export async function adminDeactivateUser(userId) {
+  return (await api.patch(`/admin/users/${userId}/deactivate`)).data;
+}
+
+export async function adminActivateUser(userId) {
+  return (await api.patch(`/admin/users/${userId}/activate`)).data;
+}
+
+
 // Изменить роль пользователя
 export async function adminChangeUserRole(userId, role) {
   return (await api.patch(`/admin/users/${userId}/role`, { role })).data;

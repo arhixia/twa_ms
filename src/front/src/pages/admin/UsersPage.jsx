@@ -1,6 +1,6 @@
 // front/src/pages/admin/UsersPage.jsx
 import React, { useState, useEffect } from 'react';
-import { adminListUsers, adminCreateUser, adminDeleteUser, adminChangeUserRole } from '../../api';
+import { adminListUsers, adminCreateUser, adminChangeUserRole, adminDeactivateUser, adminActivateUser } from '../../api'; // <--- Убраны adminDeleteUser
 import UserCard from '../../components/UserCard';
 
 function UsersPage() {
@@ -32,15 +32,7 @@ function UsersPage() {
     fetchUsers();
   }, []);
 
-  const handleDelete = async (id) => {
-    if (!confirm('Удалить пользователя?')) return;
-    try {
-      await adminDeleteUser(id);
-      setUsers(users.filter(u => u.id !== id));
-    } catch (err) {
-      alert('Ошибка при удалении');
-    }
-  };
+  // Убираем handleDelete
 
   const handleRoleChange = async (userId, newRole) => {
     try {
@@ -48,6 +40,33 @@ function UsersPage() {
       setUsers(users.map(u => u.id === updated.id ? updated : u));
     } catch (err) {
       alert('Ошибка при изменении роли');
+    }
+  };
+
+  // --- НОВАЯ ФУНКЦИЯ: Деактивировать пользователя ---
+  const handleDeactivate = async (userId) => {
+    if (!window.confirm("Вы уверены, что хотите деактивировать этого пользователя?")) return;
+    try {
+      const updated = await adminDeactivateUser(userId);
+      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+      alert(`Пользователь ${updated.name} ${updated.lastname} деактивирован.`);
+    } catch (err) {
+      console.error("Ошибка деактивации пользователя:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось деактивировать пользователя.";
+      alert(`Ошибка: ${errorMsg}`);
+    }
+  };
+
+  const handleActivate = async (userId) => {
+    if (!window.confirm("Вы уверены, что хотите активировать этого пользователя?")) return;
+    try {
+      const updated = await adminActivateUser(userId);
+      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+      alert(`Пользователь ${updated.name} ${updated.lastname} активирован.`);
+    } catch (err) {
+      console.error("Ошибка активации пользователя:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось активировать пользователя.";
+      alert(`Ошибка: ${errorMsg}`);
     }
   };
 
@@ -99,20 +118,19 @@ function UsersPage() {
               <input type="text" name="lastname" value={formData.lastname} onChange={handleChange} required />
             </label>
             <label className="dark-label">
-  Роль
-  <select
-    name="role"
-    value={formData.role}
-    onChange={handleChange}
-    className="dark-select"
-  >
-    <option value="admin">admin</option>
-    <option value="logist">logist</option>
-    <option value="montajnik">montajnik</option>
-    <option value="tech_supp">tech_supp</option>
-  </select>
-</label>
-
+              Роль
+              <select
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                className="dark-select"
+              >
+                <option value="admin">admin</option>
+                <option value="logist">logist</option>
+                <option value="montajnik">montajnik</option>
+                <option value="tech_supp">tech_supp</option>
+              </select>
+            </label>
           </div>
           <button type="submit" className="add-btn">Создать</button>
         </form>
@@ -122,8 +140,10 @@ function UsersPage() {
           <UserCard
             key={user.id}
             user={user}
-            onDelete={handleDelete}
-            onEditRole={handleRoleChange} 
+            // onDelete={handleDelete} // <--- Убрано
+            onEditRole={handleRoleChange}
+            onDeactivate={handleDeactivate}
+            onActivate={handleActivate}
           />
         ))}
       </div>
