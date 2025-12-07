@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['favorites-realized-alexander-gained.trycloudflare.com']
+    allowedHosts: ['olympic-fact-manitoba-barrier.trycloudflare.com']
   },
 })
 

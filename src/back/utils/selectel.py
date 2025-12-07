@@ -11,8 +11,6 @@ DEFAULT_PART_SIZE = 50 * 1024 * 1024  # 50 MiB
 ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp"}
 
 
-
-
 class S3Client:
     def __init__(
         self,
@@ -179,7 +177,7 @@ def get_s3_client() -> S3Client:
             secret_key=SECRET_KEY_S3,
             endpoint_url=ENDPOINT_URL_S3,  
             bucket_name=BUCKET_NAME_S3,    
-            region_name="ru-1",            
+            region_name="ru-1",  
             part_size=DEFAULT_PART_SIZE,
         )
     return _default_s3_client

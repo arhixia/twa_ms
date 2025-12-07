@@ -40,6 +40,7 @@ async def lifespan(app):
             except Exception:
                 pass
 
+
 app = FastAPI(
     title="Telegam mini app backend",
     version="1.0.0",
@@ -54,6 +55,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["Admin"])

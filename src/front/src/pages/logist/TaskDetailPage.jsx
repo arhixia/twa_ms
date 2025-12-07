@@ -106,6 +106,161 @@ function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
 }
 
 
+function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompanyId }) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filteredCompanies, setFilteredCompanies] = useState(availableCompanies);
+    const [isOpen, setIsOpen] = useState(false);
+
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredCompanies(availableCompanies);
+      } else {
+        const termLower = searchTerm.toLowerCase();
+        setFilteredCompanies(
+          availableCompanies.filter(c =>
+            c.name.toLowerCase().includes(termLower)
+          )
+        );
+      }
+    }, [searchTerm, availableCompanies]);
+
+    const handleInputChange = (e) => {
+      setSearchTerm(e.target.value);
+      setIsOpen(true);
+    };
+
+    const handleItemClick = (company) => {
+      onSelect(company.id);
+      setSearchTerm(company.name); // Отображаем имя компании в инпуте после выбора
+      setIsOpen(false);
+    };
+
+    const handleInputFocus = () => setIsOpen(true);
+    const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+    return (
+      <div style={{ position: 'relative', width: '100%' }}>
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          placeholder="🔍 Поиск компании..."
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            border: '1px solid #444',
+            borderRadius: '4px',
+            backgroundColor: '#1a1a1a',
+            color: '#e0e0e0',
+            fontSize: '14px',
+          }}
+        />
+        {isOpen && filteredCompanies.length > 0 && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            {filteredCompanies.map((c) => (
+              <li
+                key={c.id}
+                onClick={() => handleItemClick(c)}
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  color: '#e0e0e0',
+                  backgroundColor: '#2a2a2a',
+                  borderBottom: '1px solid #3a3a3a',
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {c.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {isOpen && filteredCompanies.length === 0 && searchTerm.trim() !== '' && (
+          <ul
+            style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              maxHeight: '200px',
+              overflowY: 'auto',
+              listStyle: 'none',
+              margin: 0,
+              padding: 0,
+              backgroundColor: '#1a1a1a',
+              border: '1px solid #444',
+              borderTop: 'none',
+              borderRadius: '0 0 4px 4px',
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+            }}
+          >
+            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+              Ничего не найдено
+            </li>
+          </ul>
+        )}
+      </div>
+    );
+  }
+
+
+  function SelectedCompanyDisplay({ company, onRemove }) {
+    if (!company) return null;
+
+    return (
+      <div style={{
+        padding: '6px 10px',
+        border: '1px solid #444',
+        borderRadius: '4px',
+        backgroundColor: '#2a2a2a',
+        color: '#e0e0e0',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '8px',
+      }}>
+        <span>{company.name}</span>
+        <button
+          type="button"
+          onClick={onRemove}
+          style={{
+            padding: '2px 6px',
+            backgroundColor: '#cf6679',
+            color: '#000',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '1em',
+          }}
+        >
+          ×
+        </button>
+      </div>
+    );
+  }
+
+  
 
 // --- КОМПОНЕНТ: Умный поиск для оборудования ---
 function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
@@ -938,59 +1093,67 @@ const REPORT_APPROVAL_TRANSLATIONS = {
             <div className="form-grid">
               {/* ===== Компания ===== */}
               <label>
-                Компания:
-                <select
-                  value={form.company_id || ""}
-                  onChange={(e) => {
-                    const val = e.target.value ? parseInt(e.target.value, 10) : null;
-                    setField("company_id", val);
-                    if (val) {
-                      handleCompanyChangeForForm(val);
-                    } else {
-                      setContactPersons([]);
-                      setField("contact_person_id", null);
-                      setField("contact_person_phone", null);
-                    }
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}
-                >
-                  <option value="">Выберите компанию</option>
-                  {companies.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </label>
+          Компания
+          {/* --- 1. Поле поиска --- */}
+          <SearchableCompanySelect
+            availableCompanies={companies}
+            onSelect={(companyId) => {
+              setField("company_id", companyId);
+              if (companyId) {
+                handleCompanyChangeForForm(companyId); // Загружаем контактные лица
+              } else {
+                setContactPersons([]);
+                setField("contact_person_id", null);
+                setField("contact_person_phone", null);
+              }
+            }}
+            selectedCompanyId={form.company_id} // Не используется в этом компоненте, но передаём для совместимости
+          />
+          {/* --- 2. Отображение выбранной компании --- */}
+          {form.company_id && (
+            <SelectedCompanyDisplay
+              company={companies.find(c => c.id === form.company_id)}
+              onRemove={() => {
+                setField("company_id", null);
+                setContactPersons([]);
+                setField("contact_person_id", null);
+                setField("contact_person_phone", null);
+              }}
+            />
+          )}
+        </label>
 
-              {/* ===== Контактное лицо ===== */}
-              <label>
-                Контактное лицо:
-                <select
-                  value={form.contact_person_id || ""}
-                  onChange={(e) => handleContactPersonChangeForForm(e.target.value)}
-                  disabled={!form.company_id}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}
-                >
-                  <option value="">Выберите контактное лицо</option>
-                  {contactPersons.map(cp => (
-                    <option key={cp.id} value={cp.id}>{cp.name}</option>
-                  ))}
-                </select>
-                {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
-              </label>
+        {/* --- Контактное лицо --- */}
+        <label>
+          Контактное лицо
+          <select
+            value={form.contact_person_id || ""}
+            onChange={(e) => {
+              const val = e.target.value ? parseInt(e.target.value, 10) : null;
+              setField("contact_person_id", val);
+              if (val) {
+                handleContactPersonChangeForForm(val);
+              } else {
+                setField("contact_person_phone", null);
+              }
+            }}
+            disabled={!form.company_id} // Отключаем, если не выбрана компания
+            style={{
+              width: "100%",
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              backgroundColor: "#1a1a1a",
+              color: "#e0e0e0",
+            }}
+          >
+            <option value="">Выберите контактное лицо</option>
+            {contactPersons.map(cp => (
+              <option key={cp.id} value={cp.id}>{cp.name}</option>
+            ))}
+          </select>
+          {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
+        </label>
 
               {/* ===== ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
               <label>
