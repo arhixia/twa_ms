@@ -129,6 +129,7 @@ class WorkType(AsyncAttrs, Base):
     name = Column(String, nullable=False)                      # Название работы (АТ, тахография и т.д.)
     created_at = Column(DateTime(timezone=True), default=now_ekb)
     client_price = Column(Numeric(10, 2), nullable=False)
+    category = Column(String,nullable=True)
     mont_price = Column(Numeric(10,2),nullable=False)
     is_active = Column(Boolean, default=True)                  # Активен ли тип работы
     tech_supp_require = Column(Boolean,default=False)

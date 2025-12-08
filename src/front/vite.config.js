@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['olympic-fact-manitoba-barrier.trycloudflare.com']
+    allowedHosts: ['finances-cincinnati-confidential-pattern.trycloudflare.com']
   },
 })
 

@@ -1067,9 +1067,10 @@ async def admin_get_equipment_list(db: AsyncSession = Depends(get_db)):
 
 @router.get("/work-types", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
 async def admin_get_work_types_list(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(WorkType).where(WorkType.is_active == True).order_by(WorkType.name)) 
+    res = await db.execute(select(WorkType).where(WorkType.is_active == True).order_by(WorkType.name))
     work_types_list = res.scalars().all()
-    return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price), "mont_price": str(wt.mont_price),"tech_supp_require": wt.tech_supp_require} for wt in work_types_list] 
+    # Возвращаем старый формат, но добавляем category
+    return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price), "mont_price": str(wt.mont_price),"tech_supp_require": wt.tech_supp_require, "category": wt.category} for wt in work_types_list]
 
 
 @router.post("/work-types", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
@@ -1087,6 +1088,7 @@ async def admin_add_work_type_no_schema(
     client_price = payload.get("client_price")
     mont_price = payload.get("mont_price")
     tech_supp_require = payload.get("tech_supp_require", False) # По умолчанию False
+    category = payload.get("category", None) # <--- НОВОЕ: Получаем категорию
 
     if not name or client_price is None or mont_price is None:
         raise HTTPException(status_code=400, detail="Не все поля переданы (name, client_price, mont_price обязательны)")
@@ -1106,24 +1108,25 @@ async def admin_add_work_type_no_schema(
 
     work_type = WorkType(
         name=name,
-        client_price=client_price_decimal, 
-        mont_price=mont_price_decimal,     
-        tech_supp_require=tech_supp_require 
+        client_price=client_price_decimal,
+        mont_price=mont_price_decimal,
+        tech_supp_require=tech_supp_require,
+        category=category # <--- НОВОЕ: Устанавливаем категорию
     )
     db.add(work_type)
     await db.flush()
     await db.commit()
     await db.refresh(work_type)
 
-    # Возвращаем ответ с новыми полями
+    # Возвращаем ответ с новыми полями, включая category
     return {
         "id": work_type.id,
         "name": work_type.name,
-        "client_price": str(work_type.client_price), 
-        "mont_price": str(work_type.mont_price),     
-        "tech_supp_require": work_type.tech_supp_require 
+        "client_price": str(work_type.client_price),
+        "mont_price": str(work_type.mont_price),
+        "tech_supp_require": work_type.tech_supp_require,
+        "category": work_type.category # <--- НОВОЕ: Возвращаем категорию
     }
-
 
 
 @router.post("/equipment", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
