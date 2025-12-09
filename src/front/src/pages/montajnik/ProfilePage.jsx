@@ -185,6 +185,22 @@ export default function ProfilePage() {
     { value: 12, name: 'Декабрь' },
   ];
 
+  const monthNames = {
+  1: 'Январь',
+  2: 'Февраль',
+  3: 'Март',
+  4: 'Апрель',
+  5: 'Май',
+  6: 'Июнь',
+  7: 'Июль',
+  8: 'Август',
+  9: 'Сентябрь',
+  10: 'Октябрь',
+  11: 'Ноябрь',
+  12: 'Декабрь',
+};
+
+
   // Преобразование опций для MultiSelectFilter
   const companyOptions = companies.map(c => ({ value: c.id, label: c.name }));
   const workTypeOptions = workTypes.map(w => ({ value: w.id, label: w.name }));
@@ -263,19 +279,23 @@ export default function ProfilePage() {
               </div>
             </div>
             
-            {earningsLoading ? (
-              <p>Загрузка...</p>
-            ) : periodEarnings ? (
-              <div>
-                <p><b>За период {periodEarnings.period_display}:</b></p>
-                <p style={{ fontSize: '1.2em', fontWeight: 'bold', color: '#4ade80' }}>
-                  {periodEarnings.total_earned} руб.
-                </p>
-                <p>Количество задач: {periodEarnings.task_count}</p>
-              </div>
-            ) : (
-              <p>Нет данных</p>
-            )}
+           {earningsLoading ? (
+  <p>Загрузка...</p>
+) : periodEarnings ? (
+  <div>
+    <p>
+      <b>
+        За период {selectedStartYear} г., {monthNames[selectedStartMonth]} - {selectedEndYear} г., {monthNames[selectedEndMonth]}:
+      </b>
+    </p>
+    <p style={{ fontSize: '1.2em', fontWeight: 'bold', color: '#4ade80' }}>
+      {periodEarnings.total_earned} руб.
+    </p>
+    <p>Количество задач: {periodEarnings.task_count}</p>
+  </div>
+) : (
+  <p>Нет данных</p>
+)}
           </div>
         </div>
 

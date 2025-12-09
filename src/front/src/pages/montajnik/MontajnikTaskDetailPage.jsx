@@ -96,38 +96,24 @@ function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, ta
 
 // --- Новый компонент: Модальное окно создания отчёта ---
 function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSubmitSuccess }) {
-  const [selectedWorkTypes, setSelectedWorkTypes] = useState([]);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   // --- НОВОЕ: Состояния для отслеживания загрузки вложений ---
   const [uploadedAttachments, setUploadedAttachments] = useState([]); // [{ id, storage_key, uploading: true/false, error: null/string }]
 
-  useEffect(() => {
-    setSelectedWorkTypes(taskWorkTypes);
-  }, [taskWorkTypes]);
-
-  const handleWorkTypeChange = (wtId) => {
-    setSelectedWorkTypes(prev =>
-      prev.includes(wtId)
-        ? prev.filter(id => id !== wtId)
-        : [...prev, wtId]
-    );
-  };
-
   // --- НОВОЕ: Функция onUploaded для FileUploader ---
   const handleAttachmentUploaded = (attachmentData) => {
-  setUploadedAttachments(prev => [
-    ...prev.filter(att => att.id !== attachmentData.tmpId),
-    { 
-      id: attachmentData.id,
-      storage_key: attachmentData.storage_key,
-      uploading: false,
-      error: null
-    }
-  ]);
-};
-
+    setUploadedAttachments(prev => [
+      ...prev.filter(att => att.id !== attachmentData.tmpId),
+      { 
+        id: attachmentData.id,
+        storage_key: attachmentData.storage_key,
+        uploading: false,
+        error: null
+      }
+    ]);
+  };
 
   // --- НОВОЕ: Функция для удаления вложения из состояния ---
   const handleAttachmentRemoved = (storageKey) => {
@@ -167,8 +153,8 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
       return;
     }
 
-    // Формируем текст отчёта
-    const performedWorksText = selectedWorkTypes
+    // Формируем текст отчёта - все работы автоматически считаются выполненными
+    const performedWorksText = taskWorkTypes
       .map(id => allWorkTypes.find(wt => wt.id === id)?.name || `ID ${id}`)
       .join(", ");
 
@@ -181,7 +167,7 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
     }
 
     if (!fullComment.trim()) {
-      alert("Добавьте выполненные работы или комментарий.");
+      alert("Добавьте комментарий.");
       return;
     }
 
@@ -210,64 +196,38 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   const hasErrors = uploadedAttachments.some(att => att.error);
   const successfulUploadsCount = uploadedAttachments.filter(att => !att.uploading && !att.error).length;
 
-  const relevantWorkTypes = allWorkTypes.filter(wt => taskWorkTypes.includes(wt.id));
-
   return (
-    <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: '700px' }}>
+    <div className="modal-backdrop" onClick={onClose}> {/* Закрытие по клику на бэкдроп */}
+      <div className="modal" style={{ maxWidth: '700px' }} onClick={(e) => e.stopPropagation()}> {/* Остановка всплытия */}
         <div className="modal-header">
           <h2>Добавить отчёт по задаче #{taskId}</h2>
           <button className="close" onClick={onClose}>×</button>
         </div>
 
         <div className="modal-body">
-          <div className="section">
-            <h3 style={{ color: 'white' }}>
-              Выполненные работы:
-            </h3>
-            <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #ccc', padding: '5px', borderRadius: '4px', backgroundColor: '#1a1a1a' }}>
-              {relevantWorkTypes.length > 0 ? (
-                relevantWorkTypes.map(wt => (
-                  <div key={wt.id} style={{ marginBottom: '5px', color: 'white' }}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={selectedWorkTypes.includes(wt.id)}
-                        onChange={() => handleWorkTypeChange(wt.id)}
-                        style={{ marginRight: '5px' }}
-                      />
-                      {wt.name}
-                    </label>
-                  </div>
-                ))
-              ) : (
-                <p style={{ color: 'white' }}>Нет назначенных видов работ для этой задачи.</p>
-              )}
-            </div>
-          </div>
-
+          {/* УБРАНО: секция с выполненными работами */}
+          
           <div className="section" style={{ marginTop: '20px' }}>
-  <label style={{ color: 'white', display: 'block', marginBottom: '6px' }}>
-    Комментарий:
-  </label>
+            <label style={{ color: 'white', display: 'block', marginBottom: '6px' }}>
+              Комментарий:
+            </label>
 
-  <textarea
-    value={comment}
-    onChange={(e) => setComment(e.target.value)}
-    rows="4"
-    placeholder="Дополнительная информация..."
-    style={{
-      width: '100%',            // <-- растягиваем по горизонтали
-      resize: 'vertical',       // <-- можно тянуть только вниз
-      padding: '8px',
-      backgroundColor: '#1a1a1a',
-      color: 'white',
-      border: '1px solid #555',
-      borderRadius: '4px'
-    }}
-  />
-</div>
-
+            <textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              rows="4"
+              placeholder="Дополнительная информация..."
+              style={{
+                width: '100%',            // <-- растягиваем по горизонтали
+                resize: 'vertical',       // <-- можно тянуть только вниз
+                padding: '8px',
+                backgroundColor: '#1a1a1a',
+                color: 'white',
+                border: '1px solid #555',
+                borderRadius: '4px'
+              }}
+            />
+          </div>
 
           <div className="section">
             <label style={{ color: 'white' }}>Фото:</label>
@@ -303,16 +263,16 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
 
         </div>
         <div className="modal-actions">
-  <button
-    className="primary"
-    onClick={handleSubmit}
-    disabled={submitting || pendingUploads.length > 0 || hasErrors}
-  >
-    {submitting ? 'Создание...' : 'Создать отчёт'}
-  </button>
+          <button
+            className="primary"
+            onClick={handleSubmit}
+            disabled={submitting || pendingUploads.length > 0 || hasErrors}
+          >
+            {submitting ? 'Создание...' : 'Создать отчёт'}
+          </button>
 
-  <button onClick={onClose}>Отмена</button>
-</div>
+          <button onClick={onClose}>Отмена</button>
+        </div>
 
       </div>
     </div>

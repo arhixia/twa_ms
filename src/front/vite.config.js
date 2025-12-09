@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['finances-cincinnati-confidential-pattern.trycloudflare.com']
+    allowedHosts: ['receiving-penetration-oxygen-run.trycloudflare.com']
   },
 })
 

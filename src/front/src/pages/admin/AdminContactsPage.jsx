@@ -1,3 +1,4 @@
+// front/src/pages/admin/AdminContactsPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -8,6 +9,121 @@ import {
 } from "../../api";
 import "../../styles/LogistPage.css";
 
+// Компонент автодополнения для компании
+function CompanyInput({ value, onChange, companies, placeholder }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filteredCompanies, setFilteredCompanies] = useState(companies);
+
+  useEffect(() => {
+    if (!value.trim()) {
+      setFilteredCompanies(companies);
+    } else {
+      const termLower = value.toLowerCase();
+      setFilteredCompanies(
+        companies.filter(company => company.name.toLowerCase().includes(termLower))
+      );
+    }
+  }, [value, companies]);
+
+  const handleInputChange = (e) => {
+    onChange(e.target.value);
+    setIsOpen(true);
+  };
+
+  const handleCompanySelect = (company) => {
+    onChange(company.name);
+    setIsOpen(false);
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input
+        type="text"
+        value={value}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          padding: '8px 12px',
+          border: '1px solid #444',
+          borderRadius: '4px',
+          backgroundColor: '#1a1a1a',
+          color: '#e0e0e0',
+          fontSize: '14px',
+        }}
+      />
+      {isOpen && filteredCompanies.length > 0 && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+          }}
+        >
+          {filteredCompanies.map((company) => (
+            <li
+              key={company.id}
+              onClick={() => handleCompanySelect(company)}
+              style={{
+                padding: '8px 12px',
+                cursor: 'pointer',
+                color: '#e0e0e0',
+                backgroundColor: '#2a2a2a',
+                borderBottom: '1px solid #3a3a3a',
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {company.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredCompanies.length === 0 && value.trim() !== '' && (
+        <ul
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            right: 0,
+            zIndex: 100,
+            maxHeight: '200px',
+            overflowY: 'auto',
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            backgroundColor: '#1a1a1a',
+            border: '1px solid #444',
+            borderTop: 'none',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
+          }}
+        >
+          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function AdminContactsPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -17,19 +133,18 @@ export default function AdminContactsPage() {
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
   const [newCompanyName, setNewCompanyName] = useState("");
   const [companies, setCompanies] = useState([]);
-  const [filteredCompanies, setFilteredCompanies] = useState([]); // Для поиска
-  const [companySearchTerm, setCompanySearchTerm] = useState(""); // Для поиска
+  const [filteredCompanies, setFilteredCompanies] = useState([]);
+  const [companySearchTerm, setCompanySearchTerm] = useState("");
 
   // Состояния для контактов
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [newContactName, setNewContactName] = useState("");
   const [newContactPhone, setNewContactPhone] = useState("");
   const [newContactPosition, setNewContactPosition] = useState("");
-  const [selectedCompanyId, setSelectedCompanyId] = useState("");
+  const [newContactCompanyName, setNewContactCompanyName] = useState(""); // Для автодополнения
   const [contacts, setContacts] = useState({});
   const [loadingContacts, setLoadingContacts] = useState({});
 
-  // Состояния для отображения/скрытия контактов компании
   const [expandedCompanyIds, setExpandedCompanyIds] = useState(new Set());
 
   useEffect(() => {
@@ -37,7 +152,6 @@ export default function AdminContactsPage() {
   }, []);
 
   useEffect(() => {
-    // Фильтрация компаний при изменении списка или поискового запроса
     if (!companySearchTerm.trim()) {
       setFilteredCompanies(companies);
     } else {
@@ -62,17 +176,15 @@ export default function AdminContactsPage() {
   }
 
   async function loadContactsForCompany(companyId) {
-    if (loadingContacts[companyId]) return; // Не грузим повторно, если уже грузим
+    if (loadingContacts[companyId]) return;
 
-    // Проверяем, есть ли уже загруженные контакты для этой компании
     if (contacts[companyId]) {
-      // Если уже загружены, просто переключаем видимость
       setExpandedCompanyIds(prev => {
         const newSet = new Set(prev);
         if (newSet.has(companyId)) {
-          newSet.delete(companyId); // Скрываем
+          newSet.delete(companyId);
         } else {
-          newSet.add(companyId); // Показываем
+          newSet.add(companyId);
         }
         return newSet;
       });
@@ -86,7 +198,6 @@ export default function AdminContactsPage() {
         ...prev,
         [companyId]: data || [],
       }));
-      // После загрузки показываем контакты
       setExpandedCompanyIds(prev => new Set(prev).add(companyId));
     } catch (err) {
       console.error(`Ошибка загрузки контактов для компании ${companyId}:`, err);
@@ -94,7 +205,6 @@ export default function AdminContactsPage() {
         ...prev,
         [companyId]: [],
       }));
-      // Показываем пустой список
       setExpandedCompanyIds(prev => new Set(prev).add(companyId));
     } finally {
       setLoadingContacts(prev => ({ ...prev, [companyId]: false }));
@@ -118,12 +228,34 @@ export default function AdminContactsPage() {
   };
 
   const handleAddContact = async () => {
-    if (!newContactName.trim() || !selectedCompanyId) {
-      alert("Заполните ФИО и выберите компанию");
+    if (!newContactName.trim() || !newContactCompanyName.trim()) {
+      alert("Заполните ФИО и компанию");
       return;
     }
+
+    // Проверяем, существует ли компания
+    const existingCompany = companies.find(c => c.name.toLowerCase() === newContactCompanyName.toLowerCase());
+    let companyId;
+
+    if (existingCompany) {
+      companyId = existingCompany.id;
+    } else {
+      // Создаём новую компанию
+      try {
+        const newCompany = await adminAddCompany({ name: newContactCompanyName.trim() });
+        companyId = newCompany.id;
+        // Обновляем список компаний
+        setCompanies(prev => [...prev, newCompany]);
+      } catch (err) {
+        console.error("Ошибка добавления компании:", err);
+        const errorMsg = err.response?.data?.detail || "Не удалось добавить компанию.";
+        alert(`Ошибка: ${errorMsg}`);
+        return;
+      }
+    }
+
     try {
-      const result = await adminAddContactPerson(selectedCompanyId, {
+      const result = await adminAddContactPerson(companyId, {
         name: newContactName.trim(),
         phone: newContactPhone.trim(),
         position: newContactPosition.trim(),
@@ -132,13 +264,13 @@ export default function AdminContactsPage() {
       setNewContactName("");
       setNewContactPhone("");
       setNewContactPosition("");
-      setSelectedCompanyId("");
+      setNewContactCompanyName("");
       setShowAddContactModal(false);
-      // Обновляем список контактов в состоянии
-      if (contacts[selectedCompanyId]) {
+
+      if (contacts[companyId]) {
         setContacts(prev => ({
           ...prev,
-          [selectedCompanyId]: [...(prev[selectedCompanyId] || []), result]
+          [companyId]: [...(prev[companyId] || []), result]
         }));
       }
     } catch (err) {
@@ -164,7 +296,6 @@ export default function AdminContactsPage() {
           <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
         </div>
 
-        {/* === Поиск по компаниям === */}
         <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
           <label className="dark-label">Поиск по компаниям</label>
           <input
@@ -186,7 +317,6 @@ export default function AdminContactsPage() {
           />
         </div>
 
-        {/* === Компании и их контакты === */}
         <div className="section">
           <h3>Компании и контакты</h3>
           {filteredCompanies.length > 0 ? (
@@ -219,7 +349,7 @@ export default function AdminContactsPage() {
                           backgroundColor: "#161b22",
                           border: "1px solid #30363d",
                           borderRadius: "0 0 8px 8px",
-                          marginTop: "-1px", // Слияние границы с карточкой компании
+                          marginTop: "-1px",
                         }}
                       >
                         {isLoading ? (
@@ -248,7 +378,6 @@ export default function AdminContactsPage() {
           )}
         </div>
 
-        {/* === Модальное окно добавления компании === */}
         {showAddCompanyModal && (
           <div className="modal-backdrop" onClick={() => setShowAddCompanyModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
@@ -283,7 +412,6 @@ export default function AdminContactsPage() {
           </div>
         )}
 
-        {/* === Модальное окно добавления контактного лица === */}
         {showAddContactModal && (
           <div className="modal-backdrop" onClick={() => setShowAddContactModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
@@ -345,23 +473,12 @@ export default function AdminContactsPage() {
                 </label>
                 <label className="dark-label">
                   Компания
-                  <select
-                    value={selectedCompanyId}
-                    onChange={(e) => setSelectedCompanyId(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  >
-                    <option value="">Выберите компанию</option>
-                    {companies.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <CompanyInput
+                    value={newContactCompanyName}
+                    onChange={setNewContactCompanyName}
+                    companies={companies}
+                    placeholder="Введите или выберите компанию"
+                  />
                 </label>
               </div>
               <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
@@ -375,3 +492,5 @@ export default function AdminContactsPage() {
     </div>
   );
 }
+
+//edit

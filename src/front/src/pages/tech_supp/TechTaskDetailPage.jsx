@@ -14,6 +14,7 @@ import {
   getAttachmentUrl,
 } from "../../api";
 import "../../styles/LogistPage.css";
+import ImageModal from "../../components/ImageModal";
 
 // --- НОВОЕ: Хук для загрузки вложений отчёта ---
 function useReportAttachments(reportId) {
@@ -61,6 +62,7 @@ export default function TechTaskDetailPage() {
   const [contactPersons, setContactPersons] = useState([]); // ✅ Новое
   // ✅ Состояние для хранения телефона контактного лица
   const [contactPersonPhone, setContactPersonPhone] = useState(null); // <--- Добавлено
+  const [openImage, setOpenImage] = useState(null);
 
   // --- НОВОЕ: Состояние для вложений отчётов ---
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
@@ -98,6 +100,14 @@ export default function TechTaskDetailPage() {
     } catch (err) {
       console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
     }
+  };
+
+   const handleImageClick = (imageUrl) => {
+    setOpenImage(imageUrl);
+  };
+
+  const closeModal = () => {
+    setOpenImage(null);
   };
 
     const STATUS_TRANSLATIONS = {
@@ -204,6 +214,8 @@ const REPORT_APPROVAL_TRANSLATIONS = {
   function handleRejectTechReport(taskId, reportId) {
     setRejectModal({ open: true, taskId, reportId });
   }
+
+
 
   function closeRejectModal() {
     setRejectModal({ open: false, taskId: null, reportId: null });
@@ -383,18 +395,17 @@ const REPORT_APPROVAL_TRANSLATIONS = {
                             : originalUrl;
 
                           return (
-                            <a
-                              key={att.id}
-                              href={originalUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <img
-                                src={thumbUrl}
-                                alt={`Report attachment ${idx}`}
-                                style={{ maxHeight: 100 }}
-                              />
-                            </a>
+                           <div
+                                key={att.id}
+                                style={{ cursor: 'zoom-in' }} // Меняем курсор
+                                onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                              >
+                                <img
+                                  src={thumbUrl}
+                                  alt={`Report attachment ${idx}`}
+                                  style={{ maxHeight: 100 }}
+                                />
+                              </div>
                           );
                         })}
                       </div>
@@ -425,6 +436,13 @@ const REPORT_APPROVAL_TRANSLATIONS = {
           </div>
         </div>
       </div>
+            
+            <ImageModal
+        isOpen={!!openImage} // Передаём true/false
+        onClose={closeModal}
+        imageUrl={openImage} // Передаём URL изображения
+        altText="Вложение отчёта" // Опционально: текст по умолчанию
+      />
 
     </div>
   );

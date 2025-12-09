@@ -15,7 +15,7 @@ import {
   getAttachmentUrl,
 } from '../../api'; // Убедитесь, что путь к API корректен
 import "../../styles/LogistPage.css"; // Предполагаем, что стили подходят
-
+import ImageModal from '../../components/ImageModal.jsx'; 
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -65,6 +65,7 @@ export default function AdminTaskDetailPage() {
   const [loadingPhone, setLoadingPhone] = useState(false);
   const [montajniks, setMontajniks] = useState([]);
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
+  const [openImage, setOpenImage] = useState(null);
 
   useEffect(() => {
     if (isNaN(taskId)) {
@@ -111,6 +112,16 @@ export default function AdminTaskDetailPage() {
   archived: "В архиве",
   assigned: "Назначена",
 };
+
+ const handleImageClick = (imageUrl) => {
+    setOpenImage(imageUrl);
+  };
+
+  const closeModal = () => {
+    setOpenImage(null);
+  };
+
+
 
 // --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
 function getStatusDisplayName(statusKey) {
@@ -940,6 +951,12 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
     );
   }
 
+  const assignmentTypeOptions = [
+  { value: "broadcast", display: "В эфир" },
+  { value: "individual", display: "Персональная" }
+];
+
+
   return (
     <div className="page">
       <div className="page-header">
@@ -1151,9 +1168,8 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
                   onChange={(e) => {
                     const newType = e.target.value;
                     setField("assignment_type", newType);
-                    // Если тип меняется на broadcast, сбрасываем назначенного монтажника
                     if (newType === "broadcast") {
-                      setField("assigned_user_id", null);
+                        setField("assigned_user_id", null);
                     }
                   }}
                   style={{
@@ -1165,8 +1181,11 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
                     color: "#e0e0e0",
                   }}
                 >
-                  <option value="broadcast">broadcast</option>
-                  <option value="individual">assigned</option>
+                  {assignmentTypeOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.display}
+                    </option>
+                  ))}
                 </select>
               </label>
 
@@ -1449,18 +1468,17 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
                           : originalUrl;
 
                         return (
-                          <a
-                            key={att.id}
-                            href={originalUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <img
-                              src={thumbUrl}
-                              alt={`Report attachment ${idx}`}
-                              style={{ maxHeight: 100 }}
-                            />
-                          </a>
+                           <div
+                                key={att.id}
+                                style={{ cursor: 'zoom-in' }} // Меняем курсор
+                                onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                              >
+                                <img
+                                  src={thumbUrl}
+                                  alt={`Report attachment ${idx}`}
+                                  style={{ maxHeight: 100 }}
+                                />
+                              </div>
                         );
                       })}
                     </div>
@@ -1486,6 +1504,13 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
          </>
           )}
       </div>
+        <ImageModal
+        isOpen={!!openImage} // Передаём true/false
+        onClose={closeModal}
+        imageUrl={openImage} // Передаём URL изображения
+        altText="Вложение отчёта" // Опционально: текст по умолчанию
+      />
+      
     </div>
   );
 }

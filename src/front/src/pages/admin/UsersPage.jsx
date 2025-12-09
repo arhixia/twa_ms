@@ -1,6 +1,6 @@
 // front/src/pages/admin/UsersPage.jsx
 import React, { useState, useEffect } from 'react';
-import { adminListUsers, adminCreateUser, adminChangeUserRole, adminDeactivateUser, adminActivateUser } from '../../api'; // <--- Убраны adminDeleteUser
+import { adminListUsers, adminCreateUser, adminChangeUserRole, adminDeactivateUser, adminActivateUser } from '../../api';
 import UserCard from '../../components/UserCard';
 
 function UsersPage() {
@@ -15,6 +15,14 @@ function UsersPage() {
     role: 'montajnik',
     telegram_id: '',
   });
+
+  // Маппинг ролей для отображения
+  const roleDisplayNames = {
+    admin: 'Администратор',
+    logist: 'Логист',
+    montajnik: 'Монтажник',
+    tech_supp: 'Тех.специалист',
+  };
 
   const fetchUsers = async () => {
     try {
@@ -32,8 +40,6 @@ function UsersPage() {
     fetchUsers();
   }, []);
 
-  // Убираем handleDelete
-
   const handleRoleChange = async (userId, newRole) => {
     try {
       const updated = await adminChangeUserRole(userId, newRole);
@@ -43,7 +49,6 @@ function UsersPage() {
     }
   };
 
-  // --- НОВАЯ ФУНКЦИЯ: Деактивировать пользователя ---
   const handleDeactivate = async (userId) => {
     if (!window.confirm("Вы уверены, что хотите деактивировать этого пользователя?")) return;
     try {
@@ -125,10 +130,10 @@ function UsersPage() {
                 onChange={handleChange}
                 className="dark-select"
               >
-                <option value="admin">admin</option>
-                <option value="logist">logist</option>
-                <option value="montajnik">montajnik</option>
-                <option value="tech_supp">tech_supp</option>
+                <option value="admin">{roleDisplayNames.admin}</option>
+                <option value="logist">{roleDisplayNames.logist}</option>
+                <option value="montajnik">{roleDisplayNames.montajnik}</option>
+                <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
               </select>
             </label>
           </div>
@@ -140,7 +145,7 @@ function UsersPage() {
           <UserCard
             key={user.id}
             user={user}
-            // onDelete={handleDelete} // <--- Убрано
+            roleDisplayNames={roleDisplayNames} // Передаём маппинг
             onEditRole={handleRoleChange}
             onDeactivate={handleDeactivate}
             onActivate={handleActivate}

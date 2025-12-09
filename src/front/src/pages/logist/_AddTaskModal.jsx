@@ -731,6 +731,10 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       </div>
     );
   }
+  const assignmentTypeOptions = [
+  { value: "broadcast", display: "В эфир" },
+  { value: "individual", display: "Персональная" }
+];
 
   return (
     <Modal open={open} onClose={onClose} title="Добавить задачу">
@@ -1031,24 +1035,27 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, так как разрешено дублирование
         />
 
-       <label>
-          Тип назначения
-          <select
-            value={form.assignment_type}
-            onChange={(e) => setField("assignment_type", e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#e0e0e0",
-            }}
-          >
-            <option value="broadcast">broadcast</option>
-            <option value="individual">assigned</option>
-          </select>
-        </label>
+          <label>
+      Тип назначения
+      <select
+        value={form.assignment_type}
+        onChange={(e) => setField("assignment_type", e.target.value)}
+        style={{
+          width: "100%",
+          padding: "8px",
+          borderRadius: "4px",
+          border: "1px solid #444",
+          backgroundColor: "#1a1a1a",
+          color: "#e0e0e0",
+        }}
+      >
+        {assignmentTypeOptions.map(option => (
+          <option key={option.value} value={option.value}>
+            {option.display}
+          </option>
+        ))}
+      </select>
+    </label>
 
         {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
         {/* ✅ Поле "Назначить монтажника" отображается только если тип назначения "assigned" */}

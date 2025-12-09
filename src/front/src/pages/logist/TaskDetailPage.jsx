@@ -1060,6 +1060,10 @@ const REPORT_APPROVAL_TRANSLATIONS = {
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (!task) return <div className="logist-main"><div className="empty">Задача не найдена</div></div>;
 
+  const assignmentTypeOptions = [
+  { value: "broadcast", display: "В эфир" },
+  { value: "individual", display: "Персональная" }
+];
   return (
     <div className="logist-main">
       <div className="page">
@@ -1375,16 +1379,12 @@ const REPORT_APPROVAL_TRANSLATIONS = {
                 Тип назначения
                 <select
                   value={form.assignment_type || ""}
-                  // ❌ Убираем onChange, чтобы не мешал сбросу из функции clearAssignedUserAndSetBroadcast
-                  // onChange={(e) => { ... }}
                   onChange={(e) => {
-                     const newType = e.target.value;
-                     setField("assignment_type", newType);
-                     // Если тип меняется на broadcast, сбрасываем назначенного монтажника
-                     if (newType === "broadcast") {
+                    const newType = e.target.value;
+                    setField("assignment_type", newType);
+                    if (newType === "broadcast") {
                         setField("assigned_user_id", null);
-                        // setField("assigned_user_name", null); // assigned_user_name нет в form
-                     }
+                    }
                   }}
                   style={{
                     width: "100%",
@@ -1395,8 +1395,11 @@ const REPORT_APPROVAL_TRANSLATIONS = {
                     color: "#e0e0e0",
                   }}
                 >
-                  <option value="broadcast">broadcast</option>
-                  <option value="individual">assigned</option>
+                  {assignmentTypeOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.display}
+                    </option>
+                  ))}
                 </select>
               </label>
 

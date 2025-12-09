@@ -1,7 +1,7 @@
 // front/src/components/UserCard.jsx
 import React from 'react';
 
-function UserCard({ user, onEditRole, onDeactivate, onActivate }) { // <--- Убран onDelete
+function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate }) {
   const roleColor = {
     admin: '#e57373',
     logist: '#64b5f6',
@@ -82,7 +82,7 @@ function UserCard({ user, onEditRole, onDeactivate, onActivate }) { // <--- Уб
           color: '#c9d1d9',
         }}
       >
-        <strong>Роль:</strong> {user.role}
+        <strong>Роль:</strong> {roleDisplayNames[user.role] || user.role}
       </p>
       <p
         style={{
@@ -112,10 +112,10 @@ function UserCard({ user, onEditRole, onDeactivate, onActivate }) { // <--- Уб
             fontSize: '0.9em',
           }}
         >
-          <option value="admin">admin</option>
-          <option value="logist">logist</option>
-          <option value="montajnik">montajnik</option>
-          <option value="tech_supp">tech_supp</option>
+          <option value="admin">{roleDisplayNames.admin}</option>
+          <option value="logist">{roleDisplayNames.logist}</option>
+          <option value="montajnik">{roleDisplayNames.montajnik}</option>
+          <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
         </select>
         {user.is_active ? (
           <button
