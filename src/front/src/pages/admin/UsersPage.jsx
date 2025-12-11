@@ -49,31 +49,47 @@ function UsersPage() {
     }
   };
 
-  const handleDeactivate = async (userId) => {
-    if (!window.confirm("Вы уверены, что хотите деактивировать этого пользователя?")) return;
-    try {
-      const updated = await adminDeactivateUser(userId);
-      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+const handleDeactivate = async (userId) => {
+  if (!window.confirm("Вы уверены, что хотите деактивировать этого пользователя?")) return;
+  try {
+    const updated = await adminDeactivateUser(userId);
+    setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Пользователь ${updated.name} ${updated.lastname} деактивирован.`);
+    } else {
       alert(`Пользователь ${updated.name} ${updated.lastname} деактивирован.`);
-    } catch (err) {
-      console.error("Ошибка деактивации пользователя:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось деактивировать пользователя.";
+    }
+  } catch (err) {
+    console.error("Ошибка деактивации пользователя:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось деактивировать пользователя.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
-  };
+  }
+};
 
-  const handleActivate = async (userId) => {
-    if (!window.confirm("Вы уверены, что хотите активировать этого пользователя?")) return;
-    try {
-      const updated = await adminActivateUser(userId);
-      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+const handleActivate = async (userId) => {
+  if (!window.confirm("Вы уверены, что хотите активировать этого пользователя?")) return;
+  try {
+    const updated = await adminActivateUser(userId);
+    setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Пользователь ${updated.name} ${updated.lastname} активирован.`);
+    } else {
       alert(`Пользователь ${updated.name} ${updated.lastname} активирован.`);
-    } catch (err) {
-      console.error("Ошибка активации пользователя:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось активировать пользователя.";
+    }
+  } catch (err) {
+    console.error("Ошибка активации пользователя:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось активировать пользователя.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
-  };
+  }
+};
 
   const handleCreate = async (e) => {
     e.preventDefault();

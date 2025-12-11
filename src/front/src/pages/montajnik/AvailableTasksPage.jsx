@@ -33,24 +33,32 @@ export default function AvailableTasksPage() {
     }
   }
 
-  const handleAcceptTask = async (taskId) => {
-    try {
-      await acceptTask(taskId); // Вызываем API функцию принятия задачи
+const handleAcceptTask = async (taskId) => {
+  try {
+    await acceptTask(taskId); // Вызываем API функцию принятия задачи
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Задача успешно принята!");
+    } else {
       alert("Задача успешно принята!");
-      // После успешного принятия обновляем все счетчики и перезагружаем задачи
-      await Promise.all([
-        loadTasks(), // Перезагружаем текущие задачи
-        updateAvailableTasksCount(),
-        updateMyTasksCount(),
-        updateAssignedTasksCount()
-      ]);
-    } catch (err) {
-      console.error(`Ошибка при принятии задачи ${taskId}:`, err);
-      // Проверяем, есть ли детализированное сообщение об ошибке в ответе
-      const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
+    }
+    // После успешного принятия обновляем все счетчики и перезагружаем задачи
+    await Promise.all([
+      loadTasks(), // Перезагружаем текущие задачи
+      updateAvailableTasksCount(),
+      updateMyTasksCount(),
+      updateAssignedTasksCount()
+    ]);
+  } catch (err) {
+    console.error(`Ошибка при принятии задачи ${taskId}:`, err);
+    // Проверяем, есть ли детализированное сообщение об ошибке в ответе
+    const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
+    } else {
       alert(`Ошибка: ${errorMessage}`);
     }
-  };
+  }
+};
 
   // Функция для обхода клика по карточке - осуществляет навигацию
   const handleTaskCardClick = (task) => {

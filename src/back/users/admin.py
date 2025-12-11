@@ -10,7 +10,7 @@ from back.db.database import get_db
 from back.db.models import AssignmentType, ClientCompany, ContactPerson, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
 from back.auth.auth import get_current_user,create_user as auth_create_user
 from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
-from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles
+from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles, UpdateEquipmentRequest,UpdateWorkTypeRequest,UpdateCompanyRequest,UpdateContactPersonRequest
 from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -441,7 +441,6 @@ async def admin_update_task(
         changed.append(("work_types", "old_work_set", work_types_data))
         logger.info("Типы работ помечены как изменённые")
 
-    # --- Пересчёт цен ---
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
 
@@ -462,9 +461,10 @@ async def admin_update_task(
     )
     task_work_list = work_res.scalars().all()
     for tw in task_work_list:
-        work_unit_price = tw.work_type.price or Decimal('0')
-        calculated_client_price += work_unit_price * tw.quantity
-        calculated_montajnik_reward += work_unit_price * tw.quantity
+        work_client_unit_price = tw.work_type.client_price or Decimal('0') 
+        work_mont_unit_price = tw.work_type.mont_price or Decimal('0') 
+        calculated_client_price += work_client_unit_price * tw.quantity
+        calculated_montajnik_reward += work_mont_unit_price * tw.quantity
 
     prices_changed = False
     if task.client_price != calculated_client_price or task.montajnik_reward != calculated_montajnik_reward:
@@ -1004,7 +1004,7 @@ async def admin_get_companies(db: AsyncSession = Depends(get_db)):
 async def admin_get_contact_persons(company_id: int, db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(ContactPerson).where(ContactPerson.company_id == company_id))
     contacts = res.scalars().all()
-    return [{"id": c.id, "name": c.name, "phone": c.phone, "position":c.position} for c in contacts]
+    return [{"id": c.id, "name": c.name, "phone": c.phone, "position": c.position, "company_id": c.company_id} for c in contacts]
 
 
 @router.get("/contact-persons/{contact_person_id}/phone", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
@@ -1158,7 +1158,134 @@ async def admin_add_equipment_no_schema(
 
     return {"id": equipment.id, "name": equipment.name, "category": equipment.category, "price": str(equipment.price)}
 
+@router.patch("/work-types/{work_type_id}", dependencies=[Depends(require_roles(Role.admin))])
+async def admin_update_work_type(
+    work_type_id: int,
+    payload: UpdateWorkTypeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(WorkType).where(WorkType.id == work_type_id))
+    work_type = result.scalar_one_or_none()
+    if not work_type:
+        raise HTTPException(status_code=404, detail="Тип работы не найден")
 
+    if payload.name is not None:
+        work_type.name = payload.name
+    if payload.client_price is not None:
+        work_type.client_price = Decimal(str(payload.client_price))
+    if payload.mont_price is not None:
+        work_type.mont_price = Decimal(str(payload.mont_price))
+    if payload.category is not None:
+        work_type.category = payload.category
+    if payload.tech_supp_require is not None:
+        work_type.tech_supp_require = payload.tech_supp_require
+
+    await db.commit()
+    await db.refresh(work_type)
+
+    return {
+        "id": work_type.id,
+        "name": work_type.name,
+        "client_price": str(work_type.client_price),
+        "mont_price": str(work_type.mont_price),
+        "category": work_type.category,
+        "tech_supp_require": work_type.tech_supp_require,
+        "is_active": work_type.is_active
+    }
+
+@router.patch("/equipment/{equipment_id}", dependencies=[Depends(require_roles(Role.admin, Role.logist))])
+async def admin_update_equipment(
+    equipment_id: int,
+    payload: UpdateEquipmentRequest,
+    db: AsyncSession = Depends(get_db),
+):
+
+    result = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+    equipment = result.scalar_one_or_none()
+    if not equipment:
+        raise HTTPException(status_code=404, detail="Оборудование не найдено")
+
+    if payload.name is not None:
+        equipment.name = payload.name
+    if payload.category is not None:
+        equipment.category = payload.category
+    if payload.price is not None:
+        equipment.price = Decimal(str(payload.price))
+
+    await db.commit()
+    await db.refresh(equipment)
+
+    return {
+        "id": equipment.id,
+        "name": equipment.name,
+        "category": equipment.category,
+        "price": str(equipment.price)
+    }
+
+
+@router.patch("/companies/{company_id}", dependencies=[Depends(require_roles(Role.admin))])
+async def admin_update_company(
+    company_id: int,
+    payload: UpdateCompanyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(ClientCompany).where(ClientCompany.id == company_id))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    if payload.name is not None:
+        company.name = payload.name
+
+    await db.commit()
+    await db.refresh(company)
+
+    return {
+        "id": company.id,
+        "name": company.name,
+    }
+
+@router.patch("/contact-persons/{contact_id}", dependencies=[Depends(require_roles(Role.admin))])
+async def admin_update_contact_person(
+    contact_id: int,
+    payload: UpdateContactPersonRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_id))
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
+
+    if payload.name is not None:
+        contact.name = payload.name
+    if payload.position is not None:
+        contact.position = payload.position
+    if payload.phone is not None:
+        contact.phone = payload.phone
+    if payload.company_id is not None:
+        company_result = await db.execute(select(ClientCompany).where(ClientCompany.id == payload.company_id))
+        company = company_result.scalar_one_or_none()
+        if not company:
+            raise HTTPException(status_code=404, detail="Новая компания не найдена")
+        contact.company_id = payload.company_id
+
+    await db.commit()
+    await db.refresh(contact)
+    result_with_company = await db.execute(
+        select(ContactPerson, ClientCompany.name)
+        .join(ClientCompany, ContactPerson.company_id == ClientCompany.id)
+        .where(ContactPerson.id == contact_id)
+    )
+    updated_contact, company_name = result_with_company.first()
+
+    return {
+        "id": updated_contact.id,
+        "name": updated_contact.name,
+        "position": updated_contact.position,
+        "phone": updated_contact.phone,
+        "company_id": updated_contact.company_id,
+        "company_name": company_name,
+    }
 
 @router.get("/tasks/completed_admin", summary="Получить все завершенные задачи (только админ)")
 async def admin_list_completed_tasks(

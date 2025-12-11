@@ -149,50 +149,72 @@ export default function LogistProfilePage() {
 
   // --- Логика добавления ---
   const handleAddCompany = async () => {
-    if (!newCompanyName.trim()) {
+  if (!newCompanyName.trim()) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Введите название компании");
+    } else {
       alert("Введите название компании");
-      return;
     }
-    try {
-      const result = await addCompany({ name: newCompanyName.trim() });
+    return;
+  }
+  try {
+    const result = await addCompany({ name: newCompanyName.trim() });
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Компания "${result.name}" добавлена (ID: ${result.id})`);
+    } else {
       alert(`Компания "${result.name}" добавлена (ID: ${result.id})`);
-      setNewCompanyName(""); // Очищаем поле
-      setShowAddCompanyModal(false); // Закрываем модалку
-      loadCompaniesForModal(); // Перезагружаем список для модалки
-      loadProfile(); // Перезагружаем профиль, если там отображаются компании
-    } catch (err) {
-      console.error("Ошибка добавления компании:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось добавить компанию.";
+    }
+    setNewCompanyName(""); // Очищаем поле
+    setShowAddCompanyModal(false); // Закрываем модалку
+    loadCompaniesForModal(); // Перезагружаем список для модалки
+    loadProfile(); // Перезагружаем профиль, если там отображаются компании
+  } catch (err) {
+    console.error("Ошибка добавления компании:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось добавить компанию.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
-  };
-
-  
+  }
+};
 
 const handleAddContact = async () => {
-    if (!newContactName.trim() || !selectedCompanyId) {
-        alert("Заполните ФИО и выберите компанию");
-        return;
+  if (!newContactName.trim() || !selectedCompanyId) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Заполните ФИО и выберите компанию");
+    } else {
+      alert("Заполните ФИО и выберите компанию");
     }
-    try {
-        // Передаём position в payload
-        const result = await addContactPerson(selectedCompanyId, { 
-            name: newContactName.trim(), 
-            phone: newContactPhone.trim(),
-            position: newContactPosition.trim() 
-        });
-        alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-        setNewContactName("");
-        setNewContactPhone("");
-        setNewContactPosition(""); 
-        setSelectedCompanyId("");
-        setShowAddContactModal(false);
-        loadProfile(); 
-    } catch (err) {
-        console.error("Ошибка добавления контактного лица:", err);
-        const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
-        alert(`Ошибка: ${errorMsg}`);
+    return;
+  }
+  try {
+    // Передаём position в payload
+    const result = await addContactPerson(selectedCompanyId, { 
+      name: newContactName.trim(), 
+      phone: newContactPhone.trim(),
+      position: newContactPosition.trim() 
+    });
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
+    } else {
+      alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
     }
+    setNewContactName("");
+    setNewContactPhone("");
+    setNewContactPosition(); 
+    setSelectedCompanyId("");
+    setShowAddContactModal(false);
+    loadProfile(); 
+  } catch (err) {
+    console.error("Ошибка добавления контактного лица:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
+      alert(`Ошибка: ${errorMsg}`);
+    }
+  }
 };
 
   

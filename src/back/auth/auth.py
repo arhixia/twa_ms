@@ -11,9 +11,6 @@ from passlib.context import CryptContext
 from sqlalchemy import select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from back.db.config import SECRET_KEY,TOKEN as BOT_TOKEN
-import urllib.parse 
-import hmac 
-import hashlib
 from back.db.database import get_db
 from back.db.models import  User,Role
 from back.auth.auth_schemas import  LoginWithTelegramRequest,  UserCreate,UserResponse,Token,TokenVerificationResponse,LogoutResponse
@@ -222,7 +219,6 @@ async def login_for_access_with_telegram(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный логин или пароль")
 
-    # ✅ Обновляем telegram_id, если он передан
     if telegram_id is not None:
         # Проверим, не занят ли этот telegram_id другим пользователем
         existing_user_with_tg_id = await db.execute(select(User).where(User.telegram_id == telegram_id))

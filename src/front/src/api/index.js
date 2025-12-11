@@ -338,6 +338,22 @@ export async function getAdminWorkTypesList() {
   return (await api.get("/admin/work-types")).data;
 }
 
+export async function adminUpdateWorkType(workTypeId, payload) {
+  return (await api.patch(`/admin/work-types/${workTypeId}`, payload)).data;
+}
+
+export async function adminUpdateEquipment(equipmentId, payload) {
+  return (await api.patch(`/admin/equipment/${equipmentId}`, payload)).data;
+}
+
+export async function adminUpdateCompany(companyId, payload) {
+  return (await api.patch(`/admin/companies/${companyId}`, payload)).data;
+}
+
+// Обновить контактное лицо (админ/логист)
+export async function adminUpdateContactPerson(contactId, payload) {
+  return (await api.patch(`/admin/contact-persons/${contactId}`, payload)).data;
+}
 
 // Изменить задачу
 export async function adminUpdateTask(taskId, payload) {

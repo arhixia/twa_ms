@@ -204,3 +204,25 @@ class MontajnikReportReview(BaseModel):
     original_report_photos: List[str]  # Список URL фото из оригинального отчёта
 
     model_config = ConfigDict(from_attributes=True)
+
+class UpdateWorkTypeRequest(BaseModel):
+    name: Optional[str] = None
+    client_price: Optional[float] = None
+    mont_price: Optional[float] = None
+    category: Optional[str] = None
+    tech_supp_require: Optional[bool] = None
+
+class UpdateEquipmentRequest(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    price: Optional[float] = None
+
+
+class UpdateCompanyRequest(BaseModel):
+    name: Optional[str] = None
+
+class UpdateContactPersonRequest(BaseModel):
+    name: Optional[str] = None
+    position: Optional[str] = None
+    phone: Optional[str] = None
+    company_id: Optional[int] = None

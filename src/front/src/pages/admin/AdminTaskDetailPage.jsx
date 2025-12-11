@@ -893,46 +893,59 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
     });
   }
 
-  async function saveEdit() {
-    if (isNaN(taskId)) return;
-    try {
-      const payload = {
-        ...form,
-        equipment: form.equipment || [],
-        work_types: form.work_types_ids || [],
-        client_price: undefined,
-        montajnik_reward: undefined,
-        gos_number: form.gos_number || null,
-        contact_person_phone: undefined,
-        assigned_user_name: undefined,
-      };
-      await adminUpdateTask(taskId, payload);
+async function saveEdit() {
+  if (isNaN(taskId)) return;
+  try {
+    const payload = {
+      ...form,
+      equipment: form.equipment || [],
+      work_types: form.work_types_ids || [],
+      client_price: undefined,
+      montajnik_reward: undefined,
+      gos_number: form.gos_number || null,
+      contact_person_phone: undefined,
+      assigned_user_name: undefined,
+    };
+    await adminUpdateTask(taskId, payload);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Изменения сохранены");
+    } else {
       alert("✅ Изменения сохранены");
-      setEdit(false);
-      loadTask(); // Перезагружаем данные после сохранения
-    } catch (err) {
-      console.error(err);
-      alert("Ошибка при сохранении");
+    }
+    setEdit(false);
+    loadTask();
+  } catch (err) {
+    console.error(err);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Ошибка при сохранении");
+    } else {
+      alert("Ошибка при сохранении"); // Резервный вариант
     }
   }
+}
 
-  async function handleDelete() {
-    if (isNaN(taskId)) return;
-    if (!window.confirm("Вы уверены, что хотите удалить задачу?")) return;
-    try {
-      await adminDeleteTask(taskId);
+async function handleDelete() {
+  if (isNaN(taskId)) return;
+  if (!window.confirm("Вы уверены, что хотите удалить задачу?")) return;
+  try {
+    await adminDeleteTask(taskId);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Задача удалена");
+    } else {
       alert("✅ Задача удалена");
-      navigate("/admin/tasks"); // Перенаправляем на список задач после удаления
-    } catch (err) {
-      console.error("Ошибка при удалении:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу.";
+    }
+    navigate("/admin/tasks"); // Перенаправляем на список задач после удаления
+  } catch (err) {
+    console.error("Ошибка при удалении:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
   }
+}
 
-  function handleUploaded(file) {
-    setForm((f) => ({ ...f, attachments: [...(f.attachments || []), file] }));
-  }
 
   if (loading) {
     return (

@@ -52,28 +52,32 @@ export default function AssignedTasksPage() {
     setShowRejectModal(true);
   }
 
-  async function handleRejectConfirm() {
-    if (!rejectTaskId) return;
-    setActionLoading(rejectTaskId);
-    try {
-      await rejectTask(rejectTaskId, rejectComment || null);
-      setShowRejectModal(false);
-      setRejectComment("");
-      setRejectTaskId(null);
-      // После успешного отклонения обновляем все счетчики
-      await Promise.all([
-        load(), // Перезагружаем текущие задачи
-        updateAssignedTasksCount(),
-        updateMyTasksCount(),
-        updateAvailableTasksCount()
-      ]);
-    } catch (err) {
-      console.error(err);
+async function handleRejectConfirm() {
+  if (!rejectTaskId) return;
+  setActionLoading(rejectTaskId);
+  try {
+    await rejectTask(rejectTaskId, rejectComment || null);
+    setShowRejectModal(false);
+    setRejectComment("");
+    setRejectTaskId(null);
+    // После успешного отклонения обновляем все счетчики
+    await Promise.all([
+      load(), // Перезагружаем текущие задачи
+      updateAssignedTasksCount(),
+      updateMyTasksCount(),
+      updateAvailableTasksCount()
+    ]);
+  } catch (err) {
+    console.error(err);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Ошибка при отклонении задачи");
+    } else {
       alert("Ошибка при отклонении задачи");
-    } finally {
-      setActionLoading(null);
     }
+  } finally {
+    setActionLoading(null);
   }
+}
 
   return (
     <div className="page">

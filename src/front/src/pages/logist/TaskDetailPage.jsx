@@ -54,24 +54,36 @@ function useReportAttachments(reportId) {
 function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
   const [comment, setComment] = useState("");
 
-  const handleSubmit = async () => {
-    if (!comment.trim()) {
+ const handleSubmit = async () => {
+  if (!comment.trim()) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Введите комментарий причины отклонения");
+    } else {
       alert("Введите комментарий причины отклонения");
-      return;
     }
-    try {
-      await reviewReport(taskId, reportId, { approval: "rejected", comment, photos: [] });
+    return;
+  }
+  try {
+    await reviewReport(taskId, reportId, { approval: "rejected", comment, photos: [] });
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("❌ Отчёт отклонён");
+    } else {
       alert("❌ Отчёт отклонён");
-      onSubmitSuccess && onSubmitSuccess();
-      onClose();
-    } catch (err) {
-      console.error("Ошибка отклонения отчёта:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось отклонить отчёт.";
-      alert(`Ошибка: ${errorMsg}`);
-    } finally {
-      // setSubmitting(false);
     }
-  };
+    onSubmitSuccess && onSubmitSuccess();
+    onClose();
+  } catch (err) {
+    console.error("Ошибка отклонения отчёта:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось отклонить отчёт.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
+      alert(`Ошибка: ${errorMsg}`);
+    }
+  } finally {
+    // setSubmitting(false);
+  }
+};
 
   return (
     <div className="modal-backdrop">
@@ -536,29 +548,45 @@ export default function TaskDetailPage() {
   };
 
 
-  async function handleArchiveTask() {
-    if (!task || task.is_draft) {
-        alert("Нельзя архивировать черновик через эту кнопку.");
-        return;
+async function handleArchiveTask() {
+  if (!task || task.is_draft) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Нельзя архивировать черновик через эту кнопку.");
+    } else {
+      alert("Нельзя архивировать черновик через эту кнопку.");
     }
-    // Также можно проверить, что статус не 'archived', чтобы не архивировать повторно
-    if (task.status === "archived") {
-        alert("Задача уже архивирована.");
-        return;
+    return;
+  }
+  // Также можно проверить, что статус не 'archived', чтобы не архивировать повторно
+  if (task.status === "archived") {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Задача уже архивирована.");
+    } else {
+      alert("Задача уже архивирована.");
     }
-    if (!window.confirm(`Вы уверены, что хотите архивировать задачу #${task.id}?`)) return;
-    try {
-      await archiveTask(task.id); // Вызываем API функцию
+    return;
+  }
+  if (!window.confirm(`Вы уверены, что хотите архивировать задачу #${task.id}?`)) return;
+  try {
+    await archiveTask(task.id); // Вызываем API функцию
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Задача архивирована");
+    } else {
       alert("✅ Задача архивирована");
-      useAuthStore.getState().updateActiveTasksCount();
-      navigate("/logist/tasks/active");
-      loadTask(); // Перезагружаем данные задачи
-    } catch (err) {
-      console.error("Ошибка архивации задачи:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось архивировать задачу.";
+    }
+    useAuthStore.getState().updateActiveTasksCount();
+    navigate("/logist/tasks/active");
+    loadTask(); // Перезагружаем данные задачи
+  } catch (err) {
+    console.error("Ошибка архивации задачи:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось архивировать задачу.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
   }
+}
 
   const STATUS_TRANSLATIONS = {
   new: "Создана",
@@ -948,41 +976,56 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     }
   }
 
-  async function saveEdit() {
-    try {
-      const payload = {
-        ...form,
-        equipment: form.equipment || [],
-        work_types: form.work_types_ids || [],
-        client_price: undefined,
-        montajnik_reward: undefined,
-        gos_number: form.gos_number || null,
-        contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
-        assigned_user_name: undefined,
-      };
-      await editTask(id, payload);
+async function saveEdit() {
+  try {
+    const payload = {
+      ...form,
+      equipment: form.equipment || [],
+      work_types: form.work_types_ids || [],
+      client_price: undefined,
+      montajnik_reward: undefined,
+      gos_number: form.gos_number || null,
+      contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
+      assigned_user_name: undefined,
+    };
+    await editTask(id, payload);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Изменения сохранены");
+    } else {
       alert("✅ Изменения сохранены");
-      setEdit(false);
-      loadTask(); // Перезагружаем данные
-    } catch (err) {
-      console.error(err);
+    }
+    setEdit(false);
+    loadTask(); // Перезагружаем данные
+  } catch (err) {
+    console.error(err);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Ошибка при сохранении");
+    } else {
       alert("Ошибка при сохранении");
     }
   }
+}
 
-  // --- Отчёт: принять / отклонить ---
-  async function handleApproveReport(taskId, reportId) {
-    if (!window.confirm("Принять отчёт?")) return;
-    try {
-      await reviewReport(taskId, reportId, { approval: "approved", comment: "", photos: [] });
+async function handleApproveReport(taskId, reportId) {
+  if (!window.confirm("Принять отчёт?")) return;
+  try {
+    await reviewReport(taskId, reportId, { approval: "approved", comment: "", photos: [] });
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Отчёт принят");
+    } else {
       alert("✅ Отчёт принят");
-      loadTask();
-    } catch (err) {
-      console.error("Ошибка принятия отчёта:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
+    }
+    loadTask();
+  } catch (err) {
+    console.error("Ошибка принятия отчёта:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
   }
+}
 
   function handleRejectReport(taskId, reportId) {
     setRejectModal({ open: true, taskId, reportId });

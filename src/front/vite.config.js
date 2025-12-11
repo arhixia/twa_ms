@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['receiving-penetration-oxygen-run.trycloudflare.com']
+    allowedHosts: ['proposals-flexibility-commodity-special.trycloudflare.com']
   },
 })
 

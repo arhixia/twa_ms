@@ -756,68 +756,98 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
     });
   }
 
-  async function saveEdit() {
-    try {
-      // Формируем payload в формате бекенда (аналогично _AddTaskModal)
-      const payload = {
-        ...form,
-        equipment: form.equipment || [],
-        work_types: form.work_types_ids || [], // Отправляем плоский массив ID
-        // ❌ Явно исключаем client_price и montajnik_reward, так как они рассчитываются автоматически
-        client_price: undefined,
-        montajnik_reward: undefined,
-        // ❌ contact_person_phone не отправляем, сервер сам его возьмёт по contact_person_id
-        contact_person_phone: undefined, // <--- Добавлено для ясности
-      };
-      await patchDraft(id, payload);
+async function saveEdit() {
+  try {
+    // Формируем payload в формате бекенда (аналогично _AddTaskModal)
+    const payload = {
+      ...form,
+      equipment: form.equipment || [],
+      work_types: form.work_types_ids || [], // Отправляем плоский массив ID
+      // ❌ Явно исключаем client_price и montajnik_reward, так как они рассчитываются автоматически
+      client_price: undefined,
+      montajnik_reward: undefined,
+      // ❌ contact_person_phone не отправляем, сервер сам его возьмёт по contact_person_id
+      contact_person_phone: undefined, // <--- Добавлено для ясности
+    };
+    await patchDraft(id, payload);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("💾 Изменения сохранены");
+    } else {
       alert("💾 Изменения сохранены");
-      setEdit(false);
-      await loadDraft(); // Перезагружаем данные
-    } catch (e) {
-      console.error(e);
+    }
+    setEdit(false);
+    await loadDraft(); // Перезагружаем данные
+  } catch (e) {
+    console.error(e);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Ошибка сохранения");
+    } else {
       alert("Ошибка сохранения");
     }
   }
+}
 
-  async function handlePublish() {
-    if (!window.confirm("Опубликовать задачу?")) return;
-    try {
-      // Формируем payload для публикации (аналогично _AddTaskModal)
-      const publishPayload = {
-        draft_id: Number(id),
-        ...form, // берем все поля из form, включая company_id, contact_person_id, gos_number
-        equipment: form.equipment || [],
-        work_types: form.work_types_ids || [], // Отправляем плоский массив ID
-        // ❌ Явно исключаем client_price и montajnik_reward
-        client_price: undefined,
-        montajnik_reward: undefined,
-        // ❌ contact_person_phone не отправляем
-        contact_person_phone: undefined, // <--- Добавлено для ясности
-      };
-      await publishTask(publishPayload);
+
+async function handlePublish() {
+  if (!window.confirm("Опубликовать задачу?")) return;
+  try {
+    // Формируем payload для публикации (аналогично _AddTaskModal)
+    const publishPayload = {
+      draft_id: Number(id),
+      ...form, // берем все поля из form, включая company_id, contact_person_id, gos_number
+      equipment: form.equipment || [],
+      work_types: form.work_types_ids || [], // Отправляем плоский массив ID
+      // ❌ Явно исключаем client_price и montajnik_reward
+      client_price: undefined,
+      montajnik_reward: undefined,
+      // ❌ contact_person_phone не отправляем
+      contact_person_phone: undefined, // <--- Добавлено для ясности
+    };
+    await publishTask(publishPayload);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Задача опубликована");
+    } else {
       alert("✅ Задача опубликована");
-      useAuthStore.getState().updateActiveTasksCount();
-      navigate("/logist/tasks/active");
-    } catch (e) {
-      console.error(e);
+    }
+    useAuthStore.getState().updateActiveTasksCount();
+    navigate("/logist/tasks/active");
+  } catch (e) {
+    console.error(e);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Ошибка при публикации задачи");
+    } else {
       alert("Ошибка при публикации задачи");
     }
   }
+}
 
-  async function handleDelete() {
-    if (!window.confirm("Удалить черновик?")) return;
-    try {
-      await deleteDraft(id);
+async function handleDelete() {
+  if (!window.confirm("Удалить черновик?")) return;
+  try {
+    await deleteDraft(id);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("🗑 Черновик удалён");
+    } else {
       alert("🗑 Черновик удалён");
-      navigate("/logist/drafts");
-    } catch (e) {
-      console.error(e);
+    }
+    navigate("/logist/drafts");
+  } catch (e) {
+    console.error(e);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Ошибка удаления черновика");
+    } else {
       alert("Ошибка удаления черновика");
     }
   }
+}
 
   if (loading) return <div className="page">Загрузка...</div>;
   if (!draft) return <div className="page">Черновик не найден</div>;
+
+const assignmentTypeOptions = [
+  { value: "broadcast", display: "В эфир" },
+  { value: "individual", display: "Персональная" }
+];
 
   return (
     <div className="page">
@@ -1121,8 +1151,11 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
                     color: "#e0e0e0",
                   }}
                 >
-                  <option value="broadcast">broadcast</option>
-                  <option value="individual">assigned</option>
+                    {assignmentTypeOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.display}
+                    </option>
+                  ))}
                 </select>
               </label>
 

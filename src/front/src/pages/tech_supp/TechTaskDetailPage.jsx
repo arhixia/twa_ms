@@ -195,20 +195,28 @@ const REPORT_APPROVAL_TRANSLATIONS = {
   }
 
   // --- Функция для принятия отчёта тех.специалистом ---
-  async function handleTechApprove(taskId, reportId) {
-    if (!window.confirm("Принять отчёт как тех.специалист?")) return;
-    try {
-      // Вызываем НОВУЮ функцию API для ревью с approval: "approved"
-      // ❌ Убираем photos из payload
-      await reviewTechReport(taskId, reportId, { approval: "approved", comment: "" /*, photos: []*/ });
+async function handleTechApprove(taskId, reportId) {
+  if (!window.confirm("Принять отчёт как тех.специалист?")) return;
+  try {
+    // Вызываем НОВУЮ функцию API для ревью с approval: "approved"
+    // ❌ Убираем photos из payload
+    await reviewTechReport(taskId, reportId, { approval: "approved", comment: "" /*, photos: []*/ });
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Отчёт принят тех.специалистом");
+    } else {
       alert("✅ Отчёт принят тех.специалистом");
-      loadTask(); // Перезагружаем задачу для обновления отображения
-    } catch (err) {
-      console.error("Ошибка принятия отчёта:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
+    }
+    loadTask(); // Перезагружаем задачу для обновления отображения
+  } catch (err) {
+    console.error("Ошибка принятия отчёта:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
   }
+}
 
   // --- Функции для управления модальным окном отклонения тех.специалистом ---
   function handleRejectTechReport(taskId, reportId) {
@@ -222,25 +230,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     setRejectComment("");
   }
 
-  async function handleRejectTechReportSubmit() {
-    if (!rejectComment.trim()) {
-      alert("Введите комментарий причины отклонения");
-      return;
-    }
-    try {
-      await reviewTechReport(rejectModal.taskId, rejectModal.reportId, {
-        approval: "rejected",
-        comment: rejectComment,
-      });
-      alert("❌ Отчёт отклонён тех.специалистом");
-      closeRejectModal();
-      loadTask(); // Перезагружаем задачу для обновления отображения
-    } catch (err) {
-      console.error("Ошибка отклонения отчёта:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось отклонить отчёт.";
-      alert(`Ошибка: ${errorMsg}`);
-    }
-  }
+
 
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;

@@ -392,53 +392,66 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   }
 
   async function saveDraft(asPublish = false) {
-    if (saving) return;
-    setSaving(true);
-    try {
-      const payload = {
-        ...form,
-        equipment: form.equipment || [],
-        work_types: form.work_types_ids || [],
-        scheduled_at: form.scheduled_at || null,
-        assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
-        photo_required: Boolean(form.photo_required),
-        assignment_type: form.assignment_type || "broadcast",
-        gos_number: form.gos_number || null,
-        contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
-      };
+  if (saving) return;
+  setSaving(true);
+  try {
+    const payload = {
+      ...form,
+      equipment: form.equipment || [],
+      work_types: form.work_types_ids || [],
+      scheduled_at: form.scheduled_at || null,
+      assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
+      photo_required: Boolean(form.photo_required),
+      assignment_type: form.assignment_type || "broadcast",
+      gos_number: form.gos_number || null,
+      contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
+    };
 
-      let result;
+    let result;
     if (asPublish) {
       result = await publishTask(payload);
-      alert("✅ Опубликовано");
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("✅ Опубликовано");
+      } else {
+        alert("✅ Опубликовано");
+      }
       useAuthStore.getState().updateActiveTasksCount();
     } else {
       result = await createDraft(payload);
-      alert("💾 Сохранено черновиком");
-    }
-
-      let newId = null;
-      if (asPublish) {
-        newId = result?.id || result?.task_id;
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("💾 Сохранено черновиком");
       } else {
-        newId = result?.draft_id || result?.id;
+        alert("💾 Сохранено черновиком");
       }
-
-      if (newId === null || newId === undefined || newId <= 0) {
-        console.error("Ошибка: Некорректный ID из ответа", result);
-        throw new Error("Не удалось получить корректный ID созданной сущности из ответа сервера.");
-      }
-
-      setTaskId(newId);
-      onSaved && onSaved(newId);
-      onClose();
-    } catch (e) {
-      console.error("Ошибка при сохранении:", e);
-      alert(e.response?.data?.detail || e.message || "Ошибка при сохранении");
-    } finally {
-      setSaving(false);
     }
+
+    let newId = null;
+    if (asPublish) {
+      newId = result?.id || result?.task_id;
+    } else {
+      newId = result?.draft_id || result?.id;
+    }
+
+    if (newId === null || newId === undefined || newId <= 0) {
+      console.error("Ошибка: Некорректный ID из ответа", result);
+      throw new Error("Не удалось получить корректный ID созданной сущности из ответа сервера.");
+    }
+
+    setTaskId(newId);
+    onSaved && onSaved(newId);
+    onClose();
+  } catch (e) {
+    console.error("Ошибка при сохранении:", e);
+    const errorMsg = e.response?.data?.detail || e.message || "Ошибка при сохранении";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(errorMsg);
+    } else {
+      alert(errorMsg);
+    }
+  } finally {
+    setSaving(false);
   }
+}
 
   // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ ---
   function addEquipmentItem(equipmentId) {

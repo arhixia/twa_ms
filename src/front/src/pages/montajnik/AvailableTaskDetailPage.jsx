@@ -90,21 +90,29 @@ function getStatusDisplayName(statusKey) {
     }
   }
 
-  const handleAcceptTask = async () => {
-    if (!window.confirm(`Вы уверены, что хотите принять задачу #${id}?`)) return;
-    try {
-      setAccepting(true);
-      await acceptTask(id);
+const handleAcceptTask = async () => {
+  if (!window.confirm(`Вы уверены, что хотите принять задачу #${id}?`)) return;
+  try {
+    setAccepting(true);
+    await acceptTask(id);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Задача принята!");
+    } else {
       alert("Задача принята!");
-      navigate("/montajnik/tasks/mine");
-    } catch (err) {
-      console.error("Ошибка принятия задачи:", err);
-      const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
-      alert(`Ошибка: ${errorMessage}`);
-    } finally {
-      setAccepting(false);
     }
-  };
+    navigate("/montajnik/tasks/mine");
+  } catch (err) {
+    console.error("Ошибка принятия задачи:", err);
+    const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
+    } else {
+      alert(`Ошибка: ${errorMessage}`);
+    }
+  } finally {
+    setAccepting(false);
+  }
+};
 
 
   if (loading) {

@@ -38,28 +38,40 @@ function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, ta
     // { value: "completed", label: "✅ Завершить" }, // Завершается через отдельный UI или кнопку "Добавить отчет" -> "Отправить на проверку"
   ];
 
-  const handleSubmit = async () => {
-    if (!selectedStatus) {
+const handleSubmit = async () => {
+  if (!selectedStatus) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Пожалуйста, выберите статус.");
+    } else {
       alert("Пожалуйста, выберите статус.");
-      return;
     }
-    if (!window.confirm(`Вы уверены, что хотите изменить статус на '${selectedStatus}'?`)) return;
+    return;
+  }
+  if (!window.confirm(`Вы уверены, что хотите изменить статус на '${selectedStatus}'?`)) return;
 
-    setChanging(true);
-    try {
-      // ✅ ИСПРАВЛЕНО: Передаём только строку статуса
-      await changeTaskStatus(taskId, selectedStatus);
+  setChanging(true);
+  try {
+    // ✅ ИСПРАВЛЕНО: Передаём только строку статуса
+    await changeTaskStatus(taskId, selectedStatus);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Статус обновлён");
+    } else {
       alert("Статус обновлён");
-      onSubmitSuccess && onSubmitSuccess();
-      onClose();
-    } catch (err) {
-      console.error("Ошибка изменения статуса:", err);
-      const errorMessage = err.response?.data?.detail || "Ошибка при смене статуса";
-      alert(`Ошибка: ${errorMessage}`);
-    } finally {
-      setChanging(false);
     }
-  };
+    onSubmitSuccess && onSubmitSuccess();
+    onClose();
+  } catch (err) {
+    console.error("Ошибка изменения статуса:", err);
+    const errorMessage = err.response?.data?.detail || "Ошибка при смене статуса";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
+    } else {
+      alert(`Ошибка: ${errorMessage}`);
+    }
+  } finally {
+    setChanging(false);
+  }
+};
 
   return (
     <div className="modal-backdrop">
@@ -130,66 +142,79 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   };
 
   // --- НОВОЕ: Функция onUploadError для FileUploader ---
-  const handleAttachmentUploadError = (fileId, error) => {
-    setUploadedAttachments(prev => [
-      ...prev.filter(att => att.id !== fileId),
-      { id: fileId, uploading: false, error: error }
-    ]);
-  };
-
-  const handleSubmit = async () => {
-    // --- НОВОЕ: Проверка на незавершённые загрузки ---
-    const pendingUploads = uploadedAttachments.filter(att => att.uploading);
-    if (pendingUploads.length > 0) {
+const handleSubmit = async () => {
+  // --- НОВОЕ: Проверка на незавершённые загрузки ---
+  const pendingUploads = uploadedAttachments.filter(att => att.uploading);
+  if (pendingUploads.length > 0) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
+    } else {
       alert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
-      return;
     }
+    return;
+  }
 
-    // --- НОВОЕ: Проверка на ошибки загрузки ---
-    const failedUploads = uploadedAttachments.filter(att => att.error);
-    if (failedUploads.length > 0) {
+  // --- НОВОЕ: Проверка на ошибки загрузки ---
+  const failedUploads = uploadedAttachments.filter(att => att.error);
+  if (failedUploads.length > 0) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
+    } else {
       alert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
-      console.error("Failed uploads:", failedUploads);
-      return;
     }
+    console.error("Failed uploads:", failedUploads);
+    return;
+  }
 
-    // Формируем текст отчёта - все работы автоматически считаются выполненными
-    const performedWorksText = taskWorkTypes
-      .map(id => allWorkTypes.find(wt => wt.id === id)?.name || `ID ${id}`)
-      .join(", ");
+  // Формируем текст отчёта - все работы автоматически считаются выполненными
+  const performedWorksText = taskWorkTypes
+    .map(id => allWorkTypes.find(wt => wt.id === id)?.name || `ID ${id}`)
+    .join(", ");
 
-    let fullComment = "";
-    if (performedWorksText) {
-        fullComment += `Выполнено: ${performedWorksText}`;
-    }
-    if (comment.trim()) {
-        fullComment += fullComment ? `\n\n${comment}` : comment;
-    }
+  let fullComment = "";
+  if (performedWorksText) {
+      fullComment += `Выполнено: ${performedWorksText}`;
+  }
+  if (comment.trim()) {
+      fullComment += fullComment ? `\n\n${comment}` : comment;
+  }
 
-    if (!fullComment.trim()) {
+  if (!fullComment.trim()) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Добавьте комментарий.");
+    } else {
       alert("Добавьте комментарий.");
-      return;
     }
+    return;
+  }
 
-    setSubmitting(true);
-    try {
-      const attachmentKeysToBind = uploadedAttachments.map(att => att.storage_key);
-      const createRes = await createReport(taskId, fullComment, attachmentKeysToBind);
-      const reportId = createRes.report_id;
+  setSubmitting(true);
+  try {
+    const attachmentKeysToBind = uploadedAttachments.map(att => att.storage_key);
+    const createRes = await createReport(taskId, fullComment, attachmentKeysToBind);
+    const reportId = createRes.report_id;
 
-      await submitReportForReview(taskId, reportId);
+    await submitReportForReview(taskId, reportId);
 
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Отчёт создан и отправлен на проверку!");
+    } else {
       alert("Отчёт создан и отправлен на проверку!");
-      onSubmitSuccess && onSubmitSuccess();
-      onClose();
-    } catch (err) {
-      console.error("Ошибка при создании/отправке отчёта:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось создать или отправить отчёт.";
-      alert(`Ошибка: ${errorMsg}`);
-    } finally {
-      setSubmitting(false);
     }
-  };
+    onSubmitSuccess && onSubmitSuccess();
+    onClose();
+  } catch (err) {
+    console.error("Ошибка при создании/отправке отчёта:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось создать или отправить отчёт.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
+      alert(`Ошибка: ${errorMsg}`);
+    }
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   // --- НОВОЕ: Вычисляем статус загрузки ---
   const pendingUploads = uploadedAttachments.filter(att => att.uploading);
@@ -832,17 +857,26 @@ export default function MontajnikTaskDetailPage() {
 
     if (!nextAction) return null; // если нет следующего статуса — не показываем кнопку
 
-    const handleStatusChange = async () => {
-      if (!window.confirm(`Подтвердить действие: "${nextAction.label}"?`)) return;
-      try {
-        await changeTaskStatus(task.id, nextAction.next);
-        alert(`Статус изменён на ${nextAction.next}`);
-        await loadTask();
-      } catch (err) {
-        console.error(err);
-        alert(err.response?.data?.detail || "Ошибка при смене статуса");
-      }
-    };
+const handleStatusChange = async () => {
+  if (!window.confirm(`Подтвердить действие: "${nextAction.label}"?`)) return;
+  try {
+    await changeTaskStatus(task.id, nextAction.next);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Статус изменён на ${nextAction.next}`);
+    } else {
+      alert(`Статус изменён на ${nextAction.next}`);
+    }
+    await loadTask();
+  } catch (err) {
+    console.error(err);
+    const errorMsg = err.response?.data?.detail || "Ошибка при смене статуса";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
+      alert(`Ошибка: ${errorMsg}`);
+    }
+  }
+};
 
     return (
       <button className="primary" onClick={handleStatusChange}>

@@ -40,34 +40,50 @@ export default function LogistArchivedTasksPage() {
     }
   }
 
-  async function handleDeleteArchived(taskId) {
-    if (!window.confirm(`Вы уверены, что хотите УДАЛИТЬ задачу #${taskId} из архива? Это действие необратимо.`)) return;
-    try {
-      await deleteArchivedTask(taskId);
+async function handleDeleteArchived(taskId) {
+  if (!window.confirm(`Вы уверены, что хотите УДАЛИТЬ задачу #${taskId} из архива? Это действие необратимо.`)) return;
+  try {
+    await deleteArchivedTask(taskId);
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Задача удалена из архива");
+    } else {
       alert("✅ Задача удалена из архива");
-      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-    } catch (err) {
-      console.error("Ошибка удаления архивной задачи:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу из архива.";
+    }
+    setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+  } catch (err) {
+    console.error("Ошибка удаления архивной задачи:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу из архива.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
   }
+}
 
-  // --- НОВОЕ: Функция для разархивации ---
-  async function handleUnarchive(taskId) {
-    if (!window.confirm(`Вы уверены, что хотите убрать задачу #${taskId} из архива и перевести в черновики?`)) return;
-    try {
-      await unarchiveTask(taskId); // <--- Вызываем API
+// --- НОВОЕ: Функция для разархивации ---
+async function handleUnarchive(taskId) {
+  if (!window.confirm(`Вы уверены, что хотите убрать задачу #${taskId} из архива и перевести в черновики?`)) return;
+  try {
+    await unarchiveTask(taskId); // <--- Вызываем API
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("✅ Задача убрана из архива и переведена в черновики");
+    } else {
       alert("✅ Задача убрана из архива и переведена в черновики");
-      // Удаляем задачу из списка архивных
-      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-      // Опционально: обновить счётчики задач в сторе (useAuthStore.getState().updateDraftTasksCount())
-    } catch (err) {
-      console.error("Ошибка разархивации задачи:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось убрать задачу из архива.";
+    }
+    // Удаляем задачу из списка архивных
+    setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
+    // Опционально: обновить счётчики задач в сторе (useAuthStore.getState().updateDraftTasksCount())
+  } catch (err) {
+    console.error("Ошибка разархивации задачи:", err);
+    const errorMsg = err.response?.data?.detail || "Не удалось убрать задачу из архива.";
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+    } else {
       alert(`Ошибка: ${errorMsg}`);
     }
   }
+}
 
   if (loading)
     return (
