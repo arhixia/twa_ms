@@ -308,6 +308,10 @@ export async function adminActivateUser(userId) {
   return (await api.patch(`/admin/users/${userId}/activate`)).data;
 }
 
+export async function adminUpdateUser(userId, payload) {
+  return (await api.patch(`/admin/users/${userId}`, payload)).data;
+}
+
 
 // Изменить роль пользователя
 export async function adminChangeUserRole(userId, role) {

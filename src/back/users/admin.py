@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
 from back.db.models import AssignmentType, ClientCompany, ContactPerson, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
-from back.auth.auth import get_current_user,create_user as auth_create_user
+from back.auth.auth import get_current_user,create_user as auth_create_user, get_password_hash
 from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
-from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles, UpdateEquipmentRequest,UpdateWorkTypeRequest,UpdateCompanyRequest,UpdateContactPersonRequest
+from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles, UpdateEquipmentRequest,UpdateWorkTypeRequest,UpdateCompanyRequest,UpdateContactPersonRequest, UpdateUserRequest
 from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -90,6 +90,57 @@ async def admin_create_user(
     await db.refresh(new_user)
     return UserResponse.model_validate(new_user)
 
+@router.patch("/users/{user_id}", dependencies=[Depends(require_roles(Role.admin))])
+async def admin_update_user(
+    user_id: int,
+    payload: UpdateUserRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Проверка прав
+    if current_user.role != Role.admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if payload.login is not None and payload.login != user.login:
+        existing_user_result = await db.execute(select(User).where(User.login == payload.login))
+        existing_user = existing_user_result.scalars().first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Логин уже занят другим пользователем.")
+        
+    if payload.name is not None:
+        user.name = payload.name
+    if payload.lastname is not None:
+        user.lastname = payload.lastname
+    if payload.login is not None:
+        user.login = payload.login
+    if payload.password is not None:
+        # Хэшируем новый пароль
+        user.hashed_password = get_password_hash(payload.password)
+    if payload.role is not None:
+        # Проверим, что роль валидна
+        try:
+            new_role = Role(payload.role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Неверная роль.")
+        user.role = new_role
+
+    await db.commit()
+    await db.refresh(user)
+
+    return {
+        "id": user.id,
+        "telegram_id": user.telegram_id,
+        "name": user.name,
+        "lastname": user.lastname,
+        "role": user.role.value,
+        "is_active": user.is_active,
+        "login": user.login,
+    }
 
 @router.delete(
     "/users/{user_id}",

@@ -1,7 +1,14 @@
-// front/src/components/UserCard.jsx
 import React from 'react';
 
-function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate }) {
+// Вспомогательная функция для обрезки строки
+const truncateName = (str) => {
+  if (str.length > 22) {
+    return str.substring(0, 19) + '...'; // 19 + '...' = 22
+  }
+  return str;
+};
+
+function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate, onEditUser }) {
   const roleColor = {
     admin: '#e57373',
     logist: '#64b5f6',
@@ -20,6 +27,16 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
   const handleActivateClick = () => {
     onActivate(user.id);
   };
+
+  // Обработчик клика на кнопку редактирования
+  const handleEditClick = (e) => {
+    e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал onClick на карточке
+    onEditUser(user); // Вызываем функцию открытия модального окна редактирования
+  };
+
+  // Формируем полное имя и применяем обрезку
+  const fullName = `${user.name} ${user.lastname}`;
+  const displayName = truncateName(fullName);
 
   return (
     <div
@@ -46,9 +63,14 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
             margin: '0',
             color: 'white',
             fontSize: '1.1em',
+            whiteSpace: 'nowrap', // Запрещаем перенос строки
+            overflow: 'hidden',   // Скрываем переполнение
+            textOverflow: 'ellipsis', // Добавляем многоточие
+            maxWidth: '70%' // Ограничиваем ширину, чтобы кнопки всегда были видны
           }}
+          title={`${user.name} ${user.lastname}`} // Показываем полное имя при наведении
         >
-          {user.name} {user.lastname}
+          {displayName}
         </h3>
         <div
           style={{
@@ -98,25 +120,33 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
           gap: '8px',
           marginTop: '10px',
           flexWrap: 'wrap',
+          alignItems: 'center'
         }}
       >
-        <select
-          value={user.role}
-          onChange={handleRoleChange}
+        {/* Кнопка редактирования */}
+        <button
+          className="edit-user-btn"
+          onClick={handleEditClick}
           style={{
-            padding: '4px 8px',
-            border: '1px solid #444',
+            backgroundColor: '#2962FF',
+            color: 'white',
+            border: 'none',
+            padding: '6px 12px',
             borderRadius: '4px',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
+            cursor: 'pointer',
             fontSize: '0.9em',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            transition: 'background-color 0.2s',
           }}
+          onMouseEnter={(e) => {e.target.style.backgroundColor = '#2962FF'}}
+          onMouseLeave={(e) => {e.target.style.backgroundColor = '#2962FF'}}
         >
-          <option value="admin">{roleDisplayNames.admin}</option>
-          <option value="logist">{roleDisplayNames.logist}</option>
-          <option value="montajnik">{roleDisplayNames.montajnik}</option>
-          <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
-        </select>
+          ✏️ Редактировать
+        </button>
+
+        {/* Кнопки активации/деактивации */}
         {user.is_active ? (
           <button
             className="deactivate-btn"

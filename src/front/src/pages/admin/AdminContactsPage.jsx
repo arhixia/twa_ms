@@ -530,7 +530,6 @@ const handleAddContact = async () => {
       <div className="page">
         <div className="page-header">
           <h1>Контакты</h1>
-          <button className="add-btn" onClick={() => navigate(-1)}> ⬅️ Назад</button>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
@@ -618,26 +617,22 @@ const handleAddContact = async () => {
                         ) : companyContacts.length > 0 ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {companyContacts.map(contact => (
-                              <div key={contact.id} style={{ padding: '6px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#1a1a1a' }}>
+                              <div
+                                key={contact.id}
+                                style={{ 
+                                  padding: '6px', 
+                                  border: '1px solid #444', 
+                                  borderRadius: '4px', 
+                                  backgroundColor: '#1a1a1a',
+                                  cursor: 'pointer' 
+                                }}
+                                onClick={(e) => { 
+                                  e.stopPropagation(); // <-- Останавливаем всплытие, чтобы не вызвать loadContactsForCompany
+                                  openEditContactModal(contact); // <-- Открываем модальное окно редактирования
+                                }}
+                              >
                                 <p style={{ margin: '0 0 4px 0', fontWeight: 'bold', fontSize: '0.95em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <span>{contact.name}</span>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      openEditContactModal(contact);
-                                    }}
-                                    style={{
-                                      background: 'none',
-                                      border: 'none',
-                                      color: '#8b949e',
-                                      cursor: 'pointer',
-                                      fontSize: '1em',
-                                      padding: '0 4px'
-                                    }}
-                                    title="Редактировать"
-                                  >
-                                    ✏️
-                                  </button>
                                 </p>
                                 <p style={{ margin: '0 0 2px 0', fontSize: '0.9em' }}><b>Должность:</b> {contact.position || "—"}</p>
                                 <p style={{ margin: '0', fontSize: '0.9em' }}><b>Телефон:</b> {contact.phone || "—"}</p>

@@ -141,6 +141,13 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
     ]);
   };
 
+  const handleAttachmentUploadError = (fileId, error) => {
+    setUploadedAttachments(prev => [
+      ...prev.filter(att => att.id !== fileId),
+      { id: fileId, uploading: false, error: error }
+    ]);
+  };
+
   // --- НОВОЕ: Функция onUploadError для FileUploader ---
 const handleSubmit = async () => {
   // --- НОВОЕ: Проверка на незавершённые загрузки ---

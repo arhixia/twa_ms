@@ -630,7 +630,6 @@ const handleAddWorkType = async () => {
       <div className="page">
         <div className="page-header">
           <h1>Работы</h1>
-          <button className="add-btn" onClick={() => navigate(-1)}> ⬅️ Назад</button>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
