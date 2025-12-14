@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['servers-pcs-answer-scuba.trycloudflare.com']
+    allowedHosts: ['illinois-milk-spirit-publish.trycloudflare.com']
   },
 })
 

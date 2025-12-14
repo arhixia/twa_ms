@@ -1,3 +1,4 @@
+// front/src/components/FileUploader.jsx
 import React, { useState, useEffect } from "react";
 import { uploadFallback, deletePendingAttachment } from "../api";
 
@@ -10,63 +11,82 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
   }, [reportId]);
 
   async function handleFile(e) {
-    const f = e.target.files[0];
-    if (!f) return;
+    const selectedFiles = Array.from(e.target.files); // Получаем все выбранные файлы
+    if (selectedFiles.length === 0) return;
 
-    if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
-      alert("❌ Неподдерживаемый тип файла");
-      return;
+    // Проверяем количество файлов
+    if (files.length + selectedFiles.length > maxFiles) {
+      const remainingSlots = maxFiles - files.length;
+      if (remainingSlots <= 0) {
+        alert("⚠️ Достигнут лимит файлов");
+        return;
+      }
+      // Ограничиваем количество файлов до оставшихся слотов
+      selectedFiles.splice(remainingSlots);
     }
 
-    if (files.length >= maxFiles) {
-      alert("⚠️ Достигнут лимит файлов");
-      return;
+    const newFilesToProcess = [];
+
+    for (const f of selectedFiles) {
+      if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
+        alert(`❌ Файл ${f.name} неподдерживаемого типа`);
+        continue;
+      }
+
+      const preview = URL.createObjectURL(f);
+      const fileId = `tmp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const placeholder = {
+        id: fileId,
+        name: f.name, // Добавим имя файла для информации
+        preview,
+        uploading: true,
+        uploadProgress: 0,
+        error: null,
+      };
+      newFilesToProcess.push({ file: f, placeholder });
     }
 
-    const preview = URL.createObjectURL(f);
-    const fileId = `tmp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const placeholder = {
-      id: fileId,
-      preview,
-      uploading: true,
-      uploadProgress: 0,
-      error: null,
-    };
-    setFiles((s) => [...s, placeholder]);
+    if (newFilesToProcess.length === 0) return; // Нет подходящих файлов
 
     if (!taskId) {
-      alert("❌ Невозможно загрузить файл: задача не создана");
-      setFiles((s) => s.filter((x) => x.id !== fileId));
+      alert("❌ Невозможно загрузить файлы: задача не создана");
       return;
     }
 
+    // Добавляем все подготовленные файлы в состояние
+    setFiles((s) => [...s, ...newFilesToProcess.map(item => item.placeholder)]);
     setLoading(true);
 
-    if (onUploading) onUploading(fileId);
+    // Загружаем каждый файл асинхронно
+    for (const { file, placeholder } of newFilesToProcess) {
+      if (onUploading) onUploading(placeholder.id);
 
-    try {
-      // Используем обновлённую функцию с reportId
-      const res = await uploadFallback(f, taskId, reportId);
-      console.log("[DEBUG] uploadFallback response:", res);
+      try {
+        const res = await uploadFallback(file, taskId, reportId);
+        console.log("[DEBUG] uploadFallback response:", res);
 
-          const item = { 
-      id: res.attachment_id, 
-      tmpId: fileId,      // <--- ВОТ ЭТО ДОБАВЛЯЕМ
-      storage_key: res.storage_key, 
-      preview, 
-      uploading: false 
-    };
+        const item = {
+          id: res.attachment_id,
+          tmpId: placeholder.id,      // Сохраняем временный ID
+          storage_key: res.storage_key,
+          name: file.name,
+          preview: placeholder.preview,
+          uploading: false
+        };
 
-      setFiles((s) => s.map((x) => (x.id === fileId ? item : x)));
-      if (onUploaded) onUploaded(item);
-    } catch (err) {
-      console.error(err);
-      const errorMsg = err.response?.data?.detail || err.message || "Ошибка загрузки";
-      setFiles((s) => s.map((x) => (x.id === fileId ? { ...x, uploading: false, error: errorMsg } : x)));
-      if (onUploadError) onUploadError(fileId, errorMsg);
-    } finally {
-      setLoading(false);
+        setFiles((s) => s.map(x => (x.id === placeholder.id ? item : x)));
+        if (onUploaded) onUploaded(item);
+      } catch (err) {
+        console.error(err);
+        const errorMsg = err.response?.data?.detail || err.message || "Ошибка загрузки";
+        setFiles((s) => s.map(x => (x.id === placeholder.id ? { ...x, uploading: false, error: errorMsg } : x)));
+        if (onUploadError) onUploadError(placeholder.id, errorMsg);
+      }
     }
+
+    setLoading(false);
+    // Сбросим input, чтобы можно было снова выбрать те же файлы
+    e.target.value = '';
   }
 
   const removeLocal = async (id) => {
@@ -96,13 +116,19 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
     <div className="uploader">
       <label className="uploader-label">
         + Загрузить фото
-        <input type="file" accept="image/*" onChange={handleFile} disabled={loading || !taskId} />
+        <input
+          type="file"
+          accept="image/*"
+          onChange={handleFile}
+          disabled={loading || !taskId}
+          multiple // <--- ДОБАВЛЕН АТРИБУТ multiple
+        />
       </label>
 
       <div className="thumbs">
         {files.map((f) => (
           <div className="thumb" key={f.id}>
-            <img src={f.preview} alt="preview" />
+            <img src={f.preview} alt={f.name || "preview"} />
             {f.uploading && (
               <div className="upload-progress-overlay">
                 <div className="spinner"></div>
@@ -119,7 +145,6 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
                 ✕
               </button>
             )}
-            {/* --- УБРАЛИ КНОПКУ "ОТМЕНА" --- */}
           </div>
         ))}
       </div>
@@ -131,6 +156,8 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
 const styles = `
   .thumb {
     position: relative;
+    display: inline-block;
+    margin: 4px;
   }
   .upload-progress-overlay {
     position: absolute;

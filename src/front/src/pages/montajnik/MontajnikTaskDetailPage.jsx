@@ -149,79 +149,79 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   };
 
   // --- НОВОЕ: Функция onUploadError для FileUploader ---
-const handleSubmit = async () => {
-  // --- НОВОЕ: Проверка на незавершённые загрузки ---
-  const pendingUploads = uploadedAttachments.filter(att => att.uploading);
-  if (pendingUploads.length > 0) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
-    } else {
-      alert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
+  const handleSubmit = async () => {
+    // --- НОВОЕ: Проверка на незавершённые загрузки ---
+    const pendingUploads = uploadedAttachments.filter(att => att.uploading);
+    if (pendingUploads.length > 0) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
+      } else {
+        alert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
+      }
+      return;
     }
-    return;
-  }
 
-  // --- НОВОЕ: Проверка на ошибки загрузки ---
-  const failedUploads = uploadedAttachments.filter(att => att.error);
-  if (failedUploads.length > 0) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
-    } else {
-      alert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
+    // --- НОВОЕ: Проверка на ошибки загрузки ---
+    const failedUploads = uploadedAttachments.filter(att => att.error);
+    if (failedUploads.length > 0) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
+      } else {
+        alert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
+      }
+      console.error("Failed uploads:", failedUploads);
+      return;
     }
-    console.error("Failed uploads:", failedUploads);
-    return;
-  }
 
-  // Формируем текст отчёта - все работы автоматически считаются выполненными
-  const performedWorksText = taskWorkTypes
-    .map(id => allWorkTypes.find(wt => wt.id === id)?.name || `ID ${id}`)
-    .join(", ");
+    // Формируем текст отчёта - все работы автоматически считаются выполненными
+    const performedWorksText = taskWorkTypes
+      .map(id => allWorkTypes.find(wt => wt.id === id)?.name || `ID ${id}`)
+      .join(", ");
 
-  let fullComment = "";
-  if (performedWorksText) {
-      fullComment += `Выполнено: ${performedWorksText}`;
-  }
-  if (comment.trim()) {
-      fullComment += fullComment ? `\n\n${comment}` : comment;
-  }
-
-  if (!fullComment.trim()) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Добавьте комментарий.");
-    } else {
-      alert("Добавьте комментарий.");
+    let fullComment = "";
+    if (performedWorksText) {
+        fullComment += `Выполнено: ${performedWorksText}`;
     }
-    return;
-  }
-
-  setSubmitting(true);
-  try {
-    const attachmentKeysToBind = uploadedAttachments.map(att => att.storage_key);
-    const createRes = await createReport(taskId, fullComment, attachmentKeysToBind);
-    const reportId = createRes.report_id;
-
-    await submitReportForReview(taskId, reportId);
-
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Отчёт создан и отправлен на проверку!");
-    } else {
-      alert("Отчёт создан и отправлен на проверку!");
+    if (comment.trim()) {
+        fullComment += fullComment ? `\n\n${comment}` : comment;
     }
-    onSubmitSuccess && onSubmitSuccess();
-    onClose();
-  } catch (err) {
-    console.error("Ошибка при создании/отправке отчёта:", err);
-    const errorMsg = err.response?.data?.detail || "Не удалось создать или отправить отчёт.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
+
+    if (!fullComment.trim()) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Добавьте комментарий.");
+      } else {
+        alert("Добавьте комментарий.");
+      }
+      return;
     }
-  } finally {
-    setSubmitting(false);
-  }
-};
+
+    setSubmitting(true);
+    try {
+      const attachmentKeysToBind = uploadedAttachments.map(att => att.storage_key);
+      const createRes = await createReport(taskId, fullComment, attachmentKeysToBind);
+      const reportId = createRes.report_id;
+
+      await submitReportForReview(taskId, reportId);
+
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Отчёт создан и отправлен на проверку!");
+      } else {
+        alert("Отчёт создан и отправлен на проверку!");
+      }
+      onSubmitSuccess && onSubmitSuccess();
+      onClose();
+    } catch (err) {
+      console.error("Ошибка при создании/отправке отчёта:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось создать или отправить отчёт.";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+      } else {
+        alert(`Ошибка: ${errorMsg}`);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   // --- НОВОЕ: Вычисляем статус загрузки ---
   const pendingUploads = uploadedAttachments.filter(att => att.uploading);
