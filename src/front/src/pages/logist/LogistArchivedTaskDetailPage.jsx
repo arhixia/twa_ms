@@ -176,36 +176,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
               </button>
             </div>
 
-            {/* === Отчёты === */}
-            <div className="section">
-              <h3>Отчёты монтажника</h3>
-              {(task.reports && task.reports.length > 0) ? (
-                task.reports.map(r => (
-                  <div key={r.id} className="report">
-                    <p>#{r.id}: {r.text || "—"}</p>
-                     <p>
-        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"} {/* <--- Используем новую функцию */}
-        {task.requires_tech_supp === true && (
-          <>
-            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"} {/* <--- Используем новую функцию */}
-          </>
-        )}
-      </p>
-                    {r.photos && r.photos.length > 0 && (
-                      <div className="attached-list">
-                        {r.photos.map((photoUrl, idx) => (
-                          <a key={idx} href={photoUrl} target="_blank" rel="noopener noreferrer">
-                            <img src={photoUrl} alt={`Report photo ${idx}`} style={{ maxHeight: 100 }} />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <div className="empty">Отчётов нет</div>
-              )}
-            </div>
           </div>
         </div>
       </div>

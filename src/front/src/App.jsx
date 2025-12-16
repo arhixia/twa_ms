@@ -15,7 +15,7 @@ import LogistProfilePage from "./pages/logist/LogistProfilePage";
 import LogistCompletedTaskDetailPage from "./pages/logist/LogistCompletedTaskDetailPage";
 import LogistArchivedTasksPage from "./pages/logist/LogistArchivedTasksPage";
 import LogistArchivedTaskDetailPage from "./pages/logist/LogistArchivedTaskDetailPage";
-
+import LogistContactsPage from "./pages/logist/LogistContactsPage";
 
 import TechSuppPage from "./pages/tech_supp/TechSuppPage"; // <- Новый импорт
 import TechActiveTasksPage from "./pages/tech_supp/TechActiveTasksPage"; // <- Новый импорт
@@ -72,6 +72,7 @@ export default function App() {
           <Route path="tasks/:id/history" element={<TaskHistoryPage />} />
           <Route path="me" element={<LogistProfilePage />} /> {/* Новый маршрут */}
           <Route path="completed-tasks/:id" element={<LogistCompletedTaskDetailPage />} /> {/* Новый маршрут */}
+          <Route path="contacts" element={<LogistContactsPage />} />
           <Route path="archived-tasks" element={<LogistArchivedTasksPage />} />
           <Route path="archived-tasks/:id" element={<LogistArchivedTaskDetailPage />} />
         </Route>

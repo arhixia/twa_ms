@@ -121,9 +121,6 @@ async function handleUnarchive(taskId) {
               <div key={task.id} className="card archived-task-card">
                 <div className="card-header" style={{ justifyContent: "space-between" }}>
                   <h3 style={{ margin: 0 }}>#{task.id}</h3>
-                  <span className={`status-badge status-${task.status || "unknown"}`}>
-                    <p><b>Статус:</b> {task.status || "—"}</p>
-                  </span>
                 </div>
 
                 <div className="card-body">

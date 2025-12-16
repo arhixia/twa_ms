@@ -24,7 +24,7 @@ from back.db.models import (
     TaskReport,
     WorkType,
 )
-from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg,require_roles
+from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg, UpdateCompanyRequest, UpdateContactPersonRequest,require_roles
 from back.utils.notify import notify_broadcast_task, notify_task_assignment, notify_user
 from datetime import datetime, timezone
 from sqlalchemy import and_, delete, desc, func, or_, select
@@ -2119,7 +2119,6 @@ async def logist_filter_completed_tasks(
                 work_types.append({
                     "id": tw.work_type.id,
                     "name": tw.work_type.name,
-                    "price": str(tw.work_type.price),
                     "quantity": tw.quantity
                 })
 
@@ -2331,7 +2330,7 @@ async def get_companies(db: AsyncSession = Depends(get_db)):
 async def get_contact_persons(company_id: int, db: AsyncSession = Depends(get_db)):
     res = await db.execute(select(ContactPerson).where(ContactPerson.company_id == company_id))
     contacts = res.scalars().all()
-    return [{"id": c.id, "name": c.name, "phone": c.phone} for c in contacts]
+    return [{"id": c.id, "name": c.name, "phone": c.phone, "position": c.position, "company_id": c.company_id} for c in contacts]
 
 
 @router.post("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
@@ -2384,6 +2383,70 @@ async def get_contact_person_phone(
         raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
 
     return {"phone": phone_number}
+
+@router.patch("/companies/{company_id}", dependencies=[Depends(require_roles(Role.logist))])
+async def admin_update_company(
+    company_id: int,
+    payload: UpdateCompanyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(ClientCompany).where(ClientCompany.id == company_id))
+    company = result.scalar_one_or_none()
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    if payload.name is not None:
+        company.name = payload.name
+
+    await db.commit()
+    await db.refresh(company)
+
+    return {
+        "id": company.id,
+        "name": company.name,
+    }
+
+@router.patch("/contact-persons/{contact_id}", dependencies=[Depends(require_roles(Role.logist))])
+async def logist_update_contact_person(
+    contact_id: int,
+    payload: UpdateContactPersonRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_id))
+    contact = result.scalar_one_or_none()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
+
+    if payload.name is not None:
+        contact.name = payload.name
+    if payload.position is not None:
+        contact.position = payload.position
+    if payload.phone is not None:
+        contact.phone = payload.phone
+    if payload.company_id is not None:
+        company_result = await db.execute(select(ClientCompany).where(ClientCompany.id == payload.company_id))
+        company = company_result.scalar_one_or_none()
+        if not company:
+            raise HTTPException(status_code=404, detail="Новая компания не найдена")
+        contact.company_id = payload.company_id
+
+    await db.commit()
+    await db.refresh(contact)
+    result_with_company = await db.execute(
+        select(ContactPerson, ClientCompany.name)
+        .join(ClientCompany, ContactPerson.company_id == ClientCompany.id)
+        .where(ContactPerson.id == contact_id)
+    )
+    updated_contact, company_name = result_with_company.first()
+
+    return {
+        "id": updated_contact.id,
+        "name": updated_contact.name,
+        "position": updated_contact.position,
+        "phone": updated_contact.phone,
+        "company_id": updated_contact.company_id,
+        "company_name": company_name,
+    }
 
 
 @router.get("/me")

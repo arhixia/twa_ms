@@ -1510,7 +1510,6 @@ async def admin_filter_completed_tasks(
                 work_types.append({
                     "id": tw.work_type.id,
                     "name": tw.work_type.name,
-                    "price": str(tw.work_type.price),
                     "quantity": tw.quantity
                 })
 

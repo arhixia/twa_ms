@@ -147,6 +147,14 @@ export async function addContactPerson(companyId, payload) {
   return (await api.post(`/logist/companies/${companyId}/contacts`, payload)).data;
 }
 
+export async function logistUpdateCompany(companyId, payload) {
+  return (await api.patch(`/logist/companies/${companyId}`, payload)).data;
+}
+
+export async function logistUpdateContactPerson(contactId, payload) {
+  return (await api.patch(`/logist/contact-persons/${contactId}`, payload)).data;
+}
+
 export async function getActiveMontajniks() {
   return (await api.get(`/logist/montajniks`)).data; // <--- Новый эндпоинт
 }

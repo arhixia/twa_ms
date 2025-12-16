@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['illinois-milk-spirit-publish.trycloudflare.com']
+    allowedHosts: ['combat-functionality-submitting-domains.trycloudflare.com']
   },
 })
 

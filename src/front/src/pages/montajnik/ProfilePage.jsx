@@ -284,9 +284,7 @@ export default function ProfilePage() {
 ) : periodEarnings ? (
   <div>
     <p>
-      <b>
-        За период {selectedStartYear} г., {monthNames[selectedStartMonth]} - {selectedEndYear} г., {monthNames[selectedEndMonth]}:
-      </b>
+
     </p>
     <p style={{ fontSize: '1.2em', fontWeight: 'bold', color: '#4ade80' }}>
       {periodEarnings.total_earned} руб.
