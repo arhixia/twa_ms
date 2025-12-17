@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['combat-functionality-submitting-domains.trycloudflare.com']
+    allowedHosts: ['title-totally-apply-meyer.trycloudflare.com']
   },
 })
 

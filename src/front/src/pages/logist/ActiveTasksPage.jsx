@@ -4,7 +4,6 @@ import TaskCard from "../../components/TaskCard";
 import AddTaskModal from "./_AddTaskModal";
 import MultiSelectFilter from "../../components/MultiSelectFilter";
 
-// Вспомогательная функция для дебаунса
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
 

@@ -8,7 +8,7 @@ import {
   getWorkTypes,
   getCompaniesList,
   getContactPersonsByCompany,
-  getContactPersonPhone, // <--- Новый импорт
+  getContactPersonPhone, 
   getActiveMontajniks,
   fetchActiveTasks,
   
@@ -19,29 +19,27 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   const [form, setForm] = useState({
     company_id: null,
     contact_person_id: null,
-    contact_person_phone: null, // <--- Добавлено
+    contact_person_phone: null,
     vehicle_info: "",
-    scheduled_at: "", // ✅ Оставляем пустую строку
+    scheduled_at: "", 
     location: "",
     comment: "",
     assignment_type: "broadcast",
     assigned_user_id: null,
     photo_required: true,
     gos_number: "",
-    // ✅ equipment как массив объектов { equipment_id, serial_number }
     equipment: [],
-    // ✅ work_types_ids как плоский массив ID
     work_types_ids: [],
   });
 
-  const [equipmentList, setEquipmentList] = useState([]); // Список всех Equipment
-  const [workTypesList, setWorkTypesList] = useState([]); // Список всех WorkType
+  const [equipmentList, setEquipmentList] = useState([]); 
+  const [workTypesList, setWorkTypesList] = useState([]); 
   const [companies, setCompanies] = useState([]);
   const [montajniks, setMontajniks] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
   const [saving, setSaving] = useState(false);
   const [taskId, setTaskId] = useState(null);
-  const [loadingPhone, setLoadingPhone] = useState(false); // <--- Для загрузки телефона
+  const [loadingPhone, setLoadingPhone] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -99,7 +97,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
 
     const handleItemClick = (company) => {
       onSelect(company.id);
-      setSearchTerm(company.name); // Отображаем имя компании в инпуте после выбора
+      setSearchTerm(company.name);
       setIsOpen(false);
     };
 
@@ -243,7 +241,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           availableMontajniks.filter(m =>
             (m.name && m.name.toLowerCase().includes(termLower)) ||
             (m.lastname && m.lastname.toLowerCase().includes(termLower)) ||
-            (m.id && m.id.toString().includes(termLower)) // Поиск по ID
+            (m.id && m.id.toString().includes(termLower)) 
           )
         );
       }
@@ -349,7 +347,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   }
 
 
-  // ✅ Загрузка контактных лиц при выборе компании
+  
   async function handleCompanyChange(companyId) {
     if (!companyId) {
       setContactPersons([]);
@@ -360,7 +358,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     try {
       const contacts = await getContactPersonsByCompany(companyId);
       setContactPersons(contacts || []);
-      setField("contact_person_id", null); // Сброс при смене компании
+      setField("contact_person_id", null); 
       setField("contact_person_phone", null);
     } catch (e) {
       console.error("Ошибка загрузки контактных лиц:", e);
@@ -370,7 +368,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     }
   }
 
-  // ✅ Новая функция для загрузки телефона контактного лица
+  
   async function handleContactPersonChange(contactPersonId) {
     const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
     setField("contact_person_id", val);
@@ -404,7 +402,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       photo_required: Boolean(form.photo_required),
       assignment_type: form.assignment_type || "broadcast",
       gos_number: form.gos_number || null,
-      contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
+      contact_person_phone: undefined,
     };
 
     let result;
@@ -453,7 +451,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   }
 }
 
-  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ОБОРУДОВАНИЕМ ---
+
   function addEquipmentItem(equipmentId) {
     if (!equipmentId) return;
     const eq = equipmentList.find(e => e.id === equipmentId);
@@ -461,7 +459,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
 
     const newItem = {
       equipment_id: equipmentId,
-      equipment_name: eq.name, // Для отображения
+      equipment_name: eq.name, 
       serial_number: "",
     };
     setForm((prevForm) => ({
@@ -488,7 +486,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     }));
   }
 
-  // --- НОВАЯ ЛОГИКА ДЛЯ РАБОТЫ С ТИПАМИ РАБОТ ---
+  
   function addWorkType(workTypeId) {
     if (!workTypeId) return;
     setForm((prevForm) => ({
@@ -509,7 +507,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     });
   }
 
-  // --- КОМПОНЕНТ: Умный поиск для оборудования ---
+  
   function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [filteredEquipment, setFilteredEquipment] = useState(availableEquipment);
@@ -627,7 +625,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     );
   }
 
-  // --- КОМПОНЕНТ: Умный поиск для видов работ ---
+
   function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTypeIds }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [filteredWorkTypes, setFilteredWorkTypes] = useState(availableWorkTypes);
@@ -752,25 +750,25 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   return (
     <Modal open={open} onClose={onClose} title="Добавить задачу">
       <div className="form-grid">
-        {/* Компания */}
+  
         <label>
           Компания
-          {/* --- 1. Поле поиска --- */}
+       
           <SearchableCompanySelect
             availableCompanies={companies}
             onSelect={(companyId) => {
               setField("company_id", companyId);
               if (companyId) {
-                handleCompanyChange(companyId); // Загружаем контактные лица
+                handleCompanyChange(companyId); 
               } else {
                 setContactPersons([]);
                 setField("contact_person_id", null);
                 setField("contact_person_phone", null);
               }
             }}
-            selectedCompanyId={form.company_id} // Не используется в этом компоненте, но передаём для совместимости
+            selectedCompanyId={form.company_id} 
           />
-          {/* --- 2. Отображение выбранной компании --- */}
+         
           {form.company_id && (
             <SelectedCompanyDisplay
               company={companies.find(c => c.id === form.company_id)}
@@ -784,7 +782,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           )}
         </label>
 
-        {/* --- Контактное лицо --- */}
+     
         <label>
           Контактное лицо
           <select
@@ -798,7 +796,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 setField("contact_person_phone", null);
               }
             }}
-            disabled={!form.company_id} // Отключаем, если не выбрана компания
+            disabled={!form.company_id} 
             style={{
               width: "100%",
               padding: "8px",
@@ -910,7 +908,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               rows="3"
               style={{
                 width: "100%",
-                resize: "vertical",        // <-- только вертикальное растягивание
+                resize: "vertical",        
                 padding: "8px",
                 borderRadius: "4px",
                 border: "1px solid #444",
@@ -929,7 +927,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               rows="3"
               style={{
                 width: "100%",
-                resize: "vertical",        // <-- только вниз тянуть
+                resize: "vertical",       
                 padding: "8px",
                 borderRadius: "4px",
                 border: "1px solid #444",
@@ -997,7 +995,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
         <SearchableEquipmentSelect
           availableEquipment={equipmentList}
           onSelect={addEquipmentItem}
-          selectedItems={form.equipment} // Не используется в фильтрации, так как разрешено дублирование
+          selectedItems={form.equipment} 
         />
 
         {/* Виды работ */}
@@ -1023,8 +1021,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                     padding: "4px 8px",
                     border: "1px solid #444",
                     borderRadius: 12,
-                    backgroundColor: "#bb86fc", // Цвет для работы
-                    color: "#000", // Темный текст на светлом фоне
+                    backgroundColor: "#bb86fc", 
+                    color: "#000", 
                     display: "flex",
                     alignItems: "center",
                     gap: 4,
@@ -1045,7 +1043,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
         <SearchableWorkTypeSelect
           availableWorkTypes={workTypesList}
           onSelect={addWorkType}
-          selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, так как разрешено дублирование
+          selectedWorkTypeIds={form.work_types_ids} 
         />
 
           <label>

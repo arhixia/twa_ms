@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timedelta
 import logging
 import os
 from typing import Optional
@@ -6,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
-from back.db.models import User
+from back.db.models import Task, TaskStatus, User
 from back.db.database import DATABASE_URL
 from back.db.config import TOKEN  # предполагаем, что тут есть TOKEN
 import httpx
@@ -138,3 +139,51 @@ async def notify_broadcast_task(task_id: int, exclude_user_id: Optional[int] = N
         except Exception as e:
             logger.error(f"Ошибка при рассылке задачи {task_id}: {e}")
             return {}
+        
+
+async def notify_montajniks_of_upcoming_tasks():
+    logger.info("Запуск проверки задач для уведомления монтажников за час до начала.")
+    now = datetime.now() 
+    one_hour_later = now + timedelta(hours=1)
+    buffer_minutes = 5
+    lower_bound = one_hour_later - timedelta(minutes=buffer_minutes)
+    upper_bound = one_hour_later + timedelta(minutes=buffer_minutes)
+
+    async with AsyncSessionLocal() as session:
+        try:
+            query = select(Task).where(
+                Task.scheduled_at >= lower_bound,
+                Task.scheduled_at <= upper_bound,
+                Task.status == TaskStatus.accepted,
+                Task.assigned_user_id.isnot(None)
+            )
+            result = await session.execute(query)
+            upcoming_tasks = result.scalars().all()
+
+            logger.info(f"Найдено {len(upcoming_tasks)} задач для уведомления.")
+
+            for task in upcoming_tasks:
+                user_id = task.assigned_user_id
+                message = f"Задача #{task.id} начнется примерно через час. Время начала: {task.scheduled_at.strftime('%d.%m.%Y %H:%M')}."
+
+                logger.info(f"Отправка уведомления монтажнику (ID: {user_id}) о задаче #{task.id}")
+                success = await notify_user(user_id, message, task.id)
+                if success:
+                    logger.info(f"Уведомление о задаче #{task.id} успешно отправлено монтажнику {user_id}.")
+                else:
+                    logger.warning(f"Не удалось отправить уведомление о задаче #{task.id} монтажнику {user_id}.")
+
+        except Exception as e:
+            logger.error(f"Ошибка при проверке и отправке уведомлений о предстоящих задачах: {e}")
+
+
+async def periodic_notification_task():
+    """
+    Фоновая задача, которая запускает проверку каждые 5 минут.
+    """
+    while True:
+        try:
+            await notify_montajniks_of_upcoming_tasks()
+        except Exception as e:
+            logger.error(f"Ошибка в фоновой задаче уведомлений: {e}")
+        await asyncio.sleep(5 * 60) 

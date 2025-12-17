@@ -869,9 +869,9 @@ const handleStatusChange = async () => {
   try {
     await changeTaskStatus(task.id, nextAction.next);
     if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Статус изменён на ${nextAction.next}`);
+      window.Telegram.WebApp.showAlert(`Статус изменён`);
     } else {
-      alert(`Статус изменён на ${nextAction.next}`);
+      alert(`Статус изменён`);
     }
     await loadTask();
   } catch (err) {

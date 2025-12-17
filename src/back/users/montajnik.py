@@ -59,6 +59,8 @@ STATUS_TRANSLATIONS_RU = {
 def _ensure_montajnik_or_403(user: User):
     if getattr(user, "role", None) != Role.montajnik:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
+    
+
 
 # --- Endpoints -------------------------------------------------------------
 

@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 import os
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,26 +20,48 @@ import asyncio
 from aiogram import Bot, Dispatcher, types
 
 
+
 from back.bot_worker import start_polling
+from back.utils.notify import periodic_notification_task
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
-async def lifespan(app):
-    # startup
+async def lifespan(app: FastAPI):
+
     aiogram_task = None
+    notification_task = None # Добавляем переменную для задачи уведомлений
+
     if BOT_TOKEN:
         aiogram_task = asyncio.create_task(start_polling())
-        # даём небольшую паузу, чтобы polling стартовал и ошибки сразу вылезли в логи
         await asyncio.sleep(0.1)
+    
+    logger.info("Запуск фоновой задачи уведомлений о предстоящих задачах...")
+    notification_task = asyncio.create_task(periodic_notification_task())
+    await asyncio.sleep(0.1)
+
     try:
         yield
     finally:
         # shutdown
+        logger.info("Остановка фоновых задач...")
         if aiogram_task:
             aiogram_task.cancel()
             try:
                 await aiogram_task
             except Exception:
-                pass
+                logger.exception("Ошибка при остановке polling задачи") 
+
+        if notification_task:
+            logger.info("Отмена задачи уведомлений...")
+            notification_task.cancel()
+            try:
+                await notification_task
+            except asyncio.CancelledError:
+                logger.info("Задача уведомлений успешно отменена.")
+            except Exception:
+                logger.exception("Ошибка при остановке задачи уведомлений") 
+
 
 
 app = FastAPI(
