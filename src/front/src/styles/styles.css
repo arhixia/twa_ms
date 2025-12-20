@@ -1,136 +1,598 @@
-:root{
---bg:#0f1720; --card:#111827; --muted:#9ca3af; --accent:#2b8cff; --glass: rgba(255,255,255,0.04);
-}
-*{box-sizing:border-box}
-body,html,#root{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
-body{background:linear-gradient(180deg,var(--bg),#081019);color:#e6eef8}
-.app-shell{display:flex;min-height:100vh}
-.sidebar{width:260px;background:var(--card);padding:18px;display:flex;flex-direction:column;gap:12px}
-.brand{font-weight:700;font-size:18px}
-.brand span{color:var(--accent)}
-.user-row{font-size:14px;color:var(--muted)}
-.nav{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-.nav a{color:#dbeafe;text-decoration:none;padding:8px;border-radius:8px}
-.nav a.active{background:var(--glass)}
-.sidebar-foot{margin-top:auto}
-.logout{width:100%;padding:10px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
-.content {
-  flex: 1;
-  min-width: 0; 
-  padding: 20px;
+/* src/styles/styles.css */
+
+:root {
+  /* Градиент фона */
+  --bg-gradient: linear-gradient(
+    180deg,
+    #0f172a 0%,   /* тёмно-синий */
+    #0d1321 50%,  /* сине-графитовый */
+    #020617 100%  /* почти чёрный */
+  );
+
+  --bg-card: #1b2c3c;
+  --border-subtle: rgba(255,255,255,0.08);
+  --text-muted: #c9d1d9;
 }
 
-.page-header{display:flex;justify-content:space-between;align-items:center}
-.add-btn{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:#001}
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:16px}
-.task-card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:12px;border-radius:10px;cursor:pointer;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
-.task-row{display:flex;justify-content:space-between;align-items:center}
-.task-title{font-weight:600}
-.task-meta{color:var(--muted);font-size:13px;margin-top:8px}
-.empty{padding:40px;border-radius:8px;background:rgba(255,255,255,0.02);color:var(--muted)}
-.login-page{display:flex;align-items:center;justify-content:center;height:100vh}
-.login-card{width:320px;background:var(--card);padding:20px;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,0.6)}
-.login-card input{width:100%;padding:10px;margin-top:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit}
-.login-card button{width:100%;margin-top:12px;padding:10px;border-radius:8px;background:var(--accent);border:none;color:#001}
-.modal-backdrop{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;padding:16px}
-.modal{width:100%;max-width:900px;background:var(--card);border-radius:12px;padding:12px}
-.modal-header{display:flex;justify-content:space-between;align-items:center}
-.modal-body {
+
+
+.logist-app {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  max-width: 520px;      /* фикс ширина формы */
-  margin: 0 auto;        /* выравнивание по центру */
-}
-
-.close{background:transparent;border:none;color:var(--muted)}
-.form-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.form-grid label{display:flex;flex-direction:column}
-.form-grid input, .form-grid textarea, .form-grid select{padding:8px;border-radius:8px;background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit}
-.form-grid .full-row{grid-column:1/-1}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-.modal-actions .primary{background:var(--accent);color:#001;border:none;padding:8px 12px;border-radius:8px}
-.uploader-label{display:inline-block;padding:8px;border-radius:8px;background:rgba(255,255,255,0.02);cursor:pointer}
-.uploader input{display:none}
-.thumbs{display:flex;gap:8px;margin-top:8px}
-.thumb{position:relative;width:80px;height:80px;border-radius:8px;overflow:hidden}
-.thumb img{width:100%;height:100%;object-fit:cover}
-.thumb-remove{position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.6);border:none;color:#fff;border-radius:6px}
-.attached{background:rgba(255,255,255,0.02);padding:6px;border-radius:8px;margin-bottom:6px}
-@media(max-width:800px){.sidebar{display:none}.modal{max-width:100%}.form-grid{grid-template-columns:1fr}}  
-
-
-.task-title {
-  font-weight: 600;
-  display: -webkit-box;
-  -webkit-line-clamp: 2; /* максимум 2 строки */
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.task-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  position: relative; 
-  padding: 12px;
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
-  cursor: pointer;
-  box-shadow: 0 6px 18px rgba(2,6,23,0.6);
-  min-height: 120px; /* минимальная высота */
-}
-
-
-
-.delete-btn {
-  position: absolute;
-  bottom: 8px; /* снизу */
-  right: 8px;  /* справа */
-  background: #dc3545;
-  border: none;
+  height: 100vh;
+  background: var(--bg-gradient);
   color: white;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  cursor: pointer;
+  font-family: "Inter", sans-serif;
+}
+
+
+.logist-header {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+
+.fullname {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
   font-size: 14px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+
+  background: linear-gradient(135deg, #10b981, #2563eb); /* зелёно-синий */
+
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+
+  flex-shrink: 0;
+}
+
+.user-fullname {
+  color: var(--text-muted);
+  font-size: 14px;
+  white-space: nowrap;
 }
 
 
+.logist-nav {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg-main);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+}
+
 .logout-btn {
-  background-color: #cf6679; /* розово-красный как в Material Dark */
-  color: #000;               /* контрастный текст */
+  /* Градиентная кнопка "Выйти" */
+  background: linear-gradient(to right, #ef4444, #dc2626); /* Красный градиент */
+  color: white;
   border: none;
   border-radius: 6px;
-  padding: 10px 18px;
+  padding: 8px 16px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
   display: flex;
   align-items: center;
-  gap: 6px; /* расстояние между 🚪 и текстом */
-  transition: background-color 0.2s ease, transform 0.1s ease;
+  gap: 6px; /* Расстояние между 🚪 и текстом */
 }
 
 .logout-btn:hover {
-  background-color: #d97786; /* светлее при наведении */
-  transform: translateY(-1px); /* лёгкий подъём */
+  background: linear-gradient(to right, #f87171, #f97316); /* Светлее при наведении */
+  transform: translateY(-1px); /* Лёгкий подъём */
 }
 
 .logout-btn:active {
-  background-color: #b65b68; /* темнее при нажатии */
-  transform: translateY(0);  /* сброс */
+  background: linear-gradient(to right, #b60205, #991b1b); /* Темнее при нажатии */
+  transform: translateY(0);  /* Сброс */
 }
+
+.logist-nav a {
+  color: #c9d1d9;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.logist-nav a.active {
+  background: #238636;
+  color: white;
+}
+
+.logist-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+
+.task-detail { background: rgba(255,255,255,0.02); padding:16px; border-radius:10px; margin-top:16px; }
+.task-view p { margin:6px 0; }
+.section { margin-top:20px; }
+.report { background:rgba(255,255,255,0.03); padding:12px; border-radius:8px; margin-top:8px; }
+.report-actions { display:flex; gap:8px; margin-top:8px; }
+.reject-box { margin-top:8px; background:rgba(255,255,255,0.02); padding:8px; border-radius:8px; }
+.reject-box textarea { width:100%; min-height:60px; background:transparent; border:1px solid rgba(255,255,255,0.1); color:inherit; border-radius:8px; padding:8px; }
+@media(max-width:800px){ .task-detail{padding:10px;} .report{padding:8px;} }
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center; /* центрируем по вертикали */
+  justify-content: center; /* центрируем по горизонтали */
+  z-index: 999;
+}
+
+.modal {
+  width: 100%;
+  max-width: 600px; /* ограничиваем ширину */
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--card);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 8px;
+}
+
+.modal-body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+
+@media (max-width: 600px) {
+  .modal {
+    width: 95%;
+    max-height: 90vh;
+  }
+}
+
+
+.attached-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attached img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+
+/* front/src/styles/LogistPage.css (или ProfilePage.css) */
+.profile-overview {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+  flex-wrap: wrap; /* Для адаптивности */
+}
+
+
+.profile-card {
+  flex: 1;
+  min-width: 200px; /* Минимальная ширина карточки */
+  padding: 15px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color: #161b22;
+}
+
+.profile-card h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.2em;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background-color:#161b22 ;
+}
+
+.clickable-history-item:hover {
+  background-color: #2c2c2c; 
+  border-radius: 4px;
+  padding: 8px; 
+}
+
+
+.dark-select {
+  color: white;
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 4px;
+  appearance: none;       /* убрать нативные стрелки в некоторых браузерах */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+.dark-select option {
+  background-color: #161b22; /* фон для выпадающего списка */
+  color: white;              /* текст для опций */
+}
+.dark-label {
+  display: block;
+  color: white;
+  margin-bottom: 8px;
+}
+
+.reject-btn:hover {
+  background: #d73a49;
+}
+
+.task-meta-bold {
+  font-weight: bold;
+  color: #e0e0e0; /* Яркий цвет текста */
+  font-size: 0.9em;
+  margin-top: 4px;
+}
+
+.nav-item {
+  position: relative;
+  display: inline-block;
+}
+
+.badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: bold;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid #2d3748; /* Цвет фона навигации */
+}
+
+.nav-item-with-badge {
+  position: relative;
+  display: inline-block;
+}
+
+.nav-item-with-badge .badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: bold;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid #2d3748; /* Цвет фона навигации */
+}
+
+
+/* ========== СТИЛИ ДЛЯ КАРТОЧКИ ЗАДАЧИ ПО МАКЕТУ ========== */
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  background: linear-gradient(to right, #10b981, #16a34a); /* Зеленый градиент */
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 16px;
+  letter-spacing: 0.5px;
+}
+
+.task-card {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+
+  /* --- НАЧАЛО НОВЫХ СТИЛЕЙ ДЛЯ ФИКСИРОВАННОЙ ВЫСОТЫ --- */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between; /* Распределяет элементы по вертикали */
+  min-height: 200px; /* Установите желаемую минимальную высоту */
+  /* --- КОНЕЦ НОВЫХ СТИЛЕЙ --- */
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+/* ID задачи */
+.task-id {
+  font-size: 18px;
+  font-weight: bold;
+  color: #c9d1d9;
+  margin-bottom: 8px;
+}
+
+/* Название компании/ИП — выделяем голубоватым цветом */
+.task-client {
+  font-size: 16px;
+  color: #60a5fa; /* Голубоватый цвет */
+  margin-bottom: 8px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+/* Модель ТС */
+.task-vehicle-model {
+  font-size: 14px;
+  color: #8b949e;
+  margin-bottom: 8px;
+}
+
+/* Госномер в белой рамке */
+.task-gos-number-wrapper {
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.task-gos-number {
+  font-size: 16px;
+  font-weight: bold;
+  color: #e0e0e0;
+  background: transparent; /* Прозрачный фон */
+  padding: 6px 12px;
+  border: 2px solid white; /* Белая рамка */
+  border-radius: 8px;
+  display: inline-block;
+}
+
+/* Блок оборудования */
+.equipment-section {
+  margin-bottom: 12px;
+  flex: 1; /* Занимает оставшееся пространство */
+}
+
+.equipment-label {
+  font-size: 12px;
+  color: #8b949e;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.equipment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Цвета для оборудования — пастельные, но текст темный */
+.equipment-item {
+  font-size: 12px;
+  color: #1f2937; /* Темный текст */
+  /* Фоновые цвета для оборудования — пастельные */
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%); /* Светло-голубой */
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.equipment-item:nth-child(2n) {
+  background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fdba74 100%); /* Светло-оранжевый */
+}
+
+.equipment-item:nth-child(3n) {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%); /* Светло-зеленый */
+}
+
+.equipment-item:nth-child(4n) {
+  background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 50%, #d8b4fe 100%); /* Светло-фиолетовый */
+}
+
+.equipment-item:nth-child(5n) {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 50%, #fca5a5 100%); /* Светло-розовый */
+}
+
+/* Дата и время */
+.task-scheduled-at {
+  font-size: 12px;
+  color: #8b949e;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* Статус (справа вверху) - остается как есть */
+.task-status-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  min-width: 60px;
+}
+
+/* Статус (справа вверху) */
+.task-status-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 4px 8px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  text-align: center;
+  min-width: 60px;
+}
+/* ========== СТИЛИ НАВИГАЦИИ ПО МАКЕТУ ========== */
+
+.montajnik-nav {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg-main);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+}
+
+.nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 150px;
+  padding: 12px 8px;
+  background: var(--bg-card);
+  border-radius: 12px;
+  text-decoration: none;
+  color: #c9d1d9;
+  transition: all 0.2s;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: scale(1.02);
+}
+
+.nav-item.active {
+  background: linear-gradient(to right, #10b981, #2563eb);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.nav-icon {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.nav-text {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+/* Бейдж для счетчиков */
+.badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background-color: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-weight: bold;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: 2px solid #2d3748;
+  z-index: 10;
+}
+
+
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+
+
+@media (max-width: 768px) {
+  .page-title {
+    font-size: 20px;
+    margin-bottom: 12px;
+  }
+}
+
+/* Дополнительно: если нужно, можно задать отступы для .logist-main на мобильных */
+@media (max-width: 768px) {
+  .logist-main {
+    padding: 8px; /* Уменьшаем отступы */
+  }
+}
+
+.task-card,
+.profile-card,
+.history-item,
+.report,
+.task-detail {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+}
+
+
 

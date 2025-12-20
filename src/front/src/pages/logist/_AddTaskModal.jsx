@@ -1,6 +1,5 @@
 // front/src/pages/logist/_AddTaskModal.jsx
 import React, { useState, useEffect } from "react";
-import Modal from "../../components/Modal";
 import {
   createDraft,
   publishTask,
@@ -113,14 +112,12 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск компании..."
+          className="dark-select"
           style={{
             width: '100%',
             padding: '8px 12px',
-            border: '1px solid #444',
-            borderRadius: '4px',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
             fontSize: '14px',
+            outline: 'none',
           }}
         />
         {isOpen && filteredCompanies.length > 0 && (
@@ -269,14 +266,12 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск монтажника (имя, фамилия, ID)..."
+          className="dark-select"
           style={{
             width: '100%',
             padding: '8px 12px',
-            border: '1px solid #444',
-            borderRadius: '4px',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
             fontSize: '14px',
+            outline: 'none',
           }}
         />
         {isOpen && filteredMontajniks.length > 0 && (
@@ -548,14 +543,12 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск оборудования..."
+          className="dark-select"
           style={{
             width: '100%',
             padding: '8px 12px',
-            border: '1px solid #444',
-            borderRadius: '4px',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
             fontSize: '14px',
+            outline: 'none',
           }}
         />
         {isOpen && filteredEquipment.length > 0 && (
@@ -666,14 +659,12 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск вида работ..."
+          className="dark-select"
           style={{
             width: '100%',
             padding: '8px 12px',
-            border: '1px solid #444',
-            borderRadius: '4px',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
             fontSize: '14px',
+            outline: 'none',
           }}
         />
         {isOpen && filteredWorkTypes.length > 0 && (
@@ -747,370 +738,384 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   { value: "individual", display: "Персональная" }
 ];
 
+  if (!open) return null;
+
   return (
-    <Modal open={open} onClose={onClose} title="Добавить задачу">
-      <div className="form-grid">
-  
-        <label>
-          Компания
-       
-          <SearchableCompanySelect
-            availableCompanies={companies}
-            onSelect={(companyId) => {
-              setField("company_id", companyId);
-              if (companyId) {
-                handleCompanyChange(companyId); 
-              } else {
-                setContactPersons([]);
-                setField("contact_person_id", null);
-                setField("contact_person_phone", null);
-              }
-            }}
-            selectedCompanyId={form.company_id} 
-          />
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
+        <div className="modal-header" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+          <h2 style={{ color: 'white' }}>Добавить задачу</h2>
+          <button className="close" onClick={onClose} style={{ color: 'white', background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
+        </div>
+        
+        <div className="modal-body" style={{ color: 'white' }}>
+          <div
+  className="form-grid"
+  style={{
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    width: '100%'
+  }}
+>
+
+      
+            <label className="dark-label">
+              Компания
+           
+              <SearchableCompanySelect
+                availableCompanies={companies}
+                onSelect={(companyId) => {
+                  setField("company_id", companyId);
+                  if (companyId) {
+                    handleCompanyChange(companyId); 
+                  } else {
+                    setContactPersons([]);
+                    setField("contact_person_id", null);
+                    setField("contact_person_phone", null);
+                  }
+                }}
+                selectedCompanyId={form.company_id} 
+              />
+             
+              {form.company_id && (
+                <SelectedCompanyDisplay
+                  company={companies.find(c => c.id === form.company_id)}
+                  onRemove={() => {
+                    setField("company_id", null);
+                    setContactPersons([]);
+                    setField("contact_person_id", null);
+                    setField("contact_person_phone", null);
+                  }}
+                />
+              )}
+            </label>
+
          
-          {form.company_id && (
-            <SelectedCompanyDisplay
-              company={companies.find(c => c.id === form.company_id)}
-              onRemove={() => {
-                setField("company_id", null);
-                setContactPersons([]);
-                setField("contact_person_id", null);
-                setField("contact_person_phone", null);
-              }}
-            />
-          )}
-        </label>
+            <label className="dark-label">
+              Контактное лицо
+              <select
+                value={form.contact_person_id || ""}
+                onChange={(e) => {
+                  const val = e.target.value ? parseInt(e.target.value, 10) : null;
+                  setField("contact_person_id", val);
+                  if (val) {
+                    handleContactPersonChange(val);
+                  } else {
+                    setField("contact_person_phone", null);
+                  }
+                }}
+                disabled={!form.company_id} 
+                className="dark-select"
+                style={{
+                  width: "100%",
+                }}
+              >
+                <option value="">Выберите контактное лицо</option>
+                {contactPersons.map(cp => (
+                  <option key={cp.id} value={cp.id}>{cp.name}</option>
+                ))}
+              </select>
+              {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
+            </label>
 
-     
-        <label>
-          Контактное лицо
-          <select
-            value={form.contact_person_id || ""}
-            onChange={(e) => {
-              const val = e.target.value ? parseInt(e.target.value, 10) : null;
-              setField("contact_person_id", val);
-              if (val) {
-                handleContactPersonChange(val);
-              } else {
-                setField("contact_person_phone", null);
-              }
-            }}
-            disabled={!form.company_id} 
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#e0e0e0",
-            }}
-          >
-            <option value="">Выберите контактное лицо</option>
-            {contactPersons.map(cp => (
-              <option key={cp.id} value={cp.id}>{cp.name}</option>
-            ))}
-          </select>
-          {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
-        </label>
+            {/* Телефон контактного лица */}
+            <label className="dark-label">
+              Телефон контактного лица
+              <input
+                type="text"
+                value={form.contact_person_phone || ""}
+                readOnly
+                placeholder="Выберите контактное лицо"
+                className="dark-select"
+                style={{
+                  width: "100%",
+                  cursor: "not-allowed",
+                }}
+              />
+              {form.contact_person_phone && (
+                <a
+                  href={`tel:${form.contact_person_phone}`}
+                  style={{
+                    display: 'inline-block',
+                    marginTop: '4px',
+                    fontSize: '0.9em',
+                    color: '#bb86fc',
+                    textDecoration: 'none',
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    window.location.href = `tel:${form.contact_person_phone}`;
+                  }}
+                >
+                </a>
+              )}
+            </label>
 
-        {/* Телефон контактного лица */}
-        <label>
-          Телефон контактного лица
-          <input
-            type="text"
-            value={form.contact_person_phone || ""}
-            readOnly
-            placeholder="Выберите контактное лицо"
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#2a2a2a",
-              color: "#b0b0b0",
-              cursor: "not-allowed",
-            }}
-          />
-          {form.contact_person_phone && (
-            <a
-              href={`tel:${form.contact_person_phone}`}
-              style={{
-                display: 'inline-block',
-                marginTop: '4px',
-                fontSize: '0.9em',
-                color: '#bb86fc',
-                textDecoration: 'none',
-              }}
-              onClick={(e) => {
-                e.preventDefault();
-                window.location.href = `tel:${form.contact_person_phone}`;
-              }}
-            >
-            </a>
-          )}
-        </label>
+            <label className="dark-label">
+              ТС
+              <input
+                value={form.vehicle_info}
+                onChange={(e) => setField("vehicle_info", e.target.value)}
+                className="dark-select"
+                style={{
+                  width: "100%",
+                }}
+              />
+            </label>
 
-        <label>
-          ТС
-          <input
-            value={form.vehicle_info}
-            onChange={(e) => setField("vehicle_info", e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#e0e0e0",
-            }}
-          />
-        </label>
+            <label className="dark-label">
+              Гос. номер
+              <input
+                value={form.gos_number || ""}
+                onChange={(e) => setField("gos_number", e.target.value)}
+                className="dark-select"
+                style={{
+                  width: "100%",
+                }}
+              />
+            </label>
 
-        <label>
-          Гос. номер
-          <input
-            value={form.gos_number || ""}
-            onChange={(e) => setField("gos_number", e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#e0e0e0",
-            }}
-          />
-        </label>
+            <label className="dark-label">
+              Дата и время
+              <input
+                type="datetime-local"
+                value={form.scheduled_at}
+                onChange={(e) => setField("scheduled_at", e.target.value)}
+                className="dark-select"
+                style={{
+                  width: "100%",
+                }}
+              />
+            </label>
 
-        <label>
-          Дата и время
-          <input
-            type="datetime-local"
-            value={form.scheduled_at}
-            onChange={(e) => setField("scheduled_at", e.target.value)}
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#e0e0e0",
-            }}
-          />
-        </label>
+            <label className="dark-label">
+                Место/адрес
+                <textarea
+                  value={form.location || ""}
+                  onChange={(e) => setField("location", e.target.value)}
+                  rows="3"
+                  className="dark-select"
+                  style={{
+                    width: "100%",
+                    resize: "vertical",        
+                    marginTop: "4px"
+                  }}
+                />
+              </label>
 
-        <label style={{ display: "block", marginTop: "12px", color: "#e0e0e0" }}>
-            Место/адрес
-            <textarea
-              value={form.location || ""}
-              onChange={(e) => setField("location", e.target.value)}
-              rows="3"
-              style={{
-                width: "100%",
-                resize: "vertical",        
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-                marginTop: "4px"
-              }}
-            />
-          </label>
+              <label className="dark-label">
+                Комментарий
+                <textarea
+                  value={form.comment || ""}
+                  onChange={(e) => setField("comment", e.target.value)}
+                  rows="3"
+                  className="dark-select"
+                  style={{
+                    width: "100%",
+                    resize: "vertical",       
+                    marginTop: "4px"
+                  }}
+                />
+              </label>
 
-          <label style={{ display: "block", marginTop: "12px", color: "#e0e0e0" }}>
-            Комментарий
-            <textarea
-              value={form.comment || ""}
-              onChange={(e) => setField("comment", e.target.value)}
-              rows="3"
-              style={{
-                width: "100%",
-                resize: "vertical",       
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-                marginTop: "4px"
-              }}
-            />
-          </label>
-
-        {/* Оборудование */}
-        <label>Оборудование</label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
-          {form.equipment.map((item, index) => {
-            const eq = equipmentList.find((e) => e.id === item.equipment_id);
-            return (
-              <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{
-                  flex: 1,
-                  padding: '8px',
-                  border: '1px solid #444',
-                  borderRadius: '4px',
-                  backgroundColor: '#2a2a2a',
-                  color: '#e0e0e0',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {eq?.name || `ID ${item.equipment_id}`}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <input
-                    type="text"
-                    placeholder="Серийный номер"
-                    value={item.serial_number || ""}
-                    onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)}
-                    style={{
-                      width: '100%',
+            {/* Оборудование */}
+            <label className="dark-label">Оборудование</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+              {form.equipment.map((item, index) => {
+                const eq = equipmentList.find((e) => e.id === item.equipment_id);
+                return (
+                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      flex: 1,
                       padding: '8px',
                       border: '1px solid #444',
                       borderRadius: '4px',
-                      backgroundColor: '#1a1a1a',
+                      backgroundColor: '#2a2a2a',
                       color: '#e0e0e0',
-                    }}
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeEquipmentItem(index)}
-                  style={{
-                    padding: '8px 12px',
-                    backgroundColor: '#cf6679',
-                    color: '#000',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            );
-          })}
-        </div>
-        <SearchableEquipmentSelect
-          availableEquipment={equipmentList}
-          onSelect={addEquipmentItem}
-          selectedItems={form.equipment} 
-        />
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {eq?.name || `ID ${item.equipment_id}`}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <input
+                        type="text"
+                        placeholder="Серийный номер"
+                        value={item.serial_number || ""}
+                        onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)}
+                        className="dark-select"
+                        style={{
+                          width: '100%',
+                        }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeEquipmentItem(index)}
+                      style={{
+                        padding: '8px 12px',
+                        backgroundColor: '#cf6679',
+                        color: '#000',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <SearchableEquipmentSelect
+              availableEquipment={equipmentList}
+              onSelect={addEquipmentItem}
+              selectedItems={form.equipment} 
+            />
 
-        {/* Виды работ */}
-        <label>Виды работ</label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-          {(() => {
-            const counts = {};
-            form.work_types_ids.forEach(id => {
-              counts[id] = (counts[id] || 0) + 1;
-            });
-            const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
-              id: parseInt(id, 10),
-              count,
-            }));
+            {/* Виды работ */}
+            <label className="dark-label">Виды работ</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+              {(() => {
+                const counts = {};
+                form.work_types_ids.forEach(id => {
+                  counts[id] = (counts[id] || 0) + 1;
+                });
+                const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+                  id: parseInt(id, 10),
+                  count,
+                }));
 
-            return uniqueWorkTypesWithCounts.map(({ id, count }) => {
-              const wt = workTypesList.find((w) => w.id === id);
-              if (!wt) return null;
-              return (
-                <div
-                  key={id}
-                  style={{
-                    padding: "4px 8px",
-                    border: "1px solid #444",
-                    borderRadius: 12,
-                    backgroundColor: "#bb86fc", 
-                    color: "#000", 
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
-                  {wt.name} (x{count})
-                  <span
-                    style={{ cursor: "pointer", fontWeight: 'bold' }}
-                    onClick={() => removeWorkType(id)}
-                  >
-                    ×
-                  </span>
-                </div>
-              );
-            });
-          })()}
-        </div>
-        <SearchableWorkTypeSelect
-          availableWorkTypes={workTypesList}
-          onSelect={addWorkType}
-          selectedWorkTypeIds={form.work_types_ids} 
-        />
+                return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+                  const wt = workTypesList.find((w) => w.id === id);
+                  if (!wt) return null;
+                  return (
+                    <div
+                      key={id}
+                      style={{
+                        padding: "4px 8px",
+                        border: "1px solid #444",
+                        borderRadius: 12,
+                        backgroundColor: "#bb86fc", 
+                        color: "#000", 
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}
+                    >
+                      {wt.name} (x{count})
+                      <span
+                        style={{ cursor: "pointer", fontWeight: 'bold' }}
+                        onClick={() => removeWorkType(id)}
+                      >
+                        ×
+                      </span>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+            <SearchableWorkTypeSelect
+              availableWorkTypes={workTypesList}
+              onSelect={addWorkType}
+              selectedWorkTypeIds={form.work_types_ids} 
+            />
 
-          <label>
-      Тип назначения
-      <select
-        value={form.assignment_type}
-        onChange={(e) => setField("assignment_type", e.target.value)}
-        style={{
-          width: "100%",
-          padding: "8px",
-          borderRadius: "4px",
-          border: "1px solid #444",
-          backgroundColor: "#1a1a1a",
-          color: "#e0e0e0",
-        }}
-      >
-        {assignmentTypeOptions.map(option => (
-          <option key={option.value} value={option.value}>
-            {option.display}
-          </option>
-        ))}
-      </select>
-    </label>
+              <label className="dark-label">
+          Тип назначения
+          <select
+            value={form.assignment_type}
+            onChange={(e) => setField("assignment_type", e.target.value)}
+            className="dark-select"
+            style={{
+              width: "100%",
+            }}
+          >
+            {assignmentTypeOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.display}
+              </option>
+            ))}
+          </select>
+        </label>
 
-        {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
-        {/* ✅ Поле "Назначить монтажника" отображается только если тип назначения "assigned" */}
-        {form.assignment_type === "individual" && (
-          <div>
-            <label>
-              Назначить монтажника
-            </label>
-            {/* --- Отображение выбранного монтажника --- */}
-            {form.assigned_user_id && (
-              <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
-                {/* ✅ Отображаем только имя и фамилию, без ID */}
-                Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || ''} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || ''}
-                <button
-                  type="button"
-                  onClick={() => setField("assigned_user_id", null)}
-                  style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  ×
-                </button>
+            {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
+            {/* ✅ Поле "Назначить монтажника" отображается только если тип назначения "assigned" */}
+            {form.assignment_type === "individual" && (
+              <div>
+                <label className="dark-label">
+                  Назначить монтажника
+                </label>
+                {/* --- Отображение выбранного монтажника --- */}
+                {form.assigned_user_id && (
+                  <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                    {/* ✅ Отображаем только имя и фамилию, без ID */}
+                    Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || ''} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || ''}
+                    <button
+                      type="button"
+                      onClick={() => setField("assigned_user_id", null)}
+                      style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                {/* --- Выбор нового монтажника через SearchableSelect --- */}
+                <SearchableMontajnikSelect
+                  availableMontajniks={montajniks}
+                  onSelect={(userId) => setField("assigned_user_id", userId)}
+                  selectedUserId={form.assigned_user_id}
+                />
               </div>
             )}
-            {/* --- Выбор нового монтажника через SearchableSelect --- */}
-            <SearchableMontajnikSelect
-              availableMontajniks={montajniks}
-              onSelect={(userId) => setField("assigned_user_id", userId)}
-              selectedUserId={form.assigned_user_id}
-            />
+
+          
           </div>
-        )}
+        </div>
 
-      
-      </div>
-
-      <div className="modal-actions">
-        <button onClick={() => saveDraft(false)} disabled={saving}>
-          {saving ? 'Сохранение...' : '💾 Сохранить как черновик'}
-        </button>
-        {!allowSaveOnlyDraft && (
-          <button className="primary" onClick={() => saveDraft(true)} disabled={saving}>
-            {saving ? 'Публикация...' : '📤 Опубликовать'}
+        <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+          <button 
+            onClick={() => saveDraft(false)} 
+            disabled={saving} 
+            style={{ 
+              padding: '8px 16px',
+              background: 'linear-gradient(to right, #10b981, #2563eb)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            {saving ? 'Сохранение...' : '💾 Сохранить как черновик'}
           </button>
-        )}
+          {!allowSaveOnlyDraft && (
+            <button 
+              onClick={() => saveDraft(true)} 
+              disabled={saving} 
+              style={{ 
+                padding: '8px 16px',
+                background: 'linear-gradient(to right, #10b981, #2563eb)', // Зелено-синий градиент
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              {saving ? 'Публикация...' : '📤 Опубликовать'}
+            </button>
+          )}
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 }

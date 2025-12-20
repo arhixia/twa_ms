@@ -1780,36 +1780,36 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
         Task.is_draft == False,
         Task.created_by == current_user.id
     ).options(
-        selectinload(Task.contact_person).selectinload(ContactPerson.company)
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
     )
     res = await db.execute(tasks_query)
     tasks = res.scalars().all()
-    
+
     out = []
     for t in tasks:
-        # Получаем имя контактного лица и компании
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
-        
-        vehicle_display = "—"
-        if t.vehicle_info and t.gos_number:
-            vehicle_display = f"{t.vehicle_info} / {t.gos_number}"
-        elif t.vehicle_info:
-            vehicle_display = t.vehicle_info
-        elif t.gos_number:
-            vehicle_display = t.gos_number
-        
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+
+        equipment = [
+            {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number, "equipment": te.equipment}
+            for te in (t.equipment_links or [])
+        ] or None
+
         out.append({
             "id": t.id,
-            "client": client_display,  # Используем составное имя
+            "client_name": client_name,  # ✅ Только название компании или ИП
+            "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
+            "location": t.location,
+            "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
             "status": t.status.value if t.status else None,
-            "vehicle": vehicle_display,
-            "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "client_price": str(t.client_price) if t.client_price is not None else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
+            "equipment": equipment,
         })
-    
-    # Возвращаем список задач и общее количество
+
     return {
         "tasks": out,
         "total_count": total_count
@@ -1817,31 +1817,45 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
 
 @router.get("/drafts")
 async def get_all_dafts(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    # Загружаем черновики с контактным лицом и компанией
+    # Загружаем черновики с контактным лицом, компанией и оборудованием
     q = select(Task).where(
         Task.is_draft == True,
         Task.status != TaskStatus.completed
     ).options(
-        selectinload(Task.contact_person).selectinload(ContactPerson.company)
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
     )
     res = await db.execute(q)
     tasks = res.scalars().all()
     
     out = []
     for t in tasks:
-        # Получаем имя контактного лица и компании
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
-        
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+
+        # Формируем список оборудования
+        equipment = [
+            {
+                "equipment_id": te.equipment_id,
+                "quantity": te.quantity,
+                "serial_number": te.serial_number,
+                "equipment": {
+                    "id": te.equipment.id,
+                    "name": te.equipment.name
+                } if te.equipment else None
+            }
+            for te in (t.equipment_links or [])
+        ] or []
+
         out.append({
             "id": t.id,
-            "client": client_display,  # Используем составное имя
+            "client_name": client_name,  # ✅ Используем client_name
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "status": t.status.value if t.status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
+            "equipment": equipment,  # ✅ Добавляем оборудование
         })
     
     return out
@@ -1960,20 +1974,38 @@ async def logist_filter_tasks(
         combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
-    query = query.options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
+    # Добавляем загрузку оборудования и связанных сущностей
+    query = query.options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+    )
 
     res = await db.execute(query)
     tasks = res.scalars().unique().all()
 
     out = []
     for t in tasks:
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+
+        # Формируем список оборудования
+        equipment = [
+            {
+                "equipment_id": te.equipment_id,
+                "quantity": te.quantity,
+                "serial_number": te.serial_number,
+                "equipment": {
+                    "id": te.equipment.id,
+                    "name": te.equipment.name
+                } if te.equipment else None
+            }
+            for te in (t.equipment_links or [])
+        ] or []
 
         out.append({
             "id": t.id,
-            "client": client_display,
+            "client_name": client_name,
             "status": t.status.value if t.status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
             "location": t.location,
@@ -1986,6 +2018,7 @@ async def logist_filter_tasks(
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
             "is_draft": t.is_draft,
             "photo_required": t.photo_required,
+            "equipment": equipment,  # ✅ Добавляем оборудование
         })
 
     return out

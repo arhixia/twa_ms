@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchTechActiveTasks, techSuppFilterTasks, getTechCompaniesList, getActiveMontajniks, getWorkTypes, getEquipmentList } from "../../api";
-import MultiSelectFilter from "../../components/MultiSelectFilter"; // Добавляем импорт компонента
+import { techSuppFilterTasks, getTechCompaniesList, getActiveMontajniks, getWorkTypes, getEquipmentList } from "../../api";
+import MultiSelectFilter from "../../components/MultiSelectFilter";
 import TaskCard from "../../components/TaskCard";
 import "../../styles/LogistPage.css";
 
@@ -94,6 +94,10 @@ export default function TechActiveTasksPage() {
     }
   };
 
+  const handleTaskCardClick = (task) => {
+    navigate(`/tech_supp/tasks/${task.id}`);
+  };
+
   const STATUS_OPTIONS = [
     { value: "new", label: "Создана" },
     { value: "accepted", label: "Принята монтажником" },
@@ -114,103 +118,114 @@ export default function TechActiveTasksPage() {
 
   return (
     <div className="logist-main">
-      <div className="page-header">
-        <h1>Активные задачи</h1>
-      </div>
-
-      <div
-        className="search-container"
-        style={{
-          marginBottom: '12px',
-          width: '100%',
-        }}
-      >
-        <input
-          type="text"
-          placeholder="Поиск..."
-          className="dark-input"
-          value={searchInput}
-          onChange={e => handleFilterChange("search", e.target.value)}
+      <div className="page">
+        <h1 className="page-title">Активные задачи</h1>
+        
+        <div
+          className="search-container"
           style={{
+            marginBottom: '12px',
             width: '100%',
-            padding: '10px 14px',
-            borderRadius: '6px',
-            border: '1px solid #444',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
-            fontSize: '14px',
-            outline: 'none',
-            transition: '0.2s',
           }}
-        />
-      </div>
-
-      <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', maxWidth: '100%' }}>
-        {/* Статус */}
-        <div style={{ minWidth: '150px' }}>
-          <label className="dark-label">Статус</label>
-          <MultiSelectFilter
-            options={STATUS_OPTIONS}
-            selectedValues={selectedFilters.status}
-            onChange={(values) => handleFilterChange("status", values)}
-            placeholder="Все статусы"
-            maxHeight={200}
+        >
+          <input
+            type="text"
+            placeholder="Поиск..."
+            className="dark-select"
+            value={searchInput}
+            onChange={e => handleFilterChange("search", e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 14px',
+              borderRadius: '6px',
+              fontSize: '14px',
+              outline: 'none',
+              transition: '0.2s',
+            }}
           />
         </div>
 
-        {/* Компания */}
-        <div style={{ minWidth: '150px' }}>
-          <label className="dark-label">Компания</label>
-          <MultiSelectFilter
-            options={companyOptions}
-            selectedValues={selectedFilters.company_id}
-            onChange={(values) => handleFilterChange("company_id", values)}
-            placeholder="Все компании"
-            maxHeight={200}
-          />
+        <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', maxWidth: '100%' }}>
+          {/* Статус */}
+          <div style={{ minWidth: '150px' }}>
+            <label className="dark-label">Статус</label>
+            <MultiSelectFilter
+              options={STATUS_OPTIONS}
+              selectedValues={selectedFilters.status}
+              onChange={(values) => handleFilterChange("status", values)}
+              placeholder="Все статусы"
+              maxHeight={200}
+            />
+          </div>
+
+          {/* Компания */}
+          <div style={{ minWidth: '150px' }}>
+            <label className="dark-label">Компания</label>
+            <MultiSelectFilter
+              options={companyOptions}
+              selectedValues={selectedFilters.company_id}
+              onChange={(values) => handleFilterChange("company_id", values)}
+              placeholder="Все компании"
+              maxHeight={200}
+              width="100%"
+            />
+          </div>
+
+          {/* Монтажник */}
+          <div style={{ minWidth: '150px' }}>
+            <label className="dark-label">Монтажник</label>
+            <MultiSelectFilter
+              options={montajnikOptions}
+              selectedValues={selectedFilters.assigned_user_id}
+              onChange={(values) => handleFilterChange("assigned_user_id", values)}
+              placeholder="Все монтажники"
+              maxHeight={200}
+              width="100%"
+            />
+          </div>
+
+          {/* Тип работы */}
+          <div style={{ minWidth: '150px' }}>
+            <label className="dark-label">Тип работы</label>
+            <MultiSelectFilter
+              options={workTypeOptions}
+              selectedValues={selectedFilters.work_type_id}
+              onChange={(values) => handleFilterChange("work_type_id", values)}
+              placeholder="Все типы работ"
+              maxHeight={200}
+              width="100%"
+            />
+          </div>
+
+          {/* Оборудование */}
+          <div style={{ minWidth: '150px' }}>
+            <label className="dark-label">Оборудование</label>
+            <MultiSelectFilter
+              options={equipmentOptions}
+              selectedValues={selectedFilters.equipment_id}
+              onChange={(values) => handleFilterChange("equipment_id", values)}
+              placeholder="Все оборудование"
+              maxHeight={200}
+              width="100%"
+            />
+          </div>
         </div>
 
-        {/* Монтажник */}
-        <div style={{ minWidth: '150px' }}>
-          <label className="dark-label">Монтажник</label>
-          <MultiSelectFilter
-            options={montajnikOptions}
-            selectedValues={selectedFilters.assigned_user_id}
-            onChange={(values) => handleFilterChange("assigned_user_id", values)}
-            placeholder="Все монтажники"
-            maxHeight={200}
-          />
+        <div className="cards">
+          {loading ? (
+            <div className="empty">Загрузка...</div>
+          ) : tasks.length ? (
+            tasks.map(t => (
+              <TaskCard 
+                key={t.id} 
+                task={t} 
+                onClick={handleTaskCardClick}
+              />
+            ))
+          ) : (
+            <div className="empty">Нет активных задач</div>
+          )}
         </div>
-
-        {/* Тип работы */}
-        <div style={{ minWidth: '150px' }}>
-          <label className="dark-label">Тип работы</label>
-          <MultiSelectFilter
-            options={workTypeOptions}
-            selectedValues={selectedFilters.work_type_id}
-            onChange={(values) => handleFilterChange("work_type_id", values)}
-            placeholder="Все типы работ"
-            maxHeight={200}
-          />
-        </div>
-
-        {/* Оборудование */}
-        <div style={{ minWidth: '150px' }}>
-          <label className="dark-label">Оборудование</label>
-          <MultiSelectFilter
-            options={equipmentOptions}
-            selectedValues={selectedFilters.equipment_id}
-            onChange={(values) => handleFilterChange("equipment_id", values)}
-            placeholder="Все оборудование"
-            maxHeight={200}
-          />
-        </div>
-      </div>
-
-      <div className="cards">
-        {loading ? <div>Загрузка...</div> : tasks.length ? tasks.map((task) => (
-          <TaskCard key={task.id} task={task} />
-        )) : <div className="empty">Нет активных задач</div>}
       </div>
     </div>
   );

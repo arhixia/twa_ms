@@ -5,27 +5,85 @@
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background: #0d1117;
+  background: #0d1117; /* Темный фон */
   padding: 20px;
   box-sizing: border-box;
 }
 
+/* Основной контейнер формы */
 .login-form {
   width: 100%;
   max-width: 400px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 12px;
+  background: #161b22; /* Темный фон формы */
+  border-radius: 16px;
   padding: 32px 24px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  position: relative;
 }
 
-.login-title {
-  text-align: center;
+/* Заголовок приложения вверху */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #30363d;
+}
+
+.app-title {
+  text-align: center;
+  color: #4ade80; /* Светло-зеленый цвет как на макете */
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.app-subtitle {
+  text-align: center;
+  color: #8b949e;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  color: #4ade80;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #6ee7b7;
+}
+
+.clock-icon {
+  background: transparent;
+  border: none;
+  color: #8b949e;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.clock-icon:hover {
   color: #c9d1d9;
+}
+
+/* Заголовок формы "Авторизация" */
+.form-title {
+  text-align: center;
+  color: #4ade80; /* Светло-зеленый цвет */
   font-size: 24px;
   font-weight: 600;
+  margin-bottom: 24px;
+  letter-spacing: 0.5px;
 }
 
 .input-group {
@@ -47,10 +105,22 @@
 
 .input-group input:focus {
   outline: none;
-  border-color: #218bff; /* ← синий фокус вместо зелёного */
+  border-color: #218bff;
   box-shadow: 0 0 0 2px rgba(33, 139, 255, 0.3);
 }
 
+/* Иконка пользователя */
+.input-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8b949e;
+  font-size: 18px;
+  pointer-events: none; /* Чтобы не мешала кликам */
+}
+
+/* Кнопка "Показать/Скрыть пароль" */
 .toggle-password {
   position: absolute;
   right: 12px;
@@ -83,24 +153,35 @@
   border-radius: 6px;
 }
 
+/* Кнопка входа с градиентом */
 .login-btn {
   width: 100%;
   padding: 12px;
-  background: #218bff; /* ← основной синий */
+  background: linear-gradient(to right, #10b981, #2563eb); /* Зелено-синий градиент */
   color: white;
   border: none;
   border-radius: 8px;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .login-btn:hover {
-  background: #389dff; /* ← чуть светлее при наведении */
+  background: linear-gradient(to right, #059669, #1d4ed8); /* Более темный градиент */
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
 }
 
 .login-btn:active {
   transform: translateY(1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
+/* Информация о Telegram ID (опционально) */
+.login-info {
+  color: #8b949e;
+  font-size: 0.8em;
+  text-align: center;
+  margin-top: 8px;
+}

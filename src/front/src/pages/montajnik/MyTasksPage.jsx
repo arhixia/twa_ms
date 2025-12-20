@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom"; // Импортируем useNavigate
 import { fetchMyTasks } from "../../api"; 
 import TaskCard from "../../components/TaskCard"; 
-import "../../styles/LogistPage.css"; 
-import useAuthStore from "@/store/useAuthStore"; // Импортируем store
+import useAuthStore from "@/store/useAuthStore"; 
 
 export default function MyTasksPage() {
   const [tasks, setTasks] = useState([]);
@@ -10,13 +10,17 @@ export default function MyTasksPage() {
   const [error, setError] = useState(null);
 
   const { updateMyTasksCount } = useAuthStore();
+  const navigate = useNavigate(); // Получаем функцию навигации
+
+  const handleTaskCardClick = (task) => {
+    navigate(`/montajnik/tasks/${task.id}`);
+  };
 
   useEffect(() => {
     const loadTasks = async () => {
       try {
         setLoading(true);
         const data = await fetchMyTasks(); 
-        // Теперь data - объект с полем tasks
         setTasks(data.tasks || []); 
       } catch (err) {
         console.error("Ошибка загрузки моих задач:", err);
@@ -42,7 +46,7 @@ export default function MyTasksPage() {
   if (error) {
     return (
       <div className="logist-main">
-        <div className="error"> {/* Предполагаем, что у вас есть стили для .error */}
+        <div className="error">
           {error}
         </div>
       </div>
@@ -50,12 +54,12 @@ export default function MyTasksPage() {
   }
 
   return (
-    <div className="logist-main"> {/* Используем общий класс основного контента */}
-      <div className="page"> {/* Добавляем обертку для стилизации, если нужно */}
-        <div className="page-header"> {/* Используем общий класс для заголовка страницы */}
-          <h1>Мои задачи</h1>
-        </div>
-        <div className="cards"> {/* Используем общий класс для сетки карточек */}
+    <div className="logist-main">
+      <div className="page">
+        {/* Заголовок страницы */}
+        <h1 className="page-title">Мои задачи</h1>
+        
+        <div className="cards">
           {tasks.length === 0 ? (
             <p>У вас пока нет назначенных задач.</p>
           ) : (
@@ -63,7 +67,7 @@ export default function MyTasksPage() {
               <TaskCard
                 key={task.id}
                 task={task}
-  
+                onClick={handleTaskCardClick} // Передаем обработчик в TaskCard
               />
             ))
           )}

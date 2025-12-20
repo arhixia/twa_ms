@@ -1,7 +1,9 @@
+// src/pages/AssignedTasksPage.jsx
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getAssignedTasks, acceptTask, rejectTask } from "../../api";
 import TaskCard from "../../components/TaskCard";
-import useAuthStore from "@/store/useAuthStore"; // Импортируем store
+import useAuthStore from "@/store/useAuthStore";
 
 export default function AssignedTasksPage() {
   const [tasks, setTasks] = useState([]);
@@ -11,8 +13,13 @@ export default function AssignedTasksPage() {
   const [rejectComment, setRejectComment] = useState("");
   const [rejectTaskId, setRejectTaskId] = useState(null);
 
-  // Используем store для обновления количества задач
-  const { updateAssignedTasksCount, updateMyTasksCount , updateAvailableTasksCount } = useAuthStore();
+  const { updateAssignedTasksCount, updateMyTasksCount, updateAvailableTasksCount } = useAuthStore();
+  const navigate = useNavigate(); // Получаем функцию навигации
+
+  // Обработчик клика по карточке задачи
+  const handleTaskCardClick = (task) => {
+    navigate(`/montajnik/tasks/${task.id}`);
+  };
 
   useEffect(() => { load(); }, []);
 
@@ -29,10 +36,9 @@ export default function AssignedTasksPage() {
   }
 
   async function handleAccept(taskId) {
-    setActionLoading(taskId);
+    setActionLoading(`accept-${taskId}`); // Используем уникальный ключ для типа действия
     try {
       await acceptTask(taskId);
-      // После успешного принятия обновляем все счетчики
       await Promise.all([
         load(), // Перезагружаем текущие задачи
         updateAssignedTasksCount(),
@@ -52,221 +58,185 @@ export default function AssignedTasksPage() {
     setShowRejectModal(true);
   }
 
-async function handleRejectConfirm() {
-  if (!rejectTaskId) return;
-  setActionLoading(rejectTaskId);
-  try {
-    await rejectTask(rejectTaskId, rejectComment || null);
-    setShowRejectModal(false);
-    setRejectComment("");
-    setRejectTaskId(null);
-    // После успешного отклонения обновляем все счетчики
-    await Promise.all([
-      load(), // Перезагружаем текущие задачи
-      updateAssignedTasksCount(),
-      updateMyTasksCount(),
-      updateAvailableTasksCount()
-    ]);
-  } catch (err) {
-    console.error(err);
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Ошибка при отклонении задачи");
-    } else {
-      alert("Ошибка при отклонении задачи");
+  async function handleRejectConfirm() {
+    if (!rejectTaskId) return;
+    setActionLoading(`reject-${rejectTaskId}`); // Используем уникальный ключ для типа действия
+    try {
+      await rejectTask(rejectTaskId, rejectComment || null);
+      setShowRejectModal(false);
+      setRejectComment("");
+      setRejectTaskId(null);
+      await Promise.all([
+        load(), // Перезагружаем текущие задачи
+        updateAssignedTasksCount(),
+        updateMyTasksCount(),
+        updateAvailableTasksCount()
+      ]);
+    } catch (err) {
+      console.error(err);
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Ошибка при отклонении задачи");
+      } else {
+        alert("Ошибка при отклонении задачи");
+      }
+    } finally {
+      setActionLoading(null);
     }
-  } finally {
-    setActionLoading(null);
   }
-}
+
+  // Функция для вызова отклонения (передается в TaskCard)
+  const handleReject = (taskId) => {
+    openRejectModal(taskId);
+  };
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <h1>Назначенные задачи</h1>
-      </div>
+    <div className="logist-main"> {/* Обернем в logist-main для единообразия */}
+      <div className="page">
+        <div className="page-header"> {/* Используем общий стиль заголовка */}
+          <h1 className="page-title">Назначенные задачи</h1> {/* Используем стиль заголовка как в MyTasksPage */}
+        </div>
 
-      <div className="cards">
-        {loading ? (
-          <div>Загрузка...</div>
-        ) : tasks.length ? (
-          tasks.map((task) => (
-            <div
-  key={task.id}
-  className="task-card-wrapper"
-  style={{
-    position: "relative",
-    marginBottom: "16px",
-    borderRadius: "12px",
-    overflow: "hidden",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "space-between",
-    minHeight: "150px", // фиксированная высота
-  }}
->
-  <TaskCard task={task} />
+        <div className="cards">
+          {loading ? (
+            <div>Загрузка...</div>
+          ) : tasks.length ? (
+            tasks.map((task) => (
+              <div
+                key={task.id}
+                className="task-card-wrapper"
+                style={{
+                  position: "relative", // Для позиционирования кнопок
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              >
+                {/* Передаем onClick, onAccept, onReject и статусы загрузки в TaskCard */}
+                <TaskCard
+                  task={task}
+                  onClick={handleTaskCardClick}
+                  onAccept={() => handleAccept(task.id)}
+                  onReject={() => handleReject(task.id)}
+                  isAccepting={actionLoading === `accept-${task.id}`} // Проверяем уникальный ключ
+                  isRejecting={actionLoading === `reject-${task.id}`} // Проверяем уникальный ключ
+                />
+              </div>
+            ))
+          ) : (
+            <div className="empty">Нет назначенных задач</div>
+          )}
+        </div>
 
-  {/* Кнопки */}
-  <div
-    className="task-actions"
-    style={{
-      display: "flex",
-      justifyContent: "space-between",
-      padding: "8px",
-      background: "#121212",
-      marginTop: "auto", // обязательно, чтобы кнопки прижимались к низу
-    }}
-  >
-    <button
-      disabled={actionLoading === task.id}
-      onClick={() => openRejectModal(task.id)}
-      style={{
-        backgroundColor: "#dc3545",
-        color: "white",
-        padding: "8px 16px",
-        borderRadius: "12px",
-        flex: 1,
-        marginRight: "8px",
-        fontWeight: "bold",
-        cursor: actionLoading === task.id ? "not-allowed" : "pointer",
-      }}
-    >
-      {actionLoading === task.id ? "..." : "Отклонить"}
-    </button>
-    <button
-      disabled={actionLoading === task.id}
-      onClick={() => handleAccept(task.id)}
-      style={{
-        backgroundColor: "#28a745",
-        color: "white",
-        padding: "8px 16px",
-        borderRadius: "12px",
-        flex: 1,
-        marginLeft: "8px",
-        fontWeight: "bold",
-        cursor: actionLoading === task.id ? "not-allowed" : "pointer",
-      }}
-    >
-      {actionLoading === task.id ? "..." : "Принять"}
-    </button>
-  </div>
-</div>
-          ))
-        ) : (
-          <div className="empty">Нет назначенных задач</div>
-        )}
-      </div>
-
-      {/* Модалка отклонения */}
-      {showRejectModal && (
-        <div
-          className="modal-backdrop"
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000,
-          }}
-        >
+        {/* Модалка отклонения */}
+        {showRejectModal && (
           <div
-            className="modal"
+            className="modal-backdrop"
             style={{
-              maxWidth: "500px",
-              background: "#0d1117",
-              borderRadius: "8px",
-              padding: "16px",
-              color: "white",
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 1000,
             }}
           >
             <div
-              className="modal-header"
+              className="modal"
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
+                maxWidth: "500px",
+                background: "#0d1117",
+                borderRadius: "8px",
+                padding: "16px",
+                color: "white",
               }}
             >
-              <h3>Отклонить задачу #{rejectTaskId}</h3>
-              <button
-                className="close"
-                onClick={() => setShowRejectModal(false)}
+              <div
+                className="modal-header"
                 style={{
-                  background: "transparent",
-                  border: "none",
-                  fontSize: "1.5em",
-                  color: "white",
-                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
                 }}
               >
-                ×
-              </button>
-            </div>
-
-            <div className="modal-body" style={{ marginTop: "8px" }}>
-              <label style={{ display: "block", color: "white" }}>
-                Причина отклонения (необязательно):
-                <textarea
-                  value={rejectComment}
-                  onChange={(e) => setRejectComment(e.target.value)}
-                  placeholder="Можно оставить пустым..."
+                <h3>Отклонить задачу #{rejectTaskId}</h3>
+                <button
+                  className="close"
+                  onClick={() => setShowRejectModal(false)}
                   style={{
-                    width: "100%",
-                    minHeight: "80px",
-                    backgroundColor: "#1a1a1a",
+                    background: "transparent",
+                    border: "none",
+                    fontSize: "1.5em",
                     color: "white",
-                    border: "1px solid #30363d",
-                    borderRadius: "8px",
-                    padding: "8px",
-                    marginTop: "4px",
+                    cursor: "pointer",
                   }}
-                />
-              </label>
-            </div>
+                >
+                  ×
+                </button>
+              </div>
 
-            <div
-              className="modal-actions"
-              style={{
-                marginTop: "12px",
-                display: "flex",
-                justifyContent: "flex-end",
-                gap: "8px",
-              }}
-            >
-              <button
-                className="primary"
-                onClick={handleRejectConfirm}
-                disabled={actionLoading === rejectTaskId}
+              <div className="modal-body" style={{ marginTop: "8px" }}>
+                <label style={{ display: "block", color: "white" }}>
+                  Причина отклонения (необязательно):
+                  <textarea
+                    value={rejectComment}
+                    onChange={(e) => setRejectComment(e.target.value)}
+                    placeholder="Можно оставить пустым..."
+                    style={{
+                      width: "100%",
+                      minHeight: "80px",
+                      backgroundColor: "#1a1a1a",
+                      color: "white",
+                      border: "1px solid #30363d",
+                      borderRadius: "8px",
+                      padding: "8px",
+                      marginTop: "4px",
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div
+                className="modal-actions"
                 style={{
-                  background: "#b60205",
-                  color: "white",
-                  padding: "6px 12px",
-                  borderRadius: "4px",
+                  marginTop: "12px",
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: "8px",
                 }}
               >
-                {actionLoading === rejectTaskId ? "..." : "Подтвердить"}
-              </button>
-              <button
-                onClick={() => setShowRejectModal(false)}
-                style={{
-                  background: "#444",
-                  color: "white",
-                  padding: "6px 12px",
-                  borderRadius: "4px",
-                }}
-              >
-                Отмена
-              </button>
+                <button
+                  className="primary"
+                  onClick={handleRejectConfirm}
+                  disabled={actionLoading === `reject-${rejectTaskId}`} // Проверяем уникальный ключ
+                  style={{
+                    background: "#b60205",
+                    color: "white",
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  {actionLoading === `reject-${rejectTaskId}` ? "..." : "Подтвердить"} {/* Обновляем текст кнопки */}
+                </button>
+                <button
+                  onClick={() => setShowRejectModal(false)}
+                  style={{
+                    background: "#444",
+                    color: "white",
+                    padding: "6px 12px",
+                    borderRadius: "4px",
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

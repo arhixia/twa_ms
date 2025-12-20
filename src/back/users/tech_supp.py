@@ -679,20 +679,37 @@ async def tech_supp_filter_tasks(
         combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
-    query = query.options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
+    query = query.options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+    )
 
     res = await db.execute(query)
     tasks = res.scalars().unique().all()
 
     out = []
     for t in tasks:
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+
+      
+        equipment = [
+            {
+                "equipment_id": te.equipment_id,
+                "quantity": te.quantity,
+                "serial_number": te.serial_number,
+                "equipment": {
+                    "id": te.equipment.id,
+                    "name": te.equipment.name
+                } if te.equipment else None
+            }
+            for te in (t.equipment_links or [])
+        ] or []
 
         out.append({
             "id": t.id,
-            "client": client_display,
+            "client_name": client_name,
             "status": t.status.value if t.status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
             "location": t.location,
@@ -705,6 +722,7 @@ async def tech_supp_filter_tasks(
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
             "is_draft": t.is_draft,
             "photo_required": t.photo_required,
+            "equipment": equipment
         })
 
     return out

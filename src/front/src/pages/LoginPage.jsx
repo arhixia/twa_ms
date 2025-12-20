@@ -1,7 +1,7 @@
 // src/pages/LoginPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { loginUser } from "../api"; // Убедитесь, что ваш API обновлён
+import { loginUser } from "../api";
 import useAuthStore from "../store/useAuthStore";
 import "../styles/LoginForm.css";
 
@@ -17,9 +17,7 @@ export default function LoginPage() {
   const [isTgReady, setIsTgReady] = useState(false);
 
   useEffect(() => {
-
     if (window.Telegram && window.Telegram.WebApp) {
-      //  Получаем initDataUnsafe через глобальный объект
       const initData = window.Telegram.WebApp.initDataUnsafe;
       console.log("Window Telegram WebApp initDataUnsafe:", initData);
 
@@ -30,13 +28,10 @@ export default function LoginPage() {
         setIsTgReady(true);
       } else {
         console.warn("Telegram ID not found in initDataUnsafe or not in Mini App context");
-        // setIsTgReady(true); // Если вы хотите, чтобы форма работала и не в Mini App, раскомментируйте
       }
     } else {
       console.error("Telegram WebApp object is not available. Are you running inside a Telegram Mini App?");
-      // setIsTgReady(true); // Если вы хотите, чтобы форма работала и не в Mini App, раскомментируйте
     }
-
 
     if (token && role) {
       navigate(`/${role}`);
@@ -47,16 +42,15 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    // ✅ Проверяем, готов ли SDK и есть ли telegramId, если мы ожидаем его в Mini App
-    if (!isTgReady) {
-      setError("SDK Telegram WebApp не готово или не в контексте Mini App.");
-      return;
-    }
-    // telegramId может быть null, если не в Mini App, в этом случае отправим null
-    // или можно сделать проверку и не отправлять, если null, но тогда backend должен это учитывать.
+    // Убираем проверку isTgReady, если не требуется
+    // Если нужно, чтобы работало только в Mini App — оставьте эту проверку
+    // if (!isTgReady) {
+    //   setError("SDK Telegram WebApp не готово или не в контексте Mini App.");
+    //   return;
+    // }
 
     try {
-      // ✅ Передаём telegramId в loginUser
+      // Передаём telegramId, даже если null — backend должен это обрабатывать
       const data = await loginUser(login, password, telegramId);
 
       if (!data.access_token) throw new Error("Нет токена в ответе");
@@ -76,7 +70,16 @@ export default function LoginPage() {
   return (
     <div className="login-wrapper">
       <form className="login-form" onSubmit={handleSubmit}>
-        <h2 className="login-title">Авторизация</h2>
+        {/* Заголовок приложения по центру */}
+         <div>
+            <div className="app-title">GeoTask</div>
+            <div className="app-subtitle">мини-приложение</div>
+          </div>
+
+        {/* Заголовок формы */}
+        <h2 className="form-title">Авторизация</h2>
+
+        {/* Поле Логин */}
         <div className="input-group">
           <input
             type="text"
@@ -85,7 +88,10 @@ export default function LoginPage() {
             onChange={(e) => setLogin(e.target.value)}
             required
           />
+          <span className="input-icon">👤</span>
         </div>
+
+        {/* Поле Пароль */}
         <div className="input-group">
           <input
             type={showPassword ? "text" : "password"}
@@ -100,16 +106,14 @@ export default function LoginPage() {
             onClick={() => setShowPassword(!showPassword)}
             aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
           >
-            👁
+            {showPassword ? "👁️" : "👁️‍🗨️"}
           </button>
         </div>
-        {/* ✅ Опционально: показываем, что SDK готов и telegram_id получен */}
-        {isTgReady && telegramId && (
-          <div className="login-info" style={{ color: 'gray', fontSize: '0.8em' }}>
-            Telegram ID: {telegramId} (обнаружен в Mini App)
-          </div>
-        )}
+
+        {/* Сообщение об ошибке */}
         {error && <div className="login-error">{error}</div>}
+
+        {/* Кнопка Войти */}
         <button type="submit" className="login-btn">Войти</button>
       </form>
     </div>

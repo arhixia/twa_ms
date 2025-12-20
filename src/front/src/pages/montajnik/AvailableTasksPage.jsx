@@ -1,18 +1,18 @@
+// src/pages/AvailableTasksPage.jsx
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // Убедитесь, что useNavigate импортирован
+import { useNavigate } from "react-router-dom";
 import { fetchAvailableTasks, acceptTask } from "../../api";
-import TaskCard from "../../components/TaskCard"; // Используем общий компонент карточки задачи
-import "../../styles/LogistPage.css";
-import useAuthStore from "@/store/useAuthStore"; // Используем общий store аутентификации
-
+import TaskCard from "../../components/TaskCard"; // Убедитесь, что TaskCard может принимать onAccept и isAccepting
+import useAuthStore from "@/store/useAuthStore";
 
 export default function AvailableTasksPage() {
-  const navigate = useNavigate(); // Хук для навигации
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionLoading, setActionLoading] = useState(null); // Для индикации загрузки кнопки
 
-  const { updateAvailableTasksCount, updateMyTasksCount , updateAssignedTasksCount } = useAuthStore();
+  const { updateAvailableTasksCount, updateMyTasksCount, updateAssignedTasksCount } = useAuthStore();
 
   useEffect(() => {
     loadTasks();
@@ -23,7 +23,6 @@ export default function AvailableTasksPage() {
       setLoading(true);
       setError(null);
       const data = await fetchAvailableTasks();
-      // Теперь data - объект с полем tasks
       setTasks(data.tasks || []);
     } catch (err) {
       console.error("Ошибка загрузки доступных задач:", err);
@@ -33,36 +32,35 @@ export default function AvailableTasksPage() {
     }
   }
 
-const handleAcceptTask = async (taskId) => {
-  try {
-    await acceptTask(taskId); // Вызываем API функцию принятия задачи
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Задача успешно принята!");
-    } else {
-      alert("Задача успешно принята!");
+  const handleAcceptTask = async (taskId) => {
+    setActionLoading(taskId);
+    try {
+      await acceptTask(taskId);
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Задача успешно принята!");
+      } else {
+        alert("Задача успешно принята!");
+      }
+      await Promise.all([
+        loadTasks(),
+        updateAvailableTasksCount(),
+        updateMyTasksCount(),
+        updateAssignedTasksCount()
+      ]);
+    } catch (err) {
+      console.error(`Ошибка при принятии задачи ${taskId}:`, err);
+      const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
+      } else {
+        alert(`Ошибка: ${errorMessage}`);
+      }
+    } finally {
+      setActionLoading(null);
     }
-    // После успешного принятия обновляем все счетчики и перезагружаем задачи
-    await Promise.all([
-      loadTasks(), // Перезагружаем текущие задачи
-      updateAvailableTasksCount(),
-      updateMyTasksCount(),
-      updateAssignedTasksCount()
-    ]);
-  } catch (err) {
-    console.error(`Ошибка при принятии задачи ${taskId}:`, err);
-    // Проверяем, есть ли детализированное сообщение об ошибке в ответе
-    const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
-    } else {
-      alert(`Ошибка: ${errorMessage}`);
-    }
-  }
-};
+  };
 
-  // Функция для обхода клика по карточке - осуществляет навигацию
   const handleTaskCardClick = (task) => {
-    // Используем navigate для перехода на страницу предпросмотра задачи
     navigate(`/montajnik/tasks/available/${task.id}`);
   };
 
@@ -90,22 +88,31 @@ const handleAcceptTask = async (taskId) => {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Доступные задачи</h1>
+          <h1 className="page-title">Доступные задачи</h1>
         </div>
         <div className="cards">
           {tasks.length === 0 ? (
             <p>Нет доступных задач.</p>
           ) : (
             tasks.map(task => (
-              <TaskCard
+              <div
                 key={task.id}
-                task={task}
-                // Передаем функцию навигации в onClick
-                onClick={handleTaskCardClick}
-                // Оставляем возможность принять задачу прямо из списка (если реализовано в TaskCard)
-                showAcceptButton={true} // Если хотите кнопку "Принять" в карточке
-                onAccept={handleAcceptTask} // Если хотите кнопку "Принять" в карточке
-              />
+                className="task-card-wrapper"
+                style={{
+                  position: "relative",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              >
+                {/* Передаем onClick, onAccept и isAccepting в TaskCard */}
+                <TaskCard
+                  task={task}
+                  onClick={handleTaskCardClick}
+                  onAccept={() => handleAcceptTask(task.id)} // Передаем функцию принятия задачи
+                  isAccepting={actionLoading === task.id} // Передаем статус загрузки
+                />
+              </div>
             ))
           )}
         </div>

@@ -1,8 +1,8 @@
+// src/pages/MontajnikPage.jsx
 import React, { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import "@/styles/LogistPage.css"; // Импортируем общие стили
-import { logout, fetchMyTasks, fetchAvailableTasks, getAssignedTasks } from "@/api"; // Предполагаем, что API функция logout общая
-import useAuthStore from "@/store/useAuthStore"; // Используем общий store аутентификации
+import { logout, fetchMyTasks, fetchAvailableTasks, getAssignedTasks } from "@/api"; 
+import useAuthStore from "@/store/useAuthStore"; 
 
 export default function MontajnikPage() {
   const navigate = useNavigate();
@@ -25,7 +25,6 @@ export default function MontajnikPage() {
   async function loadTaskCounts() {
     setLoadingCounts(true);
     try {
-      // Обновляем все количества задач через store
       await Promise.all([
         updateMyTasksCount(),
         updateAssignedTasksCount(),
@@ -50,31 +49,74 @@ export default function MontajnikPage() {
 
   return (
     <div className="logist-app"> 
+      {/* Шапка с логотипом, именем и кнопкой выхода */}
       <header className="logist-header"> 
-        <div className="fullname">{fullname || "Монтажник"}</div> 
+        {/* Контейнер для иконки человечка и имени */}
+        <div className="user-info">
+          <div className="user-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div className="user-fullname">
+            {fullname || "Монтажник"}
+          </div>
+        </div>
+
+ 
+
         <button className="logout-btn" onClick={handleLogout}>Выйти</button>
       </header>
 
-      <nav className="logist-nav"> 
-        <NavLink to="/montajnik/tasks/mine" className="nav-item-with-badge">
-          Мои задачи
+      {/* Навигация по макету */}
+      <nav className="montajnik-nav">
+        <NavLink to="/montajnik/tasks/mine" className="nav-item">
+          <div className="nav-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </div>
+          <div className="nav-text">Мои задачи</div>
           {!loadingCounts && myTasksCount > 0 && (
             <span className="badge">{myTasksCount}</span>
           )}
         </NavLink>
-        <NavLink to="/montajnik/tasks/available" className="nav-item-with-badge">
-          Доступные задачи
+        <NavLink to="/montajnik/tasks/available" className="nav-item">
+          <div className="nav-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+              <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+            </svg>
+          </div>
+          <div className="nav-text">Доступные задачи</div>
           {!loadingCounts && availableTasksCount > 0 && (
             <span className="badge">{availableTasksCount}</span>
           )}
         </NavLink>
-        <NavLink to="/montajnik/tasks/assigned" className="nav-item-with-badge">
-          Назначенные задачи
+        <NavLink to="/montajnik/tasks/assigned" className="nav-item">
+          <div className="nav-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="5" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="10" x2="16" y2="10"></line>
+              <line x1="8" y1="14" x2="16" y2="14"></line>
+            </svg>
+          </div>
+          <div className="nav-text">Назначенные задачи</div>
           {!loadingCounts && assignedTasksCount > 0 && (
             <span className="badge">{assignedTasksCount}</span>
           )}
         </NavLink>
-        <NavLink to="/montajnik/me">Личный кабинет</NavLink>
+        <NavLink to="/montajnik/me" className="nav-item">
+          <div className="nav-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div className="nav-text">Личный кабинет</div>
+        </NavLink>
       </nav>
 
       <main className="logist-main"> 

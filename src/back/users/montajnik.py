@@ -70,11 +70,10 @@ async def my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depe
     Список задач для текущего монтажника:
     - назначенные (assigned_user_id == me)
     - в работе / на проверке и т.д.
-    Возвращает краткую информацию о задачах.
+    Возвращает краткую информацию о задачах, включая назначенное оборудование.
     """
     _ensure_montajnik_or_403(current_user)
-    
-    # Сначала получаем количество задач
+
     count_query = select(func.count(Task.id)).where(
         Task.assigned_user_id == current_user.id,
         Task.is_draft == False,
@@ -83,28 +82,31 @@ async def my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depe
     count_res = await db.execute(count_query)
     total_count = count_res.scalar() or 0
 
-    # Загружаем задачи с контактным лицом и компанией
     q = select(Task).where(
         Task.assigned_user_id == current_user.id,
         Task.is_draft == False,
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived, TaskStatus.assigned]),
     ).options(
-        selectinload(Task.contact_person).selectinload(ContactPerson.company)
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
     )
     res = await db.execute(q)
     tasks = res.scalars().all()
 
     out = []
     for t in tasks:
-        # Получаем имя контактного лица и компании
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+
+        equipment = [
+            {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number, "equipment": te.equipment}
+            for te in (t.equipment_links or [])
+        ] or None
 
         out.append({
             "id": t.id,
-            "client": client_display,  # ✅ Используем составное имя
+            "client_name": client_name,  # ✅ Только название компании или ИП
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "location": t.location,
@@ -112,9 +114,9 @@ async def my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depe
             "status": t.status.value if t.status else None,
             "client_price": str(t.client_price) if t.client_price is not None else None,
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
-            # is_draft не нужен, так как мы фильтруем по is_draft == False
+            "equipment": equipment,
         })
-    
+
     return {
         "tasks": out,
         "total_count": total_count
@@ -146,22 +148,26 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
             Task.status == TaskStatus.new, 
         )
         .options(
-            selectinload(Task.contact_person).selectinload(ContactPerson.company)
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
         )
     )
     tasks = res.scalars().all()
 
     out = []
     for t in tasks:
-        # Получаем имя контактного лица и компании
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+
+        equipment = [
+            {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number, "equipment": te.equipment}
+            for te in (t.equipment_links or [])
+        ] or None
 
         out.append({
             "id": t.id,
-            "client": client_display,  
+            "client_name": client_name,  # ✅ Только название компании или ИП
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "location": t.location,
@@ -169,9 +175,9 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
             "status": t.status.value if t.status else None,
             "client_price": str(t.client_price) if t.client_price is not None else None,
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
-            "assigned_user_id": t.assigned_user_id,
+            "equipment": equipment,
         })
-    
+
     return {
         "tasks": out,
         "total_count": total_count
@@ -199,22 +205,26 @@ async def assigned_tasks(db: AsyncSession = Depends(get_db), current_user: User 
             Task.assigned_user_id == current_user.id,
         )
         .options(
-            selectinload(Task.contact_person).selectinload(ContactPerson.company)
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
         )
     )
     tasks = res.scalars().all()
 
     out = []
     for t in tasks:
-        # Получаем имя контактного лица и компании
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+
+        equipment = [
+            {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number, "equipment": te.equipment}
+            for te in (t.equipment_links or [])
+        ] or None
 
         out.append({
             "id": t.id,
-            "client": client_display,  
+            "client_name": client_name,  # ✅ Только название компании или ИП
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "location": t.location,
@@ -222,9 +232,9 @@ async def assigned_tasks(db: AsyncSession = Depends(get_db), current_user: User 
             "status": t.status.value if t.status else None,
             "client_price": str(t.client_price) if t.client_price is not None else None,
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
-            "assigned_user_id": t.assigned_user_id,
+            "equipment": equipment,
         })
-    
+
     return {
         "tasks": out,
         "total_count": total_count

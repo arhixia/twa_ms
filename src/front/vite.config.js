@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['title-totally-apply-meyer.trycloudflare.com']
+    allowedHosts: ['lisa-oral-outdoor-impacts.trycloudflare.com']
   },
 })
 
