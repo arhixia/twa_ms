@@ -9,8 +9,6 @@ import {
   getContactPersonsByCompany,
   getContactPersonPhone, 
   getActiveMontajniks,
-  fetchActiveTasks,
-  
 } from "../../api";
 import useAuthStore from "@/store/useAuthStore";
 
@@ -50,7 +48,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
 
   async function loadRefs() {
     try {
-      const [eqRes, wtRes, compRes,montRes] = await Promise.allSettled([
+      const [eqRes, wtRes, compRes, montRes] = await Promise.allSettled([
         getEquipmentList(),
         getWorkTypes(),
         getCompaniesList(),
@@ -69,7 +67,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   function setField(k, v) {
     setForm((f) => ({ ...f, [k]: v }));
   }
-
 
   function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompanyId }) {
     const [searchTerm, setSearchTerm] = useState("");
@@ -104,7 +101,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
     return (
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div className="searchable-select-container">
         <input
           type="text"
           value={searchTerm}
@@ -112,45 +109,15 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск компании..."
-          className="dark-select"
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            fontSize: '14px',
-            outline: 'none',
-          }}
+          className="searchable-select-input"
         />
         {isOpen && filteredCompanies.length > 0 && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
+          <ul className="searchable-select-dropdown">
             {filteredCompanies.map((c) => (
               <li
                 key={c.id}
                 onClick={() => handleItemClick(c)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  color: '#e0e0e0',
-                  backgroundColor: '#2a2a2a',
-                  borderBottom: '1px solid #3a3a3a',
-                }}
+                className="searchable-select-option"
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {c.name}
@@ -159,26 +126,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </ul>
         )}
         {isOpen && filteredCompanies.length === 0 && searchTerm.trim() !== '' && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+          <ul className="searchable-select-dropdown">
+            <li className="searchable-select-no-results">
               Ничего не найдено
             </li>
           </ul>
@@ -187,42 +136,22 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     );
   }
 
-
   function SelectedCompanyDisplay({ company, onRemove }) {
     if (!company) return null;
 
     return (
-      <div style={{
-        padding: '6px 10px',
-        border: '1px solid #444',
-        borderRadius: '4px',
-        backgroundColor: '#2a2a2a',
-        color: '#e0e0e0',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '8px',
-      }}>
+      <div className="selected-company-display">
         <span>{company.name}</span>
         <button
           type="button"
           onClick={onRemove}
-          style={{
-            padding: '2px 6px',
-            backgroundColor: '#cf6679',
-            color: '#000',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '1em',
-          }}
+          className="selected-company-remove"
         >
           ×
         </button>
       </div>
     );
   }
-  
 
   function SearchableMontajnikSelect({ availableMontajniks, onSelect, selectedUserId }) {
     const [searchTerm, setSearchTerm] = useState("");
@@ -258,7 +187,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
     return (
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div className="searchable-select-container">
         <input
           type="text"
           value={searchTerm}
@@ -266,45 +195,15 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск монтажника (имя, фамилия, ID)..."
-          className="dark-select"
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            fontSize: '14px',
-            outline: 'none',
-          }}
+          className="searchable-select-input"
         />
         {isOpen && filteredMontajniks.length > 0 && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
+          <ul className="searchable-select-dropdown">
             {filteredMontajniks.map((m) => (
               <li
                 key={m.id}
                 onClick={() => handleItemClick(m)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  color: '#e0e0e0',
-                  backgroundColor: '#2a2a2a',
-                  borderBottom: '1px solid #3a3a3a',
-                }}
+                className="searchable-select-option"
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {m.name} {m.lastname} (ID: {m.id})
@@ -313,26 +212,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </ul>
         )}
         {isOpen && filteredMontajniks.length === 0 && searchTerm.trim() !== '' && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+          <ul className="searchable-select-dropdown">
+            <li className="searchable-select-no-results">
               Ничего не найдено
             </li>
           </ul>
@@ -341,8 +222,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     );
   }
 
-
-  
   async function handleCompanyChange(companyId) {
     if (!companyId) {
       setContactPersons([]);
@@ -363,7 +242,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     }
   }
 
-  
   async function handleContactPersonChange(contactPersonId) {
     const val = contactPersonId ? parseInt(contactPersonId, 10) : null;
     setField("contact_person_id", val);
@@ -385,67 +263,66 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
   }
 
   async function saveDraft(asPublish = false) {
-  if (saving) return;
-  setSaving(true);
-  try {
-    const payload = {
-      ...form,
-      equipment: form.equipment || [],
-      work_types: form.work_types_ids || [],
-      scheduled_at: form.scheduled_at || null,
-      assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
-      photo_required: Boolean(form.photo_required),
-      assignment_type: form.assignment_type || "broadcast",
-      gos_number: form.gos_number || null,
-      contact_person_phone: undefined,
-    };
+    if (saving) return;
+    setSaving(true);
+    try {
+      const payload = {
+        ...form,
+        equipment: form.equipment || [],
+        work_types: form.work_types_ids || [],
+        scheduled_at: form.scheduled_at || null,
+        assigned_user_id: form.assigned_user_id ? Number(form.assigned_user_id) : null,
+        photo_required: Boolean(form.photo_required),
+        assignment_type: form.assignment_type || "broadcast",
+        gos_number: form.gos_number || null,
+        contact_person_phone: undefined,
+      };
 
-    let result;
-    if (asPublish) {
-      result = await publishTask(payload);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("✅ Опубликовано");
+      let result;
+      if (asPublish) {
+        result = await publishTask(payload);
+        if (window.Telegram?.WebApp) {
+          window.Telegram.WebApp.showAlert("✅ Опубликовано");
+        } else {
+          alert("✅ Опубликовано");
+        }
+        useAuthStore.getState().updateActiveTasksCount();
       } else {
-        alert("✅ Опубликовано");
+        result = await createDraft(payload);
+        if (window.Telegram?.WebApp) {
+          window.Telegram.WebApp.showAlert("💾 Сохранено черновиком");
+        } else {
+          alert("💾 Сохранено черновиком");
+        }
       }
-      useAuthStore.getState().updateActiveTasksCount();
-    } else {
-      result = await createDraft(payload);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("💾 Сохранено черновиком");
+
+      let newId = null;
+      if (asPublish) {
+        newId = result?.id || result?.task_id;
       } else {
-        alert("💾 Сохранено черновиком");
+        newId = result?.draft_id || result?.id;
       }
-    }
 
-    let newId = null;
-    if (asPublish) {
-      newId = result?.id || result?.task_id;
-    } else {
-      newId = result?.draft_id || result?.id;
-    }
+      if (newId === null || newId === undefined || newId <= 0) {
+        console.error("Ошибка: Некорректный ID из ответа", result);
+        throw new Error("Не удалось получить корректный ID созданной сущности из ответа сервера.");
+      }
 
-    if (newId === null || newId === undefined || newId <= 0) {
-      console.error("Ошибка: Некорректный ID из ответа", result);
-      throw new Error("Не удалось получить корректный ID созданной сущности из ответа сервера.");
+      setTaskId(newId);
+      onSaved && onSaved(newId);
+      onClose();
+    } catch (e) {
+      console.error("Ошибка при сохранении:", e);
+      const errorMsg = e.response?.data?.detail || e.message || "Ошибка при сохранении";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(errorMsg);
+      } else {
+        alert(errorMsg);
+      }
+    } finally {
+      setSaving(false);
     }
-
-    setTaskId(newId);
-    onSaved && onSaved(newId);
-    onClose();
-  } catch (e) {
-    console.error("Ошибка при сохранении:", e);
-    const errorMsg = e.response?.data?.detail || e.message || "Ошибка при сохранении";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(errorMsg);
-    } else {
-      alert(errorMsg);
-    }
-  } finally {
-    setSaving(false);
   }
-}
-
 
   function addEquipmentItem(equipmentId) {
     if (!equipmentId) return;
@@ -481,7 +358,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     }));
   }
 
-  
   function addWorkType(workTypeId) {
     if (!workTypeId) return;
     setForm((prevForm) => ({
@@ -502,7 +378,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     });
   }
 
-  
   function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [filteredEquipment, setFilteredEquipment] = useState(availableEquipment);
@@ -535,7 +410,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
     return (
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div className="searchable-select-container">
         <input
           type="text"
           value={searchTerm}
@@ -543,45 +418,15 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск оборудования..."
-          className="dark-select"
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            fontSize: '14px',
-            outline: 'none',
-          }}
+          className="searchable-select-input"
         />
         {isOpen && filteredEquipment.length > 0 && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
+          <ul className="searchable-select-dropdown">
             {filteredEquipment.map((eq) => (
               <li
                 key={eq.id}
                 onClick={() => handleItemClick(eq)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  color: '#e0e0e0',
-                  backgroundColor: '#2a2a2a',
-                  borderBottom: '1px solid #3a3a3a',
-                }}
+                className="searchable-select-option"
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {eq.name}
@@ -590,26 +435,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </ul>
         )}
         {isOpen && filteredEquipment.length === 0 && searchTerm.trim() !== '' && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+          <ul className="searchable-select-dropdown">
+            <li className="searchable-select-no-results">
               Ничего не найдено
             </li>
           </ul>
@@ -617,7 +444,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       </div>
     );
   }
-
 
   function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTypeIds }) {
     const [searchTerm, setSearchTerm] = useState("");
@@ -651,7 +477,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
     return (
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div className="searchable-select-container">
         <input
           type="text"
           value={searchTerm}
@@ -659,45 +485,15 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск вида работ..."
-          className="dark-select"
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            fontSize: '14px',
-            outline: 'none',
-          }}
+          className="searchable-select-input"
         />
         {isOpen && filteredWorkTypes.length > 0 && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
+          <ul className="searchable-select-dropdown">
             {filteredWorkTypes.map((wt) => (
               <li
                 key={wt.id}
                 onClick={() => handleItemClick(wt)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  color: '#e0e0e0',
-                  backgroundColor: '#2a2a2a',
-                  borderBottom: '1px solid #3a3a3a',
-                }}
+                className="searchable-select-option"
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {wt.name}
@@ -706,26 +502,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
           </ul>
         )}
         {isOpen && filteredWorkTypes.length === 0 && searchTerm.trim() !== '' && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+          <ul className="searchable-select-dropdown">
+            <li className="searchable-select-no-results">
               Ничего не найдено
             </li>
           </ul>
@@ -733,36 +511,26 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       </div>
     );
   }
+
   const assignmentTypeOptions = [
-  { value: "broadcast", display: "В эфир" },
-  { value: "individual", display: "Персональная" }
-];
+    { value: "broadcast", display: "В эфир" },
+    { value: "individual", display: "Персональная" }
+  ];
 
   if (!open) return null;
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-subtle)' }}>
-        <div className="modal-header" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-          <h2 style={{ color: 'white' }}>Добавить задачу</h2>
-          <button className="close" onClick={onClose} style={{ color: 'white', background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h2>Добавить задачу</h2>
+          <button className="close" onClick={onClose}>×</button>
         </div>
         
-        <div className="modal-body" style={{ color: 'white' }}>
-          <div
-  className="form-grid"
-  style={{
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-    width: '100%'
-  }}
->
-
-      
+        <div className="modal-body">
+          <div className="form-grid">
             <label className="dark-label">
               Компания
-           
               <SearchableCompanySelect
                 availableCompanies={companies}
                 onSelect={(companyId) => {
@@ -777,7 +545,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 }}
                 selectedCompanyId={form.company_id} 
               />
-             
               {form.company_id && (
                 <SelectedCompanyDisplay
                   company={companies.find(c => c.id === form.company_id)}
@@ -791,7 +558,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               )}
             </label>
 
-         
             <label className="dark-label">
               Контактное лицо
               <select
@@ -807,9 +573,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 }}
                 disabled={!form.company_id} 
                 className="dark-select"
-                style={{
-                  width: "100%",
-                }}
               >
                 <option value="">Выберите контактное лицо</option>
                 {contactPersons.map(cp => (
@@ -819,7 +582,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
             </label>
 
-            {/* Телефон контактного лица */}
             <label className="dark-label">
               Телефон контактного лица
               <input
@@ -828,10 +590,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 readOnly
                 placeholder="Выберите контактное лицо"
                 className="dark-select"
-                style={{
-                  width: "100%",
-                  cursor: "not-allowed",
-                }}
+                style={{ cursor: "not-allowed" }}
               />
               {form.contact_person_phone && (
                 <a
@@ -858,9 +617,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 value={form.vehicle_info}
                 onChange={(e) => setField("vehicle_info", e.target.value)}
                 className="dark-select"
-                style={{
-                  width: "100%",
-                }}
               />
             </label>
 
@@ -870,9 +626,6 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 value={form.gos_number || ""}
                 onChange={(e) => setField("gos_number", e.target.value)}
                 className="dark-select"
-                style={{
-                  width: "100%",
-                }}
               />
             </label>
 
@@ -883,85 +636,53 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 value={form.scheduled_at}
                 onChange={(e) => setField("scheduled_at", e.target.value)}
                 className="dark-select"
-                style={{
-                  width: "100%",
-                }}
               />
             </label>
 
             <label className="dark-label">
-                Место/адрес
-                <textarea
-                  value={form.location || ""}
-                  onChange={(e) => setField("location", e.target.value)}
-                  rows="3"
-                  className="dark-select"
-                  style={{
-                    width: "100%",
-                    resize: "vertical",        
-                    marginTop: "4px"
-                  }}
-                />
-              </label>
+              Место/адрес
+              <textarea
+                value={form.location || ""}
+                onChange={(e) => setField("location", e.target.value)}
+                rows="3"
+                className="dark-select"
+                style={{ resize: "vertical", marginTop: "4px" }}
+              />
+            </label>
 
-              <label className="dark-label">
-                Комментарий
-                <textarea
-                  value={form.comment || ""}
-                  onChange={(e) => setField("comment", e.target.value)}
-                  rows="3"
-                  className="dark-select"
-                  style={{
-                    width: "100%",
-                    resize: "vertical",       
-                    marginTop: "4px"
-                  }}
-                />
-              </label>
+            <label className="dark-label">
+              Комментарий
+              <textarea
+                value={form.comment || ""}
+                onChange={(e) => setField("comment", e.target.value)}
+                rows="3"
+                className="dark-select"
+                style={{ resize: "vertical", marginTop: "4px" }}
+              />
+            </label>
 
-            {/* Оборудование */}
             <label className="dark-label">Оборудование</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+            <div className="equipment-list-container">
               {form.equipment.map((item, index) => {
                 const eq = equipmentList.find((e) => e.id === item.equipment_id);
                 return (
-                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{
-                      flex: 1,
-                      padding: '8px',
-                      border: '1px solid #444',
-                      borderRadius: '4px',
-                      backgroundColor: '#2a2a2a',
-                      color: '#e0e0e0',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
+                  <div key={index} className="equipment-item-row">
+                    <div className="equipment-item-name">
                       {eq?.name || `ID ${item.equipment_id}`}
                     </div>
-                    <div style={{ flex: 1 }}>
+                    <div>
                       <input
                         type="text"
                         placeholder="Серийный номер"
                         value={item.serial_number || ""}
                         onChange={(e) => updateEquipmentItem(index, "serial_number", e.target.value)}
-                        className="dark-select"
-                        style={{
-                          width: '100%',
-                        }}
+                        className="equipment-item-serial"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={() => removeEquipmentItem(index)}
-                      style={{
-                        padding: '8px 12px',
-                        backgroundColor: '#cf6679',
-                        color: '#000',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                      }}
+                      className="equipment-item-remove"
                     >
                       ×
                     </button>
@@ -975,9 +696,8 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               selectedItems={form.equipment} 
             />
 
-            {/* Виды работ */}
             <label className="dark-label">Виды работ</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+            <div className="work-types-container">
               {(() => {
                 const counts = {};
                 form.work_types_ids.forEach(id => {
@@ -992,24 +712,9 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                   const wt = workTypesList.find((w) => w.id === id);
                   if (!wt) return null;
                   return (
-                    <div
-                      key={id}
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid #444",
-                        borderRadius: 12,
-                        backgroundColor: "#bb86fc", 
-                        color: "#000", 
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
+                    <div key={id} className="work-type-tag">
                       {wt.name} (x{count})
-                      <span
-                        style={{ cursor: "pointer", fontWeight: 'bold' }}
-                        onClick={() => removeWorkType(id)}
-                      >
+                      <span className="work-type-tag-remove" onClick={() => removeWorkType(id)}>
                         ×
                       </span>
                     </div>
@@ -1023,46 +728,38 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
               selectedWorkTypeIds={form.work_types_ids} 
             />
 
-              <label className="dark-label">
-          Тип назначения
-          <select
-            value={form.assignment_type}
-            onChange={(e) => setField("assignment_type", e.target.value)}
-            className="dark-select"
-            style={{
-              width: "100%",
-            }}
-          >
-            {assignmentTypeOptions.map(option => (
-              <option key={option.value} value={option.value}>
-                {option.display}
-              </option>
-            ))}
-          </select>
-        </label>
+            <label className="dark-label">
+              Тип назначения
+              <select
+                value={form.assignment_type}
+                onChange={(e) => setField("assignment_type", e.target.value)}
+                className="dark-select"
+              >
+                {assignmentTypeOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.display}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-            {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
-            {/* ✅ Поле "Назначить монтажника" отображается только если тип назначения "assigned" */}
             {form.assignment_type === "individual" && (
               <div>
                 <label className="dark-label">
                   Назначить монтажника
                 </label>
-                {/* --- Отображение выбранного монтажника --- */}
                 {form.assigned_user_id && (
-                  <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
-                    {/* ✅ Отображаем только имя и фамилию, без ID */}
+                  <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #30363d', borderRadius: '4px', backgroundColor: '#161b22', color: '#c9d1d9' }}>
                     Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || ''} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || ''}
                     <button
                       type="button"
                       onClick={() => setField("assigned_user_id", null)}
-                      style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                      style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                     >
                       ×
                     </button>
                   </div>
                 )}
-                {/* --- Выбор нового монтажника через SearchableSelect --- */}
                 <SearchableMontajnikSelect
                   availableMontajniks={montajniks}
                   onSelect={(userId) => setField("assigned_user_id", userId)}
@@ -1070,27 +767,14 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
                 />
               </div>
             )}
-
-          
           </div>
         </div>
 
-        <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+        <div className="modal-actions">
           <button 
             onClick={() => saveDraft(false)} 
             disabled={saving} 
-            style={{ 
-              padding: '8px 16px',
-              background: 'linear-gradient(to right, #10b981, #2563eb)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: '600',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
+            className="gradient-button"
           >
             {saving ? 'Сохранение...' : '💾 Сохранить как черновик'}
           </button>
@@ -1098,18 +782,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
             <button 
               onClick={() => saveDraft(true)} 
               disabled={saving} 
-              style={{ 
-                padding: '8px 16px',
-                background: 'linear-gradient(to right, #10b981, #2563eb)', // Зелено-синий градиент
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}
+              className="gradient-button"
             >
               {saving ? 'Публикация...' : '📤 Опубликовать'}
             </button>

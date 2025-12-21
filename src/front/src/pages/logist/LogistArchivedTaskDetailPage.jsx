@@ -1,26 +1,23 @@
 // front/src/pages/logist/LogistArchivedTaskDetailPage.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-// ✅ Импортируем новый API метод для получения архивной задачи
 import { fetchLogistArchivedTaskDetail, getEquipmentList, getWorkTypes } from "../../api";
 import "../../styles/LogistPage.css";
 
 export default function LogistArchivedTaskDetailPage() {
-  const { id } = useParams(); // ID задачи из URL
+  const { id } = useParams();
   const navigate = useNavigate();
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  // --- Состояния для справочников ---
   const [equipmentList, setEquipmentList] = useState([]);
   const [workTypesList, setWorkTypesList] = useState([]);
 
   useEffect(() => {
-    loadRefs(); // Загружаем справочники
+    loadRefs();
     loadTask();
   }, [id]);
 
-  // --- Функция: Загрузка справочников ---
   async function loadRefs() {
     try {
       const [eqRes, wtRes] = await Promise.allSettled([
@@ -35,49 +32,43 @@ export default function LogistArchivedTaskDetailPage() {
   }
 
   const STATUS_TRANSLATIONS = {
-  new: "Создана",
-  accepted: "Принята монтажником",
-  on_the_road: "Выехал на работу",
-  started: "В процессе выполнения",
-  on_site: "Прибыл на место",
-  completed: "Завершена",
-  inspection: "На проверке",
-  returned: "Возвращена на доработку",
-  archived: "В архиве",
-  assigned: "Назначена",
-};
+    new: "Создана",
+    accepted: "Принята монтажником",
+    on_the_road: "Выехал на работу",
+    started: "В процессе выполнения",
+    on_site: "Прибыл на место",
+    completed: "Завершена",
+    inspection: "На проверке",
+    returned: "Возвращена на доработку",
+    archived: "В архиве",
+    assigned: "Назначена",
+  };
 
-// --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
-function getStatusDisplayName(statusKey) {
-  return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
-}
+  function getStatusDisplayName(statusKey) {
+    return STATUS_TRANSLATIONS[statusKey] || statusKey || "—";
+  }
 
-const REPORT_APPROVAL_TRANSLATIONS = {
-  waiting: "Проверяется",
-  approved: "Принято",
-  rejected: "Отклонено",
-};
+  const REPORT_APPROVAL_TRANSLATIONS = {
+    waiting: "Проверяется",
+    approved: "Принято",
+    rejected: "Отклонено",
+  };
 
   function getReportApprovalDisplayName(approvalKey) {
-  return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
-}
-
-
-
+    return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
+  }
 
   async function loadTask() {
     setLoading(true);
     setError(null);
     try {
-      // ✅ Вызываем новый API метод для получения архивной задачи
       const data = await fetchLogistArchivedTaskDetail(id);
       setTask(data);
     } catch (err) {
       console.error("Ошибка загрузки архивной задачи логиста:", err);
       setError(err.response?.data?.detail || err.message || "Ошибка загрузки задачи");
       if (err.response?.status === 403 || err.response?.status === 404) {
-        // Перенаправляем на профиль или список архивных задач, если доступа нет или задача не найдена
-        navigate("/logist/profile"); // или navigate("/logist/tasks/archived");
+        navigate("/logist/profile");
       }
     } finally {
       setLoading(false);
@@ -88,7 +79,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
   if (!task) return <div className="logist-main"><div className="empty">Задача не найдена</div></div>;
 
-  // --- Функции для получения имён по ID ---
   const getEquipmentNameById = (eqId) => {
     const eq = equipmentList.find(e => e.id === eqId);
     return eq ? eq.name : `ID ${eqId}`;
@@ -104,7 +94,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
       <div className="page">
         <div className="page-header">
           <h1>Архивная задача #{task.id}</h1>
-          <button className="add-btn" onClick={() => navigate(-1)}> {/* Кнопка "Назад" */}
+          <button className="gradient-button" onClick={() => navigate(-1)}>
             ⬅️ Назад
           </button>
         </div>
@@ -119,47 +109,42 @@ const REPORT_APPROVAL_TRANSLATIONS = {
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
             <p><b>Статус:</b> {getStatusDisplayName(task.status)}</p>
             <p>
-                <b>Место/Адрес:</b>{" "}
-                {task.location ? (
-                  <a
-                    href={`https://2gis.ru/search/  ${encodeURIComponent(task.location)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      color: '#1e88e5',
-                      textDecoration: 'none',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {task.location}
-                  </a>
-                ) : "—"}
-              </p>
-            {/* ✅ Отображаем имя монтажника, если оно есть, иначе ID */}
+              <b>Место/Адрес:</b>{" "}
+              {task.location ? (
+                <a
+                  href={`https://2gis.ru/search/${encodeURIComponent(task.location)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: '#1e88e5',
+                    textDecoration: 'none',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {task.location}
+                </a>
+              ) : "—"}
+            </p>
             <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
             <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>
 
-            {/* === Оборудование (с именами) === */}
             <p>
               <b>Оборудование:</b>{" "}
               {(task.equipment || [])
                 .map((e) => {
                   const eqName = getEquipmentNameById(e.equipment_id);
-                  // ✅ Отображаем serial_number и quantity
                   return `${eqName} x${e.quantity} (СН: ${e.serial_number || 'N/A'})`;
                 })
                 .join(", ") || "—"}
             </p>
 
-            {/* === Виды работ (с именами и количеством) === */}
             <p>
               <b>Виды работ:</b>{" "}
               {(task.work_types || [])
                 .map((wt) => {
                   const wtName = getWorkTypeNameById(wt.work_type_id);
-                  // ✅ Отображаем quantity из объекта work_type
                   return `${wtName} x${wt.quantity}`;
                 })
                 .join(", ") || "—"}
@@ -167,15 +152,12 @@ const REPORT_APPROVAL_TRANSLATIONS = {
 
             <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
 
-            {/* === История (кнопка) === */}
             <div className="section">
               <h3>История</h3>
-              {/* Кнопка "Подробнее" теперь ведёт на отдельную страницу истории */}
-              <button className="add-btn" onClick={() => navigate(`/logist/tasks/${task.id}/history`)}>
+              <button className="gradient-button" onClick={() => navigate(`/logist/tasks/${task.id}/history`)}>
                 Подробнее
               </button>
             </div>
-
           </div>
         </div>
       </div>

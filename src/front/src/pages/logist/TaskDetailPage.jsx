@@ -9,7 +9,7 @@ import {
   getWorkTypes,
   getCompaniesList,
   getContactPersonsByCompany,
-  getContactPersonPhone, // <--- Импорт
+  getContactPersonPhone,
   getActiveMontajniks,
   archiveTask,
   listReportAttachments,
@@ -17,8 +17,7 @@ import {
 } from "../../api";
 import "../../styles/LogistPage.css";
 import useAuthStore from "@/store/useAuthStore";
-import ImageModal  from "../../components/ImageModal"; // <--- Импортируем компонент
-
+import ImageModal from "../../components/ImageModal";
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -50,73 +49,71 @@ function useReportAttachments(reportId) {
   return { attachments, loading, error };
 }
 
-
 function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
   const [comment, setComment] = useState("");
 
- const handleSubmit = async () => {
-  if (!comment.trim()) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Введите комментарий причины отклонения");
-    } else {
-      alert("Введите комментарий причины отклонения");
+  const handleSubmit = async () => {
+    if (!comment.trim()) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Введите комментарий причины отклонения");
+      } else {
+        alert("Введите комментарий причины отклонения");
+      }
+      return;
     }
-    return;
-  }
-  try {
-    await reviewReport(taskId, reportId, { approval: "rejected", comment, photos: [] });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("❌ Отчёт отклонён");
-    } else {
-      alert("❌ Отчёт отклонён");
+    try {
+      await reviewReport(taskId, reportId, { approval: "rejected", comment, photos: [] });
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("❌ Отчёт отклонён");
+      } else {
+        alert("❌ Отчёт отклонён");
+      }
+      onSubmitSuccess && onSubmitSuccess();
+      onClose();
+    } catch (err) {
+      console.error("Ошибка отклонения отчёта:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось отклонить отчёт.";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+      } else {
+        alert(`Ошибка: ${errorMsg}`);
+      }
+    } finally {
+      // setSubmitting(false);
     }
-    onSubmitSuccess && onSubmitSuccess();
-    onClose();
-  } catch (err) {
-    console.error("Ошибка отклонения отчёта:", err);
-    const errorMsg = err.response?.data?.detail || "Не удалось отклонить отчёт.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
-    }
-  } finally {
-    // setSubmitting(false);
-  }
-};
+  };
 
-  return (
-    <div className="modal-backdrop">
-      <div className="modal" style={{ maxWidth: '500px' }}>
+return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: '500px' }} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Отклонить отчёт #{reportId} по задаче #{taskId}</h2>
           <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
           <div className="form-grid">
-            <label>
+            <label className="dark-label">
               Комментарий:
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows="4"
                 placeholder="Причина отклонения..."
+                className="dark-select"
+                style={{ width: '100%', resize: 'vertical', marginTop: '12px' }}
               />
             </label>
           </div>
         </div>
         <div className="modal-actions">
-          {/* ❌ Убираем состояние submitting из кнопки */}
-          <button className="primary" onClick={handleSubmit} /*disabled={submitting}*/>
+          <button className="gradient-button" onClick={handleSubmit}>
             Отправить
           </button>
-          <button onClick={onClose}>Отмена</button>
         </div>
       </div>
     </div>
   );
 }
-
 
 function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompanyId }) {
     const [searchTerm, setSearchTerm] = useState("");
@@ -151,7 +148,7 @@ function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompany
     const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
     return (
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div className="searchable-select-container">
         <input
           type="text"
           value={searchTerm}
@@ -159,47 +156,15 @@ function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompany
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск компании..."
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            border: '1px solid #444',
-            borderRadius: '4px',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
-            fontSize: '14px',
-          }}
+          className="searchable-select-input"
         />
         {isOpen && filteredCompanies.length > 0 && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
+          <ul className="searchable-select-dropdown">
             {filteredCompanies.map((c) => (
               <li
                 key={c.id}
                 onClick={() => handleItemClick(c)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  color: '#e0e0e0',
-                  backgroundColor: '#2a2a2a',
-                  borderBottom: '1px solid #3a3a3a',
-                }}
+                className="searchable-select-option"
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {c.name}
@@ -208,26 +173,8 @@ function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompany
           </ul>
         )}
         {isOpen && filteredCompanies.length === 0 && searchTerm.trim() !== '' && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+          <ul className="searchable-select-dropdown">
+            <li className="searchable-select-no-results">
               Ничего не найдено
             </li>
           </ul>
@@ -236,43 +183,22 @@ function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompany
     );
   }
 
-
   function SelectedCompanyDisplay({ company, onRemove }) {
     if (!company) return null;
 
     return (
-      <div style={{
-        padding: '6px 10px',
-        border: '1px solid #444',
-        borderRadius: '4px',
-        backgroundColor: '#2a2a2a',
-        color: '#e0e0e0',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '8px',
-      }}>
+      <div className="selected-company-display">
         <span>{company.name}</span>
         <button
           type="button"
           onClick={onRemove}
-          style={{
-            padding: '2px 6px',
-            backgroundColor: '#cf6679',
-            color: '#000',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '1em',
-          }}
+          className="selected-company-remove"
         >
           ×
         </button>
       </div>
     );
   }
-
-  
 
 // --- КОМПОНЕНТ: Умный поиск для оборудования ---
 function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
@@ -308,7 +234,7 @@ function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems
   const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div className="searchable-select-container">
       <input
         type="text"
         value={searchTerm}
@@ -316,47 +242,15 @@ function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems
         onFocus={handleInputFocus}
         onBlur={handleInputBlur}
         placeholder="🔍 Поиск оборудования..."
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          backgroundColor: '#1a1a1a',
-          color: '#e0e0e0',
-          fontSize: '14px',
-        }}
+        className="searchable-select-input"
       />
       {isOpen && filteredEquipment.length > 0 && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
+        <ul className="searchable-select-dropdown">
           {filteredEquipment.map((eq) => (
             <li
               key={eq.id}
               onClick={() => handleItemClick(eq)}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                color: '#e0e0e0',
-                backgroundColor: '#2a2a2a',
-                borderBottom: '1px solid #3a3a3a',
-              }}
+              className="searchable-select-option"
               onMouseDown={(e) => e.preventDefault()}
             >
               {eq.name}
@@ -365,26 +259,8 @@ function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems
         </ul>
       )}
       {isOpen && filteredEquipment.length === 0 && searchTerm.trim() !== '' && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+        <ul className="searchable-select-dropdown">
+          <li className="searchable-select-no-results">
             Ничего не найдено
           </li>
         </ul>
@@ -426,7 +302,7 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
   const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div className="searchable-select-container">
       <input
         type="text"
         value={searchTerm}
@@ -434,47 +310,15 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         onFocus={handleInputFocus}
         onBlur={handleInputBlur}
         placeholder="🔍 Поиск вида работ..."
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          backgroundColor: '#1a1a1a',
-          color: '#e0e0e0',
-          fontSize: '14px',
-        }}
+        className="searchable-select-input"
       />
       {isOpen && filteredWorkTypes.length > 0 && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
+        <ul className="searchable-select-dropdown">
           {filteredWorkTypes.map((wt) => (
             <li
               key={wt.id}
               onClick={() => handleItemClick(wt)}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                color: '#e0e0e0',
-                backgroundColor: '#2a2a2a',
-                borderBottom: '1px solid #3a3a3a',
-              }}
+              className="searchable-select-option"
               onMouseDown={(e) => e.preventDefault()}
             >
               {wt.name}
@@ -483,26 +327,8 @@ function SearchableWorkTypeSelect({ availableWorkTypes, onSelect, selectedWorkTy
         </ul>
       )}
       {isOpen && filteredWorkTypes.length === 0 && searchTerm.trim() !== '' && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+        <ul className="searchable-select-dropdown">
+          <li className="searchable-select-no-results">
             Ничего не найдено
           </li>
         </ul>
@@ -529,7 +355,6 @@ export default function TaskDetailPage() {
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
   const [openImage, setOpenImage] = useState(null);
 
-
   useEffect(() => {
     loadRefs();
     loadTask();
@@ -546,7 +371,6 @@ export default function TaskDetailPage() {
       console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
     }
   };
-
 
 async function handleArchiveTask() {
   if (!task || task.is_draft) {
@@ -625,7 +449,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
         getCompaniesList(),
         getActiveMontajniks(),
       ]);
-
       setEquipmentList(eqRes.status === 'fulfilled' ? eqRes.value || [] : []);
       setWorkTypesList(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
       setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
@@ -639,14 +462,12 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     setLoading(true);
     try {
       const data = await fetchTaskDetail(id);
-
       // --- Обработка equipment и work_types ---
       const processedEquipment = (data.equipment || []).map(e => ({
         equipment_id: e.equipment_id,
         serial_number: e.serial_number || "",
         quantity: e.quantity || 1,
       }));
-
       const processedWorkTypesForView = (data.work_types || []).map(wt => ({
         work_type_id: wt.work_type_id,
         quantity: wt.quantity
@@ -659,22 +480,18 @@ const REPORT_APPROVAL_TRANSLATIONS = {
         history: data.history || [],
         reports: data.reports || [],
       };
-
       setTask(t);
-
       // --- ИНИЦИАЛИЗАЦИЯ form ДЛЯ РЕДАКТИРОВАНИЯ ---
       const formEquipment = t.equipment.map(e => ({
         equipment_id: e.equipment_id,
         serial_number: e.serial_number,
       }));
-
       const formWorkTypesIds = [];
       processedWorkTypesForView.forEach(item => {
         for (let i = 0; i < item.quantity; i++) {
           formWorkTypesIds.push(item.work_type_id);
         }
       });
-
       const initialForm = {
         ...t,
         equipment: formEquipment,
@@ -684,9 +501,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
         assigned_user_id: t.assigned_user_id || null,
         photo_required: true,
       };
-
       setForm(initialForm);
-
       // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
       if (t.contact_person_id && !t.contact_person_phone) {
          try {
@@ -699,7 +514,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
       } else {
         setContactPersonPhone(t.contact_person_phone || null);
       }
-
       // --- ЗАГРУЗКА КОНТАКТНЫХ ЛИЦ ДЛЯ КОМПАНИИ ЗАДАЧИ ---
       if (initialForm.company_id) {
         try {
@@ -726,14 +540,11 @@ const REPORT_APPROVAL_TRANSLATIONS = {
       } else {
         setContactPersons([]);
       }
-
       if (t.reports) {
         t.reports.forEach(r => {
           loadReportAttachments(r.id);
         });
       }
-
-      
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
       alert("Ошибка загрузки задачи");
@@ -742,8 +553,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     }
   }
 
-
-
   const handleImageClick = (imageUrl) => {
     setOpenImage(imageUrl);
   };
@@ -751,7 +560,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
   const closeModal = () => {
     setOpenImage(null);
   };
-
 
   function setField(k, v) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -831,7 +639,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     }
   }
 
-
    function setAssignedUser(userId) {
     setField("assigned_user_id", userId);
   }
@@ -870,7 +677,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
     return (
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div className="searchable-select-container">
         <input
           type="text"
           value={searchTerm}
@@ -878,47 +685,15 @@ const REPORT_APPROVAL_TRANSLATIONS = {
           onFocus={handleInputFocus}
           onBlur={handleInputBlur}
           placeholder="🔍 Поиск монтажника (имя, фамилия, ID)..."
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            border: '1px solid #444',
-            borderRadius: '4px',
-            backgroundColor: '#1a1a1a',
-            color: '#e0e0e0',
-            fontSize: '14px',
-          }}
+          className="searchable-select-input"
         />
         {isOpen && filteredMontajniks.length > 0 && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
+          <ul className="searchable-select-dropdown">
             {filteredMontajniks.map((m) => (
               <li
                 key={m.id}
                 onClick={() => handleItemClick(m)}
-                style={{
-                  padding: '8px 12px',
-                  cursor: 'pointer',
-                  color: '#e0e0e0',
-                  backgroundColor: '#2a2a2a',
-                  borderBottom: '1px solid #3a3a3a',
-                }}
+                className="searchable-select-option"
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {m.name} {m.lastname} (ID: {m.id})
@@ -927,26 +702,8 @@ const REPORT_APPROVAL_TRANSLATIONS = {
           </ul>
         )}
         {isOpen && filteredMontajniks.length === 0 && searchTerm.trim() !== '' && (
-          <ul
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              right: 0,
-              zIndex: 100,
-              maxHeight: '200px',
-              overflowY: 'auto',
-              listStyle: 'none',
-              margin: 0,
-              padding: 0,
-              backgroundColor: '#1a1a1a',
-              border: '1px solid #444',
-              borderTop: 'none',
-              borderRadius: '0 0 4px 4px',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-            }}
-          >
-            <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+          <ul className="searchable-select-dropdown">
+            <li className="searchable-select-no-results">
               Ничего не найдено
             </li>
           </ul>
@@ -1099,7 +856,6 @@ async function handleApproveReport(taskId, reportId) {
     );
   }
 
-
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (!task) return <div className="logist-main"><div className="empty">Задача не найдена</div></div>;
 
@@ -1107,39 +863,56 @@ async function handleApproveReport(taskId, reportId) {
   { value: "broadcast", display: "В эфир" },
   { value: "individual", display: "Персональная" }
 ];
+
   return (
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Задача #{task.id}</h1>
-          {!edit ? (
-            <>
-              <button className="add-btn" onClick={() => setEdit(true)}>
-                ✏️ Редактировать
-              </button>
-              {task.status !== "archived" && !task.is_draft && ( // <--- Условный рендер: не архивирована и не черновик
-                <button className="add-btn" style={{ backgroundColor: '#ff9800' }} onClick={handleArchiveTask}> {/* <--- Стиль и обработчик */}
-                  🗃 Архивировать
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <button type="button" className="add-btn" onClick={saveEdit}>
-                💾 Сохранить
-              </button>
-              <button type="button" className="add-btn" onClick={() => setEdit(false)}>
-                ❌ Отмена
-              </button>
-            </>
-          )}
-        </div>
-
+  <h1>Задача #{task.id}</h1>
+  {!edit ? (
+    <div style={{ display: 'flex', gap: '10px' }}>
+      <button className="gradient-button" onClick={() => setEdit(true)}>
+        ✏️ Редактировать
+      </button>
+      {task.status !== "archived" && !task.is_draft && (
+        <button 
+  className="gradient-button" 
+  style={{ 
+    background: 'linear-gradient(to right, #2563eb, #10b981)', // Сине-зелёный градиент
+    backgroundImage: 'linear-gradient(to right, #2563eb, #10b981)' // Перезаписываем фон из CSS
+  }} 
+  onClick={handleArchiveTask}
+>
+  🗃 Архивировать
+</button>
+      )}
+    </div>
+  ) : (
+    <div style={{ display: 'flex', gap: '10px' }}>
+  <button
+    type="button"
+    className="gradient-button"
+    onClick={saveEdit}
+    style={{ width: 'auto' }}
+  >
+    💾 Сохранить
+  </button>
+  <button
+    type="button"
+    className="gradient-button"
+    onClick={() => setEdit(false)}
+    style={{ width: 'auto', backgroundColor: '#6c757d' }}
+  >
+    ❌ Отмена
+  </button>
+</div>
+  )}
+</div>
         <div className="task-detail">
           {edit ? (
             <div className="form-grid">
               {/* ===== Компания ===== */}
-              <label>
+              <label className="dark-label">
           Компания
           {/* --- 1. Поле поиска --- */}
           <SearchableCompanySelect
@@ -1169,9 +942,8 @@ async function handleApproveReport(taskId, reportId) {
             />
           )}
         </label>
-
         {/* --- Контактное лицо --- */}
-        <label>
+        <label className="dark-label">
           Контактное лицо
           <select
             value={form.contact_person_id || ""}
@@ -1185,14 +957,7 @@ async function handleApproveReport(taskId, reportId) {
               }
             }}
             disabled={!form.company_id} // Отключаем, если не выбрана компания
-            style={{
-              width: "100%",
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              backgroundColor: "#1a1a1a",
-              color: "#e0e0e0",
-            }}
+            className="dark-select"
           >
             <option value="">Выберите контактное лицо</option>
             {contactPersons.map(cp => (
@@ -1201,24 +966,16 @@ async function handleApproveReport(taskId, reportId) {
           </select>
           {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
         </label>
-
               {/* ===== ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
-              <label>
+              <label className="dark-label">
                 Телефон контактного лица:
                 <input
                   type="text"
                   value={form.contact_person_phone || ""}
                   readOnly
                   placeholder="Выберите контактное лицо"
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#2a2a2a",
-                    color: "#b0b0b0",
-                    cursor: "not-allowed",
-                  }}
+                  className="dark-select"
+                  style={{ cursor: "not-allowed" }}
                 />
                 {form.contact_person_phone && (
                   <a
@@ -1238,122 +995,79 @@ async function handleApproveReport(taskId, reportId) {
                   </a>
                 )}
               </label>
-
-              <label>
+              <label className="dark-label">
                 ТС 
                 <input
                   value={form.vehicle_info || ""}
                   onChange={(e) => setField("vehicle_info", e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}
+                  className="dark-select"
                 />
               </label>
-
-              <label>
+              <label className="dark-label">
                 Гос. номер
                 <input
                   value={form.gos_number || ""}
                   onChange={(e) => setField("gos_number", e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}
+                  className="dark-select"
                 />
               </label>
-
-              <label>
+              <label className="dark-label">
                 Дата и время
                 <input
                   type="datetime-local"
                   value={form.scheduled_at ? new Date(form.scheduled_at).toISOString().slice(0, 16) : ""}
                   onChange={(e) => setField("scheduled_at", e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}
+                  className="dark-select"
                 />
               </label>
-                      <label style={{ display: "block", marginTop: "12px", color: "#e0e0e0" }}>
+                      <label className="dark-label">
             Место/адрес
             <textarea
               value={form.location || ""}
               onChange={(e) => setField("location", e.target.value)}
               rows="3"
-              style={{
-                width: "100%",
-                resize: "vertical",        // <-- только вертикальное растягивание
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-                marginTop: "4px"
-              }}
+              className="dark-select"
+              style={{ resize: "vertical", marginTop: "4px" }}
             />
           </label>
-
-          <label style={{ display: "block", marginTop: "12px", color: "#e0e0e0" }}>
+          <label className="dark-label">
             Комментарий
             <textarea
               value={form.comment || ""}
               onChange={(e) => setField("comment", e.target.value)}
               rows="3"
-              style={{
-                width: "100%",
-                resize: "vertical",        // <-- только вниз тянуть
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-                marginTop: "4px"
-              }}
+              className="dark-select"
+              style={{ resize: "vertical", marginTop: "4px" }}
             />
           </label>
               {/* Цены — только для отображения, не редактируются */}
-              
-
               {/* ===== Оборудование (редактирование с умным поиском) ===== */}
-              <label>Оборудование</label>
+              <label className="dark-label">Оборудование</label>
               {/* --- Список выбранных элементов (название - поле серийного номера) --- */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+              <div className="equipment-list-container">
                 {(form.equipment || []).map((item, index) => {
                   const eq = equipmentList.find((e) => e.id === item.equipment_id);
                   return (
-                    <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div key={index} className="equipment-item-row">
                       {/* Название оборудования */}
-                      <div style={{ flex: 1, padding: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                      <div className="equipment-item-name">
                         {eq?.name || `ID ${item.equipment_id}`}
                       </div>
                       {/* Поле ввода серийного номера */}
-                      <div style={{ flex: 1 }}>
+                      <div>
                         <input
                           type="text"
                           placeholder="Серийный номер"
                           value={item.serial_number || ""}
                           onChange={(e) => updateEquipmentItemInForm(index, "serial_number", e.target.value)}
-                          style={{ width: '100%', padding: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#1a1a1a', color: '#e0e0e0' }}
+                          className="equipment-item-serial"
                         />
                       </div>
                       {/* Кнопка удаления (удаляет конкретную строку/единицу) */}
                       <button
                         type="button"
                         onClick={() => removeEquipmentItemFromForm(index)}
-                        style={{ padding: '8px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        className="equipment-item-remove"
                       >
                         ×
                       </button>
@@ -1367,11 +1081,10 @@ async function handleApproveReport(taskId, reportId) {
                 onSelect={addEquipmentItemToForm}
                 selectedItems={form.equipment} // Не используется в фильтрации, т.к. разрешено дублирование
               />
-
               {/* ===== Виды работ (редактирование с умным поиском) ===== */}
-              <label>Виды работ</label>
+              <label className="dark-label">Виды работ</label>
               {/* --- Отображение выбранных типов работ с количеством --- */}
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+              <div className="work-types-container">
                 {(() => {
                   const counts = {};
                   (form.work_types_ids || []).forEach(id => {
@@ -1381,27 +1094,17 @@ async function handleApproveReport(taskId, reportId) {
                     id: parseInt(id, 10),
                     count,
                   }));
-
                   return uniqueWorkTypesWithCounts.map(({ id, count }) => {
                     const wt = workTypesList.find((w) => w.id === id);
                     if (!wt) return null;
                     return (
                       <div
                         key={id}
-                        style={{
-                          padding: "4px 8px",
-                          border: "1px solid #444",
-                          borderRadius: 12,
-                          backgroundColor: "#bb86fc", // Цвет для работы
-                          color: "#000", // Темный текст на светлом фоне
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
+                        className="work-type-tag"
                       >
                         {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
                         <span
-                          style={{ cursor: "pointer", fontWeight: 'bold' }}
+                          className="work-type-tag-remove"
                           onClick={() => removeWorkTypeItemFromForm(id)}
                         >
                           ×
@@ -1417,8 +1120,7 @@ async function handleApproveReport(taskId, reportId) {
                 onSelect={addWorkTypeItemToForm}
                 selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, т.к. разрешено дублирование
               />
-
-               <label>
+               <label className="dark-label">
                 Тип назначения
                 <select
                   value={form.assignment_type || ""}
@@ -1429,14 +1131,7 @@ async function handleApproveReport(taskId, reportId) {
                         setField("assigned_user_id", null);
                     }
                   }}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: "4px",
-                    border: "1px solid #444",
-                    backgroundColor: "#1a1a1a",
-                    color: "#e0e0e0",
-                  }}
+                  className="dark-select"
                 >
                   {assignmentTypeOptions.map(option => (
                     <option key={option.value} value={option.value}>
@@ -1445,24 +1140,23 @@ async function handleApproveReport(taskId, reportId) {
                   ))}
                 </select>
               </label>
-
               {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
               {/* ✅ Поле "Назначить монтажника" отображается только если тип "assigned" */}
               {form.assignment_type === "individual" && (
                 <div>
-                  <label>
+                  <label className="dark-label">
                     Назначить монтажника
                   </label>
                   {/* --- Отображение выбранного монтажника --- */}
                   {form.assigned_user_id && (
-                    <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2a2a2a', color: '#e0e0e0' }}>
+                    <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #30363d', borderRadius: '4px', backgroundColor: '#161b22', color: '#c9d1d9' }}>
                       {/* ✅ Отображаем имя и фамилию монтажника */}
                       Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || 'ID:'} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || form.assigned_user_id}
                       <button
                         type="button"
                         // ✅ ИСПРАВЛЕНО: вызываем новую функцию
                         onClick={clearAssignedUserAndSetBroadcast}
-                        style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#cf6679', color: '#000', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                       >
                         ×
                       </button>
@@ -1483,7 +1177,6 @@ async function handleApproveReport(taskId, reportId) {
                   />
                 </div>
               )}
-
             </div>
           ) : (
             <div className="task-view">
@@ -1498,7 +1191,6 @@ async function handleApproveReport(taskId, reportId) {
       onClick={() => {
         const phone = contactPersonPhone || task.contact_person_phone;
         const telUrl = `tel:${phone}`;
-
         // Если внутри Telegram Mini App
         if (window.Telegram?.WebApp) {
           // Попробуем открыть в внешнем браузере
@@ -1556,35 +1248,26 @@ async function handleApproveReport(taskId, reportId) {
                   })
                   .join(", ") || "—"}
               </p>
-
               {/* ===== ИЗМЕНЁННОЕ ОТОБРАЖЕНИЕ ВИДОВ РАБОТ ===== */}
-              <p>
-                <b>Виды работ:</b>{" "}
-                {task.work_types && task.work_types.length > 0 ? (
-                  task.work_types.map(wt => {
+              <p><b>Виды работ:</b> {task.work_types && task.work_types.length > 0 ? task.work_types.map(wt => {
                     const wtObj = workTypesList.find(w => w.id === wt.work_type_id);
                     const name = wtObj?.name || wt.work_type_id;
                     const count = wt.quantity || 1;
                     return `${name} (x${count})`;
-                  }).join(", ")
-                ) : "—"}
-              </p>
+                  }).join(", ") : "—"}</p>
               <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
             </div>
           )}
-
           {/* === БЛОК ИСТОРИИ === */}
           {!edit && (
             <>
               <div className="section">
                 <h3>История</h3>
-                <button type="button" className="add-btn" onClick={() => navigate(`/logist/tasks/${id}/history`)}>
-                  Подробнее
-                </button>
+                <button type="button" className="gradient-button" onClick={() => navigate(`/logist/tasks/${id}/history`)}>
+    Подробнее
+  </button>
               </div>
-
               <div className="section">
-
             <h3>Отчёты монтажников</h3>
             {(task.reports || []).length ? (
               task.reports.map((r) => {
@@ -1592,21 +1275,19 @@ async function handleApproveReport(taskId, reportId) {
                 let performedWorks = "";
                 let comment = "";
                 if (r.text) {
-                  const lines = r.text.split("\n\n");
+                  const lines = r.text.split("\n");
                   if (lines[0].startsWith("Выполнено: ")) {
                     performedWorks = lines[0].substring("Выполнено: ".length);
                   }
                   if (lines.length > 1) {
-                    comment = lines.slice(1).join("\n\n");
+                    comment = lines.slice(1).join("\n");
                   } else if (!r.text.startsWith("Выполнено: ")) {
                     comment = r.text;
                   }
                 }
-
                 // --- ИЗМЕНЕНО: Получение вложений из reportAttachmentsMap ---
                 const reportAttachments = reportAttachmentsMap[r.id] || [];
                 const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
-
                 return (
                   <div key={r.id} className="report">
                     {/* #37: Выполнено: {типы работ} */}
@@ -1627,9 +1308,7 @@ async function handleApproveReport(taskId, reportId) {
                           const thumbUrl = att.thumb_key
                             ? getAttachmentUrl(att.thumb_key)
                             : originalUrl;
-
                            return (
-              
                               <div
                                 key={att.id}
                                 style={{ cursor: 'zoom-in' }} // Меняем курсор
@@ -1659,24 +1338,28 @@ async function handleApproveReport(taskId, reportId) {
                     {r.review_comment && (
                       <p><b>Комментарий отклонения:</b> <span style={{ color: "red" }}>{r.review_comment}</span></p>
                     )}
-                    <div className="report-actions">
-                      {r.approval_logist === "waiting" ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleApproveReport(task.id, r.id)}
-                          >
-                            ✅ Принять
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRejectReport(task.id, r.id)}
-                          >
-                            ❌ Отклонить
-                          </button>
-                        </>
-                      ) : null}
-                    </div>
+        <div className="report-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start' }}>
+  {r.approval_logist === "waiting" ? (
+    <>
+      <button
+        type="button"
+        onClick={() => handleApproveReport(task.id, r.id)}
+        className="gradient-button"
+        style={{ width: 'auto' }}
+      >
+        ✅ Принять
+      </button>
+      <button
+        type="button"
+        onClick={() => handleRejectReport(task.id, r.id)}
+        className="gradient-button"
+        style={{ width: 'auto', backgroundColor: '#ef4444' }}
+      >
+        ❌ Отклонить
+      </button>
+    </>
+  ) : null}
+</div>
                   </div>
                 );
               })
@@ -1684,20 +1367,16 @@ async function handleApproveReport(taskId, reportId) {
               <div className="empty">Отчётов пока нет</div>
             )}
 </div>
-
             </>
           )}
         </div>
       </div>
-
       <ImageModal
         isOpen={!!openImage} // Передаём true/false
         onClose={closeModal}
         imageUrl={openImage} // Передаём URL изображения
         altText="Вложение отчёта" // Опционально: текст по умолчанию
       />
-      
-
       {rejectModal.open && (
         <RejectReportModal
           taskId={rejectModal.taskId}

@@ -5,7 +5,6 @@ import {
   fetchTechTaskFullHistory,
   getTechCompaniesList,
   getTechContactPersonsByCompany,
-  getTechContactPersonPhone,
 } from "../../api";
 import "../../styles/LogistPage.css";
 
@@ -62,8 +61,6 @@ export default function TechTaskHistoryPage() {
     return STATUS_TRANSLATIONS[statusKey] || statusKey || "—";
   }
 
-  
-
   function getCompanyNameById(companyId) {
     if (!companyId) return "—";
     const company = companies.find((c) => c.id === companyId);
@@ -95,7 +92,6 @@ export default function TechTaskHistoryPage() {
     [contactPersonsCache]
   );
 
-  
   if (loading) return <div className="logist-main"><div className="empty">Загрузка истории задачи #{id}...</div></div>;
   if (!history.length) return <div className="logist-main"><div className="empty">История задачи #{id} пуста</div></div>;
 
@@ -103,10 +99,12 @@ export default function TechTaskHistoryPage() {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>История задачи #{id}</h1>
-          <button className="add-btn" onClick={() => navigate(-1)}>
-            ⬅️ Назад
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <h1>История задачи #{id}</h1>
+            <button className="gradient-button" onClick={() => navigate(-1)}>
+              ⬅️ Назад
+            </button>
+          </div>
         </div>
 
         <div className="history-list">
@@ -135,8 +133,8 @@ export default function TechTaskHistoryPage() {
               return (
                 <li key={h.id} style={{ 
                   padding: '16px', 
-                  borderBottom: '1px solid #30363d',
-                  backgroundColor: '#0d1117',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  backgroundColor: 'var(--bg-card)',
                   borderRadius: '8px',
                   marginBottom: '8px'
                 }}>
@@ -195,139 +193,8 @@ export default function TechTaskHistoryPage() {
                     })()}
                   </div>
 
-                  {/* --- Все поля задачи на момент события --- */}
-                  <div style={{ 
-                    marginTop: '12px', 
-                    padding: '12px', 
-                    backgroundColor: '#161b22', 
-                    borderRadius: '4px', 
-                    color: '#e6eef8' 
-                  }}>
-                    <b style={{ marginBottom: '8px', display: 'block' }}>Состояние задачи:</b>
-                    
-                    {/* === Адаптивная сетка для полей === */}
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
-                      gap: '12px',
-                      rowGap: '8px'
-                    }}>
-                      {/* Основная информация */}
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Компания:</b>
-                        <span style={{ color: '#c9d1d9' }}>{companyName}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Контакт:</b>
-                        <ContactNameResolver
-                          contactPersonId={h.contact_person_id}
-                          companyId={h.company_id}
-                          getContactPersonNameById={getContactPersonNameById}
-                          contactPersonPhone={h.contact_person_phone}
-                        />
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>ТС:</b>
-                        <span style={{ color: '#c9d1d9' }}>{h.vehicle_info || "—"}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Гос. номер:</b>
-                        <span style={{ color: '#c9d1d9' }}>{h.gos_number || "—"}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Дата:</b>
-                        <span style={{ color: '#c9d1d9' }}>
-                          {h.scheduled_at ? new Date(h.scheduled_at).toLocaleString() : "—"}
-                        </span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Место/Адрес:</b>
-                        <span style={{ color: '#c9d1d9' }}>
-                          {h.location ? (
-                            <a
-                              href={`https://2gis.ru/search/${encodeURIComponent(h.location)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                color: '#1e88e5',
-                                textDecoration: 'none',
-                                fontWeight: 'bold'
-                              }}
-                            >
-                              {h.location}
-                            </a>
-                          ) : "—"}
-                        </span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Статус:</b>
-                        <span style={{ color: '#c9d1d9' }}>{getStatusDisplayName(h.status)}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Монтажник:</b>
-                        <span style={{ color: '#c9d1d9' }}>{h.assigned_user_name || "—"}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Комментарий:</b>
-                        <span style={{ color: '#c9d1d9' }}>{h.comment_field || "—"}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Цена клиента:</b>
-                        <span style={{ color: '#c9d1d9' }}>{h.client_price || "—"}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Награда монтажнику:</b>
-                        <span style={{ color: '#c9d1d9' }}>{h.montajnik_reward || "—"}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Фото обязательно:</b>
-                        <span style={{ color: '#c9d1d9' }}>{h.photo_required ? "Да" : "Нет"}</span>
-                      </div>
-                      
-                      <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Тип назначения:</b>
-                        <span style={{ color: '#c9d1d9' }}>
-                          {h.assignment_type === "broadcast" ? "в эфир" : 
-                           h.assignment_type === "individual" ? "персональная" : h.assignment_type || "—"}
-                        </span>
-                      </div>
-
-                      {/* Оборудование */}
-                      <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Оборудование:</b>
-                        <span style={{ color: '#c9d1d9' }}>
-                          {h.equipment_snapshot && h.equipment_snapshot.length > 0 ? (
-                            h.equipment_snapshot.map((e, idx) => (
-                              `${e.name}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`
-                            )).join(", ")
-                          ) : "—"}
-                        </span>
-                      </div>
-
-                      {/* Виды работ */}
-                      <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
-                        <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Виды работ:</b>
-                        <span style={{ color: '#c9d1d9' }}>
-                          {h.work_types_snapshot && h.work_types_snapshot.length > 0 ? (
-                            h.work_types_snapshot.map((wt) => (
-                              `${wt.name} x${wt.quantity}`
-                            )).join(", ")
-                          ) : "—"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  {/* --- Состояние задачи (скрытое по умолчанию) --- */}
+                  <StateSnapshotSection h={h} companyName={companyName} getContactPersonNameById={getContactPersonNameById} getStatusDisplayName={getStatusDisplayName} />
                 </li>
               );
             })}
@@ -338,9 +205,171 @@ export default function TechTaskHistoryPage() {
   );
 }
 
-function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameById, contactPersonPhone }) {
+function StateSnapshotSection({ h, companyName, getContactPersonNameById, getStatusDisplayName }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const toggleExpanded = () => {
+    setExpanded(!expanded);
+  };
+
+  return (
+    <div style={{ marginTop: '12px' }}>
+      <button 
+        onClick={toggleExpanded} 
+        style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '8px',
+          background: 'none',
+          border: 'none',
+          color: '#79c0ff',
+          cursor: 'pointer',
+          fontSize: '1em',
+          padding: '0',
+          margin: '0'
+        }}
+      >
+        <span style={{ transform: `rotate(${expanded ? '90deg' : '0deg'})`, transition: 'transform 0.2s' }}>▶</span>
+        <b>Состояние задачи</b>
+      </button>
+
+      {expanded && (
+        <div style={{ 
+          marginTop: '12px', 
+          padding: '12px', 
+          backgroundColor: '#161b22', 
+          borderRadius: '4px', 
+          color: '#e6eef8' 
+        }}>
+          {/* === Адаптивная сетка для полей === */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gap: '12px',
+            rowGap: '8px'
+          }}>
+            {/* Основная информация */}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Компания:</b>
+              <span style={{ color: '#c9d1d9' }}>{companyName}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Контакт:</b>
+              <ContactNameResolver
+                contactPersonId={h.contact_person_id}
+                companyId={h.company_id}
+                getContactPersonNameById={getContactPersonNameById}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>ТС:</b>
+              <span style={{ color: '#c9d1d9' }}>{h.vehicle_info || "—"}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Гос. номер:</b>
+              <span style={{ color: '#c9d1d9' }}>{h.gos_number || "—"}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Дата:</b>
+              <span style={{ color: '#c9d1d9' }}>
+                {h.scheduled_at ? new Date(h.scheduled_at).toLocaleString() : "—"}
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Место/Адрес:</b>
+              <span style={{ color: '#c9d1d9' }}>
+                {h.location ? (
+                  <a
+                    href={`https://2gis.ru/search/${encodeURIComponent(h.location)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      color: '#1e88e5',
+                      textDecoration: 'none',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    {h.location}
+                  </a>
+                ) : "—"}
+              </span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Статус:</b>
+              <span style={{ color: '#c9d1d9' }}>{getStatusDisplayName(h.status)}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Монтажник:</b>
+              <span style={{ color: '#c9d1d9' }}>{h.assigned_user_name || "—"}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Комментарий:</b>
+              <span style={{ color: '#c9d1d9' }}>{h.comment_field || "—"}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Цена клиента:</b>
+              <span style={{ color: '#c9d1d9' }}>{h.client_price || "—"}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Награда монтажнику:</b>
+              <span style={{ color: '#c9d1d9' }}>{h.montajnik_reward || "—"}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Фото обязательно:</b>
+              <span style={{ color: '#c9d1d9' }}>{h.photo_required ? "Да" : "Нет"}</span>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Тип назначения:</b>
+              <span style={{ color: '#c9d1d9' }}>
+                {h.assignment_type === "broadcast" ? "в эфир" : 
+                 h.assignment_type === "individual" ? "персональная" : h.assignment_type || "—"}
+              </span>
+            </div>
+
+            {/* Оборудование */}
+            <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Оборудование:</b>
+              <span style={{ color: '#c9d1d9' }}>
+                {h.equipment_snapshot && h.equipment_snapshot.length > 0 ? (
+                  h.equipment_snapshot.map((e, idx) => (
+                    `${e.name}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`
+                  )).join(", ")
+                ) : "—"}
+              </span>
+            </div>
+
+            {/* Виды работ */}
+            <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
+              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Виды работ:</b>
+              <span style={{ color: '#c9d1d9' }}>
+                {h.work_types_snapshot && h.work_types_snapshot.length > 0 ? (
+                  h.work_types_snapshot.map((wt) => (
+                    `${wt.name} x${wt.quantity}`
+                  )).join(", ")
+                ) : "—"}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameById }) {
   const [contactPersonName, setContactPersonName] = useState("...");
-  const [resolvedPhone, setResolvedPhone] = useState(contactPersonPhone || null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -348,9 +377,6 @@ function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameB
     async function resolveName() {
       if (!contactPersonId || !companyId) {
         setContactPersonName("—");
-        if (!isCancelled) {
-            setResolvedPhone(null);
-        }
         return;
       }
 
@@ -359,29 +385,10 @@ function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameB
         if (!isCancelled) {
           setContactPersonName(name);
         }
-        
-        if (!contactPersonPhone) {
-            try {
-                const { phone } = await getTechContactPersonPhone(contactPersonId);
-                if (!isCancelled) {
-                   setResolvedPhone(phone);
-                }
-            } catch (phoneError) {
-                console.error("Ошибка загрузки телефона контактного лица в истории:", phoneError);
-                if (!isCancelled) {
-                    setResolvedPhone(null);
-                }
-            }
-        } else {
-            if (!isCancelled) {
-                setResolvedPhone(contactPersonPhone);
-            }
-        }
       } catch (error) {
         console.error("Ошибка при разрешении имени контакта:", error);
         if (!isCancelled) {
           setContactPersonName(`Контакт ${contactPersonId}`);
-          setResolvedPhone(null);
         }
       }
     }
@@ -391,16 +398,9 @@ function ContactNameResolver({ contactPersonId, companyId, getContactPersonNameB
     return () => {
       isCancelled = true;
     };
-  }, [contactPersonId, companyId, getContactPersonNameById, contactPersonPhone]);
+  }, [contactPersonId, companyId, getContactPersonNameById]);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-      <span style={{ color: '#c9d1d9' }}>{contactPersonName}</span>
-      {resolvedPhone && (
-        <span>
-          (<a href={`tel:${resolvedPhone}`} style={{ color: '#1e88e5', textDecoration: 'none' }}>{resolvedPhone}</a>)
-        </span>
-      )}
-    </div>
+    <span style={{ color: '#c9d1d9' }}>{contactPersonName}</span>
   );
 }
