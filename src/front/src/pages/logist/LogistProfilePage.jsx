@@ -2,15 +2,13 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   fetchLogistProfile,
-  addCompany,
-  addContactPerson,
   getCompaniesList,
   getActiveMontajniks,
   getWorkTypes,
   getEquipmentList,
   logistFilterCompletedTasks,
 } from "../../api";
-import MultiSelectFilter from "../../components/MultiSelectFilter"; // Добавляем импорт компонента
+import MultiSelectFilter from "../../components/MultiSelectFilter";
 import "../../styles/LogistPage.css";
 
 // Вспомогательная функция для дебаунса
@@ -50,15 +48,6 @@ export default function LogistProfilePage() {
   const [workTypes, setWorkTypes] = useState([]);
   const [equipments, setEquipments] = useState([]);
 
-  // Состояния для модальных окон
-  const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
-  const [showAddContactModal, setShowAddContactModal] = useState(false);
-  const [newCompanyName, setNewCompanyName] = useState("");
-  const [newContactName, setNewContactName] = useState("");
-  const [newContactPhone, setNewContactPhone] = useState("");
-  const [selectedCompanyId, setSelectedCompanyId] = useState("");
-  const [newContactPosition, setNewContactPosition] = useState("")
-
   // Состояния для истории задач
   const [historyTasks, setHistoryTasks] = useState([]);
 
@@ -68,12 +57,10 @@ export default function LogistProfilePage() {
 
   useEffect(() => {
     loadProfile();
-    loadCompaniesForModal(); // Загружаем компании для модалки
-    loadFilterOptions(); // Загружаем опции для фильтров
+    loadFilterOptions();
   }, []);
 
   useEffect(() => {
-    // Загружаем задачи при изменении дебаунснутого поиска или других фильтров
     const filtersToUse = { ...selectedFilters, search: debouncedSearch };
     loadHistoryTasks(filtersToUse);
   }, [debouncedSearch, selectedFilters.company_id, selectedFilters.assigned_user_id, selectedFilters.work_type_id, selectedFilters.equipment_id]);
@@ -82,7 +69,7 @@ export default function LogistProfilePage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchLogistProfile(); // Вызываем новый API метод
+      const data = await fetchLogistProfile();
       setProfile(data);
     } catch (err) {
       console.error("Ошибка загрузки профиля логиста:", err);
@@ -94,7 +81,7 @@ export default function LogistProfilePage() {
 
   async function loadHistoryTasks(filters) {
     try {
-      const data = await logistFilterCompletedTasks(filters); // Используем новый эндпоинт
+      const data = await logistFilterCompletedTasks(filters);
       setHistoryTasks(data || []);
     } catch (err) {
       console.error("Ошибка загрузки истории задач:", err);
@@ -119,21 +106,8 @@ export default function LogistProfilePage() {
     }
   }
 
-  // Загружаем компании для модалки добавления контакта
-  async function loadCompaniesForModal() {
-    try {
-      const data = await getCompaniesList(); // Убедитесь, что этот метод доступен и возвращает список
-      setCompanies(data || []);
-    } catch (e) {
-      console.error("Ошибка загрузки компаний для модалки:", e);
-      // Можно не показывать ошибку, просто список будет пустой
-      setCompanies([]);
-    }
-  }
-
-  // Функция для перехода к деталям завершенной задачи (если используется в истории)
   const viewCompletedTask = (taskId) => {
-    navigate(`/logist/completed-tasks/${taskId}`); // Новый маршрут
+    navigate(`/logist/completed-tasks/${taskId}`);
   };
 
   const handleFilterChange = (field, value) => {
@@ -144,78 +118,6 @@ export default function LogistProfilePage() {
 
     setSelectedFilters(prev => ({ ...prev, [field]: normalized }));
   };
-
-  // --- Логика добавления ---
-  const handleAddCompany = async () => {
-  if (!newCompanyName.trim()) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Введите название компании");
-    } else {
-      alert("Введите название компании");
-    }
-    return;
-  }
-  try {
-    const result = await addCompany({ name: newCompanyName.trim() });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Компания "${result.name}" добавлена (ID: ${result.id})`);
-    } else {
-      alert(`Компания "${result.name}" добавлена (ID: ${result.id})`);
-    }
-    setNewCompanyName(""); // Очищаем поле
-    setShowAddCompanyModal(false); // Закрываем модалку
-    loadCompaniesForModal(); // Перезагружаем список для модалки
-    loadProfile(); // Перезагружаем профиль, если там отображаются компании
-  } catch (err) {
-    console.error("Ошибка добавления компании:", err);
-    const errorMsg = err.response?.data?.detail || "Не удалось добавить компанию.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
-    }
-  }
-};
-
-const handleAddContact = async () => {
-  if (!newContactName.trim() || !selectedCompanyId) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Заполните ФИО и выберите компанию");
-    } else {
-      alert("Заполните ФИО и выберите компанию");
-    }
-    return;
-  }
-  try {
-    // Передаём position в payload
-    const result = await addContactPerson(selectedCompanyId, { 
-      name: newContactName.trim(), 
-      phone: newContactPhone.trim(),
-      position: newContactPosition.trim() 
-    });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-    } else {
-      alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-    }
-    setNewContactName("");
-    setNewContactPhone("");
-    setNewContactPosition(); 
-    setSelectedCompanyId("");
-    setShowAddContactModal(false);
-    loadProfile(); 
-  } catch (err) {
-    console.error("Ошибка добавления контактного лица:", err);
-    const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
-    }
-  }
-};
-
-  
 
   // Преобразование опций для MultiSelectFilter
   const companyOptions = companies.map(c => ({ value: c.id, label: c.name }));
@@ -231,7 +133,7 @@ const handleAddContact = async () => {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Личный кабинет</h1>
+          <h1 className="page-title">Личный кабинет</h1>
         </div>
 
         <div className="profile-overview">
@@ -248,115 +150,147 @@ const handleAddContact = async () => {
             <p><b>В архиве:</b> {profile.archived_count || 0}</p>
           </div>
         </div>
+
         <div className="section">
-          <h3>История выполненных задач</h3>
-          <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
-  {/* Поиск */}
-  <div style={{ marginBottom: '12px', width: '100%' }}>
-    <label className="dark-label">Поиск</label>
-    <input
-      type="text"
-      className="dark-input"
-      placeholder="Поиск..."
-      value={selectedFilters.search}
-      onChange={e => handleFilterChange("search", e.target.value)}
-      style={{
-        width: '100%',
-        padding: '8px 12px',
-        border: '1px solid #444',
-        borderRadius: '4px',
-        backgroundColor: '#1a1a1a',
-        color: '#e0e0e0',
-        fontSize: '14px',
-        boxSizing: 'border-box'
-      }}
-    />
+  <h3>История выполненных задач</h3>
+  <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
+    {/* Поиск */}
+    <div style={{ marginBottom: '12px', width: '100%' }}>
+      <label className="dark-label">Поиск</label>
+      <input
+        type="text"
+        className="dark-select"
+        placeholder="Поиск..."
+        value={selectedFilters.search}
+        onChange={e => handleFilterChange("search", e.target.value)}
+      />
+    </div>
+
+    <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', maxWidth: '100%' }}>
+      {/* Компания */}
+      <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+        <label className="dark-label">Компания</label>
+        <MultiSelectFilter
+          options={companyOptions}
+          selectedValues={selectedFilters.company_id}
+          onChange={(values) => handleFilterChange("company_id", values)}
+          placeholder="Все компании"
+          maxHeight={200}
+          width="100%" 
+        />
+      </div>
+
+      {/* Монтажник */}
+      <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+        <label className="dark-label">Монтажник</label>
+        <MultiSelectFilter
+          options={montajnikOptions}
+          selectedValues={selectedFilters.assigned_user_id}
+          onChange={(values) => handleFilterChange("assigned_user_id", values)}
+          placeholder="Все монтажники"
+          maxHeight={200}
+        />
+      </div>
+
+      {/* Тип работы */}
+      <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+        <label className="dark-label">Тип работы</label>
+        <MultiSelectFilter
+          options={workTypeOptions}
+          selectedValues={selectedFilters.work_type_id}
+          onChange={(values) => handleFilterChange("work_type_id", values)}
+          placeholder="Все типы работ"
+          maxHeight={200}
+        />
+      </div>
+
+      {/* Оборудование */}
+      <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+        <label className="dark-label">Оборудование</label>
+        <MultiSelectFilter
+          options={equipmentOptions}
+          selectedValues={selectedFilters.equipment_id}
+          onChange={(values) => handleFilterChange("equipment_id", values)}
+          placeholder="Все оборудование"
+          maxHeight={200}
+        />
+      </div>
+    </div>
   </div>
 
-  <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', maxWidth: '100%' }}>
-    {/* Компания */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Компания</label>
-      <MultiSelectFilter
-        options={companyOptions}
-        selectedValues={selectedFilters.company_id}
-        onChange={(values) => handleFilterChange("company_id", values)}
-        placeholder="Все компании"
-        maxHeight={200}
-        width="100%" 
-      />
-    </div>
+  {/* Добавляем минимальную высоту для контейнера задач */}
+  <div style={{ minHeight: '300px' }}>
+    {historyTasks && historyTasks.length > 0 ? (
+      <div className="cards">
+        {historyTasks.map((task) => (
+          <div key={task.id} className="task-card" onClick={() => viewCompletedTask(task.id)}>
+            {/* ID задачи */}
+            <div className="task-id">#{task.id}</div>
 
-    {/* Монтажник */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Монтажник</label>
-      <MultiSelectFilter
-        options={montajnikOptions}
-        selectedValues={selectedFilters.assigned_user_id}
-        onChange={(values) => handleFilterChange("assigned_user_id", values)}
-        placeholder="Все монтажники"
-        maxHeight={200}
-      />
-    </div>
+            {/* Название компании/ИП */}
+            <div className="task-client">{task.client || "—"}</div>
 
-    {/* Тип работы */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Тип работы</label>
-      <MultiSelectFilter
-        options={workTypeOptions}
-        selectedValues={selectedFilters.work_type_id}
-        onChange={(values) => handleFilterChange("work_type_id", values)}
-        placeholder="Все типы работ"
-        maxHeight={200}
-      />
-    </div>
+            {/* Модель ТС */}
+            {task.vehicle_info && (
+              <div className="task-vehicle-model">{task.vehicle_info}</div>
+            )}
 
-    {/* Оборудование */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Оборудование</label>
-      <MultiSelectFilter
-        options={equipmentOptions}
-        selectedValues={selectedFilters.equipment_id}
-        onChange={(values) => handleFilterChange("equipment_id", values)}
-        placeholder="Все оборудование"
-        maxHeight={200}
-      />
-    </div>
+            {/* Госномер в рамке */}
+            {task.gos_number && (
+              <div className="task-gos-number-wrapper">
+                <div className="task-gos-number">{task.gos_number}</div>
+              </div>
+            )}
+
+            {/* Блок оборудования */}
+            <div className="equipment-section">
+              <div className="equipment-label">ОБОРУДОВАНИЕ:</div>
+              <div className="equipment-list">
+                {task.equipment && task.equipment.length > 0 ? (
+                  task.equipment.map((eq, index) => (
+                    <div key={index} className="equipment-item">
+                      {eq.equipment?.name || `Оборудование ${eq.equipment_id}`}
+                    </div>
+                  ))
+                ) : (
+                  <div className="equipment-item">Оборудование не назначено</div>
+                )}
+              </div>
+            </div>
+
+            {/* Дата и время */}
+            <div className="task-scheduled-at">
+              <span style={{ 
+                fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", 
+                fontWeight: 600,
+                fontSize: '1.1em',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px'
+              }}>
+                Дата завершения:&nbsp;
+                {task.completed_at ? new Date(task.completed_at).toLocaleString('ru-RU', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }) : "—"}
+              </span>
+            </div>
+
+            {/* Статус (справа вверху) */}
+            <div className="task-status-badge" style={{ backgroundColor: '#20c997' }}>
+              Завершена
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="empty">История пока пуста</div>
+    )}
   </div>
 </div>
-
-          {historyTasks && historyTasks.length > 0 ? (
-            <div className="history-list">
-              {historyTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="history-item clickable-history-item"
-                  onClick={() => viewCompletedTask(task.id)}
-                  style={{
-                    cursor: "pointer",
-                    padding: "12px",
-                    borderBottom: "1px solid #30363d",
-                    borderRadius: "8px",
-                    marginBottom: "8px",
-                    backgroundColor: "#0d1117",
-                  }}
-                >
-                  <p style={{ margin: "4px 0" }}>
-                    <b>#{task.id}</b> — {task.client || "—"}
-                  </p>
-                  <p style={{ margin: "4px 0" }}>
-                    <b>ТС / гос.номер:</b> {task.vehicle_info || "—"} / {task.gos_number || "—"}
-                  </p>
-                  <p style={{ margin: "4px 0" }}>
-                    <b>Дата завершения:</b> {task.completed_at ? new Date(task.completed_at).toLocaleString() : "—"}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty">История пока пуста</div>
-          )}
-        </div>
       </div>
     </div>
   );

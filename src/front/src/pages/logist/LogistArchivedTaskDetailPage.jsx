@@ -92,7 +92,7 @@ export default function LogistArchivedTaskDetailPage() {
   return (
     <div className="logist-main">
       <div className="page">
-        <div className="page-header">
+        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h1>Архивная задача #{task.id}</h1>
           <button className="gradient-button" onClick={() => navigate(-1)}>
             ⬅️ Назад

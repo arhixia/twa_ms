@@ -769,7 +769,7 @@ async def admin_filter_tasks(
         open_statuses = [
             TaskStatus.new, TaskStatus.accepted, TaskStatus.on_the_road,
             TaskStatus.on_site, TaskStatus.started, TaskStatus.assigned,
-            TaskStatus.inspection, TaskStatus.returned
+            TaskStatus.inspection, TaskStatus.returned,TaskStatus.completed
         ]
         query = query.where(Task.status.in_(open_statuses))
 

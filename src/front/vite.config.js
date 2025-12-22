@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['phil-cheers-connecting-went.trycloudflare.com']
+    allowedHosts: ['motor-everyday-helping-similarly.trycloudflare.com']
   },
 })
 

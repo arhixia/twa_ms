@@ -114,7 +114,18 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
 
   return (
     <div className="uploader">
-      <label className="uploader-label">
+      <label className="uploader-label" style={{ 
+        display: 'block', 
+        padding: '8px 12px', 
+        backgroundColor: '#161b22', 
+        border: '1px solid #30363d', 
+        borderRadius: '4px', 
+        cursor: 'pointer',
+        color: 'white',
+        textAlign: 'center',
+        fontSize: '14px',
+        marginBottom: '8px'
+      }}>
         + Загрузить фото
         <input
           type="file"
@@ -122,26 +133,91 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
           onChange={handleFile}
           disabled={loading || !taskId}
           multiple // <--- ДОБАВЛЕН АТРИБУТ multiple
+          style={{ display: 'none' }} // Скрываем оригинальный input
         />
       </label>
 
-      <div className="thumbs">
+      <div className="thumbs" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
         {files.map((f) => (
-          <div className="thumb" key={f.id}>
-            <img src={f.preview} alt={f.name || "preview"} />
+          <div className="thumb" key={f.id} style={{ 
+            position: 'relative', 
+            width: '80px', 
+            height: '80px', 
+            border: '1px solid #30363d',
+            borderRadius: '4px',
+            overflow: 'hidden'
+          }}>
+            <img 
+              src={f.preview} 
+              alt={f.name || "preview"} 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
             {f.uploading && (
-              <div className="upload-progress-overlay">
-                <div className="spinner"></div>
+              <div className="upload-progress-overlay" style={{ 
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                borderRadius: 'inherit'
+              }}>
+                <div className="spinner" style={{ 
+                  width: '20px',
+                  height: '20px',
+                  border: '2px solid rgba(255, 255, 255, 0.3)',
+                  borderTop: '2px solid #ffffff',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
               </div>
             )}
             {f.error && (
-              <div className="upload-error-message">
-                <span style={{ color: 'red', fontSize: '0.8em' }}>{f.error}</span>
+              <div className="upload-error-message" style={{ 
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                backgroundColor: 'rgba(255, 0, 0, 0.7)',
+                color: 'white',
+                padding: '2px',
+                fontSize: '0.7em',
+                textAlign: 'center',
+                borderBottomLeftRadius: 'inherit',
+                borderBottomRightRadius: 'inherit',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                <span>{f.error}</span>
               </div>
             )}
             {/* --- Кнопка удаления появляется только если НЕ загружается --- */}
             {!f.uploading && (
-              <button className="thumb-remove" onClick={() => removeLocal(f.id)}>
+              <button 
+                className="thumb-remove" 
+                onClick={() => removeLocal(f.id)}
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  right: '2px',
+                  background: 'rgba(0, 0, 0, 0.7)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '16px',
+                  height: '16px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  padding: 0
+                }}
+              >
                 ✕
               </button>
             )}
@@ -151,69 +227,3 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
     </div>
   );
 }
-
-// --- Стили ---
-const styles = `
-  .thumb {
-    position: relative;
-    display: inline-block;
-    margin: 4px;
-  }
-  .upload-progress-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(0, 0, 0, 0.5);
-    border-radius: inherit;
-  }
-  .spinner {
-    width: 30px;
-    height: 30px;
-    border: 3px solid rgba(255, 255, 255, 0.3);
-    border-top: 3px solid #ffffff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-  .upload-error-message {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background-color: rgba(255, 0, 0, 0.7);
-    color: white;
-    padding: 2px;
-    font-size: 0.7em;
-    text-align: center;
-    border-bottom-left-radius: inherit;
-    border-bottom-right-radius: inherit;
-  }
-  .thumb-remove {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    background: rgba(0, 0, 0, 0.7);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-  }
-`;
-
-const styleSheet = document.createElement("style");
-styleSheet.innerText = styles;
-document.head.appendChild(styleSheet);

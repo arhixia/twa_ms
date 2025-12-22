@@ -8,7 +8,7 @@ import {
   getEquipmentList,
   techSuppFilterCompletedTasks
 } from "../../api";
-import MultiSelectFilter from "../../components/MultiSelectFilter"; // Добавляем импорт компонента
+import MultiSelectFilter from "../../components/MultiSelectFilter";
 import "../../styles/LogistPage.css";
 
 // Вспомогательная функция для дебаунса
@@ -134,7 +134,7 @@ export default function TechSuppProfilePage() {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Личный кабинет</h1>
+          <h1 className="page-title">Личный кабинет</h1>
         </div>
 
         <div className="profile-overview">
@@ -154,113 +154,142 @@ export default function TechSuppProfilePage() {
         <div className="section">
           <h3>История выполненных задач</h3>
           <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
-  {/* Поиск */}
-  <div style={{ marginBottom: '12px', width: '100%' }}>
-    <label className="dark-label">Поиск</label>
-    <input
-      type="text"
-      className="dark-input"
-      placeholder="Поиск..."
-      value={selectedFilters.search}
-      onChange={e => handleFilterChange("search", e.target.value)}
-      style={{
-        width: '100%',
-        padding: '8px 12px',
-        border: '1px solid #444',
-        borderRadius: '4px',
-        backgroundColor: '#1a1a1a',
-        color: '#e0e0e0',
-        fontSize: '14px',
-        boxSizing: 'border-box'
-      }}
-    />
-  </div>
-
-  <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', maxWidth: '100%' }}>
-    {/* Компания */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Компания</label>
-      <MultiSelectFilter
-        options={companyOptions}
-        selectedValues={selectedFilters.company_id}
-        onChange={(values) => handleFilterChange("company_id", values)}
-        placeholder="Все компании"
-        maxHeight={200}
-      />
-    </div>
-
-    {/* Монтажник */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Монтажник</label>
-      <MultiSelectFilter
-        options={montajnikOptions}
-        selectedValues={selectedFilters.assigned_user_id}
-        onChange={(values) => handleFilterChange("assigned_user_id", values)}
-        placeholder="Все монтажники"
-        maxHeight={200}
-      />
-    </div>
-
-    {/* Тип работы */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Тип работы</label>
-      <MultiSelectFilter
-        options={workTypeOptions}
-        selectedValues={selectedFilters.work_type_id}
-        onChange={(values) => handleFilterChange("work_type_id", values)}
-        placeholder="Все типы работ"
-        maxHeight={200}
-      />
-    </div>
-
-    {/* Оборудование */}
-    <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px' }}>
-      <label className="dark-label">Оборудование</label>
-      <MultiSelectFilter
-        options={equipmentOptions}
-        selectedValues={selectedFilters.equipment_id}
-        onChange={(values) => handleFilterChange("equipment_id", values)}
-        placeholder="Все оборудование"
-        maxHeight={200}
-      />
-    </div>
-  </div>
-</div>
-
-          {historyTasks && historyTasks.length > 0 ? (
-            <div className="history-list">
-              {historyTasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="history-item clickable-history-item"
-                  onClick={() => viewCompletedTask(task.id)}
-                  style={{
-                    cursor: "pointer",
-                    padding: "12px",
-                    borderBottom: "1px solid #30363d",
-                    borderRadius: "8px",
-                    marginBottom: "8px",
-                    backgroundColor: "#0d1117",
-                    transition: "background 0.2s",
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#161b22"}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#0d1117"}
-                >
-                  <p style={{ margin: "4px 0" }}>
-                    <b>#{task.id}</b> — {task.client || "—"}
-                  </p>
-                  <p style={{ margin: "4px 0" }}>
-                    <b>ТС / гос.номер:</b> {task.vehicle_info || "—"} / {task.gos_number || "—"}
-                  </p>
-                  <p style={{ margin: "4px 0" }}>
-                    <b>Дата завершения:</b> {task.completed_at ? new Date(task.completed_at).toLocaleString() : "—"}
-                  </p>
-                </div>
-              ))}
+            {/* Поиск */}
+            <div style={{ marginBottom: '12px', width: '100%' }}>
+              <label className="dark-label">Поиск</label>
+              <input
+                type="text"
+                className="dark-select"
+                placeholder="Поиск..."
+                value={selectedFilters.search}
+                onChange={e => handleFilterChange("search", e.target.value)}
+              />
             </div>
-          ) : (
-            <div className="empty">История пока пуста</div>
-          )}
+
+            <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', maxWidth: '100%' }}>
+              {/* Компания */}
+              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                <label className="dark-label">Компания</label>
+                <MultiSelectFilter
+                  options={companyOptions}
+                  selectedValues={selectedFilters.company_id}
+                  onChange={(values) => handleFilterChange("company_id", values)}
+                  placeholder="Все компании"
+                  maxHeight={200}
+                  width="100%" 
+                />
+              </div>
+
+              {/* Монтажник */}
+              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                <label className="dark-label">Монтажник</label>
+                <MultiSelectFilter
+                  options={montajnikOptions}
+                  selectedValues={selectedFilters.assigned_user_id}
+                  onChange={(values) => handleFilterChange("assigned_user_id", values)}
+                  placeholder="Все монтажники"
+                  maxHeight={200}
+                />
+              </div>
+
+              {/* Тип работы */}
+              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                <label className="dark-label">Тип работы</label>
+                <MultiSelectFilter
+                  options={workTypeOptions}
+                  selectedValues={selectedFilters.work_type_id}
+                  onChange={(values) => handleFilterChange("work_type_id", values)}
+                  placeholder="Все типы работ"
+                  maxHeight={200}
+                />
+              </div>
+
+              {/* Оборудование */}
+              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                <label className="dark-label">Оборудование</label>
+                <MultiSelectFilter
+                  options={equipmentOptions}
+                  selectedValues={selectedFilters.equipment_id}
+                  onChange={(values) => handleFilterChange("equipment_id", values)}
+                  placeholder="Все оборудование"
+                  maxHeight={200}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Добавляем минимальную высоту для контейнера задач */}
+          <div style={{ minHeight: '300px' }}>
+            {historyTasks && historyTasks.length > 0 ? (
+              <div className="cards">
+                {historyTasks.map((task) => (
+                  <div key={task.id} className="task-card" onClick={() => viewCompletedTask(task.id)}>
+                    {/* ID задачи */}
+                    <div className="task-id">#{task.id}</div>
+
+                    {/* Название компании/ИП */}
+                    <div className="task-client">{task.client || "—"}</div>
+
+                    {/* Модель ТС */}
+                    {task.vehicle_info && (
+                      <div className="task-vehicle-model">{task.vehicle_info}</div>
+                    )}
+
+                    {/* Госномер в рамке */}
+                    {task.gos_number && (
+                      <div className="task-gos-number-wrapper">
+                        <div className="task-gos-number">{task.gos_number}</div>
+                      </div>
+                    )}
+
+                    {/* Блок оборудования */}
+                    <div className="equipment-section">
+                      <div className="equipment-label">ОБОРУДОВАНИЕ:</div>
+                      <div className="equipment-list">
+                        {task.equipment && task.equipment.length > 0 ? (
+                          task.equipment.map((eq, index) => (
+                            <div key={index} className="equipment-item">
+                              {eq.equipment?.name || `Оборудование ${eq.equipment_id}`}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="equipment-item">Оборудование не назначено</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Дата и время */}
+                    <div className="task-scheduled-at">
+                      <span style={{ 
+                        fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif", 
+                        fontWeight: 600,
+                        fontSize: '1.1em',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px'
+                      }}>
+                        Дата завершения:&nbsp;
+                        {task.completed_at ? new Date(task.completed_at).toLocaleString('ru-RU', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }) : "—"}
+                      </span>
+                    </div>
+
+                    {/* Статус (справа вверху) */}
+                    <div className="task-status-badge" style={{ backgroundColor: '#20c997' }}>
+                      Завершена
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty">История пока пуста</div>
+            )}
+          </div>
         </div>
       </div>
     </div>

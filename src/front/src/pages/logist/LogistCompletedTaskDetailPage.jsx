@@ -1,4 +1,3 @@
-// front/src/pages/logist/LogistCompletedTaskDetailPage.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -92,34 +91,32 @@ export default function LogistCompletedTaskDetailPage() {
   }
 
   const STATUS_TRANSLATIONS = {
-  new: "Создана",
-  accepted: "Принята монтажником",
-  on_the_road: "Выехал на работу",
-  started: "В процессе выполнения",
-  on_site: "Прибыл на место",
-  completed: "Завершена",
-  inspection: "На проверке",
-  returned: "Возвращена на доработку",
-  archived: "В архиве",
-  assigned: "Назначена",
-};
+    new: "Создана",
+    accepted: "Принята монтажником",
+    on_the_road: "Выехал на работу",
+    started: "В процессе выполнения",
+    on_site: "Прибыл на место",
+    completed: "Завершена",
+    inspection: "На проверке",
+    returned: "Возвращена на доработку",
+    archived: "В архиве",
+    assigned: "Назначена",
+  };
 
-// --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
-function getStatusDisplayName(statusKey) {
-  return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
-}
+  // --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
+  function getStatusDisplayName(statusKey) {
+    return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
+  }
 
-const REPORT_APPROVAL_TRANSLATIONS = {
-  waiting: "Проверяется",
-  approved: "Принято",
-  rejected: "Отклонено",
-};
+  const REPORT_APPROVAL_TRANSLATIONS = {
+    waiting: "Проверяется",
+    approved: "Принято",
+    rejected: "Отклонено",
+  };
 
   function getReportApprovalDisplayName(approvalKey) {
-  return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
-}
-
-
+    return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
+  }
 
   async function loadTask() {
     setLoading(true);
@@ -185,39 +182,70 @@ const REPORT_APPROVAL_TRANSLATIONS = {
   return (
     <div className="logist-main">
       <div className="page">
-        <div className="page-header">
-          <h1>Завершённая задача #{task.id}</h1>
-          <button className="add-btn" onClick={() => navigate(-1)}> {/* Кнопка "Назад" */}
-            ⬅️ Назад
-          </button>
-        </div>
+        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h1>Завершённая задача #{task.id}</h1>
+                <button className="gradient-button" onClick={() => navigate(-1)}>
+                  ⬅️ Назад
+                </button>
+              </div>
 
         <div className="task-detail">
           <div className="task-view">
             <p><b>Компания:</b> {task.company_name || "—"}</p>
             <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
-            <p><b>Телефон контактного лица:</b> {task.contact_person_phone || "—"}</p>
+            {/* ===== ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+            <p>
+              <b>Телефон контактного лица:</b>{" "}
+              {task.contact_person_phone || "—"}
+              {task.contact_person_phone && (
+                <button
+                  onClick={() => {
+                    const phone = task.contact_person_phone;
+                    const telUrl = `tel:${phone}`;
+                    // Если внутри Telegram Mini App
+                    if (window.Telegram?.WebApp) {
+                      // Попробуем открыть в внешнем браузере
+                      window.open(telUrl, "_blank");
+                    } else {
+                      // Обычный браузер
+                      window.location.href = telUrl;
+                    }
+                  }}
+                  style={{
+                    marginLeft: '8px',
+                    fontSize: '0.9em',
+                    color: '#1e88e5',
+                    background: 'none',
+                    border: 'none',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                  }}
+                >
+                  
+                </button>
+              )}
+            </p>
             <p><b>ТС:</b> {task.vehicle_info || "—"}</p>
             <p><b>Гос. номер:</b> {task.gos_number || "—"}</p>
             <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
             <p><b>Статус:</b> {getStatusDisplayName(task.status)}</p>
             <p>
-                <b>Место/Адрес:</b>{" "}
-                {task.location ? (
-                  <a
-                    href={`https://2gis.ru/search/${encodeURIComponent(task.location)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      color: '#1e88e5',
-                      textDecoration: 'none',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    {task.location}
-                  </a>
-                ) : "—"}
-              </p>
+              <b>Место/Адрес:</b>{" "}
+              {task.location ? (
+                <a
+                  href={`https://2gis.ru/search/  ${encodeURIComponent(task.location)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    color: '#1e88e5',
+                    textDecoration: 'none',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {task.location}
+                </a>
+              ) : "—"}
+            </p>
             <p><b>Монтажник:</b> {task.assigned_user_name || task.assigned_user_id || "—"}</p>
             <p><b>Комментарий:</b> {task.comment || "—"}</p>
             <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
@@ -228,30 +256,26 @@ const REPORT_APPROVAL_TRANSLATIONS = {
               <b>Оборудование:</b>{" "}
               {(task.equipment || [])
                 .map((e) => {
-                  const eqName = getEquipmentNameById(e.equipment_id);
-                  return `${eqName} x${e.quantity} (СН: ${e.serial_number || 'N/A'})`;
+                  const eqName = equipmentList.find((eq) => eq.id === e.equipment_id)?.name;
+                  return `${eqName || e.equipment_id}${e.serial_number ? ` (СН: ${e.serial_number})` : ''} x${e.quantity}`;
                 })
                 .join(", ") || "—"}
             </p>
 
             {/* === Виды работ (с именами) === */}
-            <p>
-              <b>Виды работ:</b>{" "}
-              {(task.work_types || [])
-                .map((wt) => {
-                  const wtName = getWorkTypeNameById(wt.work_type_id);
-                  return `${wtName} x${wt.quantity}`;
-                })
-                .join(", ") || "—"}
-            </p>
+            <p><b>Виды работ:</b> {task.work_types && task.work_types.length > 0 ? task.work_types.map(wt => {
+                  const wtObj = workTypesList.find(w => w.id === wt.work_type_id);
+                  const name = wtObj?.name || wt.work_type_id;
+                  const count = wt.quantity || 1;
+                  return `${name} (x${count})`;
+                }).join(", ") : "—"}</p>
 
             <p><b>Фото обязательно:</b> {task.photo_required ? "Да" : "Нет"}</p>
 
-            {/* === История (кнопка) === */}
+            {/* === ИСТОРИЯ (кнопка) === */}
             <div className="section">
               <h3>История</h3>
-              {/* Кнопка "Подробнее" теперь ведёт на отдельную страницу истории */}
-              <button className="add-btn" onClick={() => navigate(`/logist/tasks/${task.id}/history`)}>
+              <button className="gradient-button" onClick={() => navigate(`/logist/tasks/${task.id}/history`)}>
                 Подробнее
               </button>
             </div>
@@ -291,13 +315,13 @@ const REPORT_APPROVAL_TRANSLATIONS = {
                         <p>{comment}</p>
                       )}
                       <p>
-        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"} {/* <--- Используем новую функцию */}
-        {task.requires_tech_supp === true && (
-          <>
-            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"} {/* <--- Используем новую функцию */}
-          </>
-        )}
-      </p>
+                        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"} {/* <--- Используем новую функцию */}
+                        {task.requires_tech_supp === true && (
+                          <>
+                            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"} {/* <--- Используем новую функцию */}
+                          </>
+                        )}
+                      </p>
                       {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
                       {reportAttachmentsLoading ? (
                         <p>Загрузка вложений...</p>
@@ -340,7 +364,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
         </div>
       </div>
 
-      {/* --- НОВОЕ: Рендерим модальное окно --- */}
       <ImageModal
         isOpen={!!openImage} // Передаём true/false
         onClose={closeModal}

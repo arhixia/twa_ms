@@ -2126,25 +2126,26 @@ async def logist_filter_completed_tasks(
 
     out = []
     for t in tasks:
-        contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
 
         assigned_user_full_name = None
         if t.assigned_user:
             assigned_user_full_name = f"{t.assigned_user.name} {t.assigned_user.lastname}"
 
-        equipment = []
-        if t.equipment_links:
-            for link in t.equipment_links:
-                equipment.append({
-                    "id": link.equipment.id,
-                    "name": link.equipment.name,
-                    "category": link.equipment.category,
-                    "price": str(link.equipment.price),
-                    "quantity": link.quantity,
-                    "serial_number": link.serial_number
-                })
+        equipment = [
+            {
+                "equipment_id": te.equipment_id,
+                "quantity": te.quantity,
+                "serial_number": te.serial_number,
+                "equipment": {
+                    "id": te.equipment.id,
+                    "name": te.equipment.name
+                } if te.equipment else None
+            }
+            for te in (t.equipment_links or [])
+        ] or []
 
         work_types = []
         if t.works:
@@ -2157,7 +2158,7 @@ async def logist_filter_completed_tasks(
 
         out.append({
             "id": t.id,
-            "client": client_display,
+            "client": client_name,
             "status": t.status.value if t.status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
             "location": t.location,
