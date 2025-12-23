@@ -11,20 +11,6 @@ export default function TaskCard({ task, onClick, onAccept, onReject, onDelete, 
       return;
     }
 
-    // Эта логика не выполнится, если onClick всегда передается
-    // const navigate = useNavigate();
-    // const location = useLocation();
-    // if (location.pathname.startsWith("/logist")) {
-    //   navigate(`/logist/tasks/${task.id}`);
-    // } else if (location.pathname.startsWith("/tech_supp")) {
-    //   navigate(`/tech_supp/tasks/${task.id}`);
-    // } else if (location.pathname.startsWith("/montajnik")) {
-    //   navigate(`/montajnik/tasks/${task.id}`);
-    // } else if (location.pathname.startsWith("/admin")) {
-    //   navigate(`/admin/tasks/${task.id}`);
-    // } else {
-    //   navigate(`/tasks/${task.id}`);
-    // }
   }
 
   const statusColor = getStatusColor(task.status);

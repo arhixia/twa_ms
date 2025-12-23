@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; // Импортируем useNavigate
+import { useNavigate } from "react-router-dom";
 import { fetchMyTasks } from "../../api"; 
 import TaskCard from "../../components/TaskCard"; 
 import useAuthStore from "@/store/useAuthStore"; 
@@ -10,7 +10,7 @@ export default function MyTasksPage() {
   const [error, setError] = useState(null);
 
   const { updateMyTasksCount } = useAuthStore();
-  const navigate = useNavigate(); // Получаем функцию навигации
+  const navigate = useNavigate();
 
   const handleTaskCardClick = (task) => {
     navigate(`/montajnik/tasks/${task.id}`);
@@ -56,7 +56,6 @@ export default function MyTasksPage() {
   return (
     <div className="logist-main">
       <div className="page">
-        {/* Заголовок страницы */}
         <h1 className="page-title">Мои задачи</h1>
         
         <div className="cards">
@@ -64,11 +63,28 @@ export default function MyTasksPage() {
             <p>У вас пока нет назначенных задач.</p>
           ) : (
             tasks.map(task => (
-              <TaskCard
+              <div
                 key={task.id}
-                task={task}
-                onClick={handleTaskCardClick} // Передаем обработчик в TaskCard
-              />
+                className="task-card-wrapper"
+                style={{
+                  position: "relative",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              >
+                {/* Отображение mont_reward */}
+                {task.montajnik_reward && (
+                  <div className="task-mont-reward">
+                    {task.montajnik_reward}
+                  </div>
+                )}
+                
+                <TaskCard
+                  task={task}
+                  onClick={handleTaskCardClick}
+                />
+              </div>
             ))
           )}
         </div>

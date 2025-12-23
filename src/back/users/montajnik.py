@@ -170,6 +170,7 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
             "client_name": client_name,  # ✅ Только название компании или ИП
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
+            "mont_reward": t.montajnik_reward,
             "location": t.location,
             "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
             "status": t.status.value if t.status else None,

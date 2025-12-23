@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchAvailableTasks, acceptTask } from "../../api";
-import TaskCard from "../../components/TaskCard"; // Убедитесь, что TaskCard может принимать onAccept и isAccepting
+import TaskCard from "../../components/TaskCard";
 import useAuthStore from "@/store/useAuthStore";
 
 export default function AvailableTasksPage() {
@@ -10,7 +10,7 @@ export default function AvailableTasksPage() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [actionLoading, setActionLoading] = useState(null); // Для индикации загрузки кнопки
+  const [actionLoading, setActionLoading] = useState(null);
 
   const { updateAvailableTasksCount, updateMyTasksCount, updateAssignedTasksCount } = useAuthStore();
 
@@ -105,12 +105,18 @@ export default function AvailableTasksPage() {
                   boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
                 }}
               >
-                {/* Передаем onClick, onAccept и isAccepting в TaskCard */}
+                {/* Отображение mont_reward */}
+                {task.montajnik_reward && (
+                  <div className="task-mont-reward">
+                    {task.montajnik_reward}
+                  </div>
+                )}
+                
                 <TaskCard
                   task={task}
                   onClick={handleTaskCardClick}
-                  onAccept={() => handleAcceptTask(task.id)} // Передаем функцию принятия задачи
-                  isAccepting={actionLoading === task.id} // Передаем статус загрузки
+                  onAccept={() => handleAcceptTask(task.id)}
+                  isAccepting={actionLoading === task.id}
                 />
               </div>
             ))

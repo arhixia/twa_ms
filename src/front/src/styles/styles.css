@@ -829,6 +829,21 @@
   transition: transform 0.2s, background 0.2s;
 }
 
+/* Отображение вознаграждения монтажника */
+
+.task-mont-reward {
+  position: absolute;
+  top: 110px; /* Ниже ID задачи */
+  right: 12px; /* Справа */
+  font-size: 22px;
+  font-weight: 600;
+  z-index: 1;
+  background: linear-gradient(to right, #10b981, #2563eb);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;;
+  text-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
 
 .gradient-button:hover {
   background: linear-gradient(to right, #34d399, #3b82f6);

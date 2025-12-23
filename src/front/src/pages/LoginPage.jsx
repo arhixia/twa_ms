@@ -69,15 +69,15 @@ export default function LoginPage() {
 
   return (
     <div className="login-wrapper">
-      <form className="login-form" onSubmit={handleSubmit}>
+      <form className="login-form" onSubmit={handleSubmit} style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>
         {/* Заголовок приложения по центру */}
          <div>
-            <div className="app-title">GeoTask</div>
-            <div className="app-subtitle">мини-приложение</div>
+            <div className="app-title" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>GeoTask</div>
+            <div className="app-subtitle" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>мини-приложение</div>
           </div>
 
         {/* Заголовок формы */}
-        <h2 className="form-title">Авторизация</h2>
+        <h2 className="form-title" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>Авторизация</h2>
 
         {/* Поле Логин */}
         <div className="input-group">
@@ -87,6 +87,7 @@ export default function LoginPage() {
             value={login}
             onChange={(e) => setLogin(e.target.value)}
             required
+            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           />
           <span className="input-icon">👤</span>
         </div>
@@ -99,22 +100,24 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           />
           <button
             type="button"
             className="toggle-password"
             onClick={() => setShowPassword(!showPassword)}
             aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
+            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           >
             {showPassword ? "👁️" : "👁️‍🗨️"}
           </button>
         </div>
 
         {/* Сообщение об ошибке */}
-        {error && <div className="login-error">{error}</div>}
+        {error && <div className="login-error" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>{error}</div>}
 
         {/* Кнопка Войти */}
-        <button type="submit" className="login-btn">Войти</button>
+        <button type="submit" className="login-btn" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>Войти</button>
       </form>
     </div>
   );

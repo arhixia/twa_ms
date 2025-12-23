@@ -14,10 +14,9 @@ export default function AssignedTasksPage() {
   const [rejectTaskId, setRejectTaskId] = useState(null);
 
   const { updateAssignedTasksCount, updateMyTasksCount, updateAvailableTasksCount } = useAuthStore();
-  const navigate = useNavigate(); // Получаем функцию навигации
+  const navigate = useNavigate();
 
-  // Обработчик клика по карточке задачи
-   const handleTaskCardClick = (task) => {
+  const handleTaskCardClick = (task) => {
     navigate(`/montajnik/tasks/assigned/${task.id}`);
   };
 
@@ -36,11 +35,11 @@ export default function AssignedTasksPage() {
   }
 
   async function handleAccept(taskId) {
-    setActionLoading(`accept-${taskId}`); // Используем уникальный ключ для типа действия
+    setActionLoading(`accept-${taskId}`);
     try {
       await acceptTask(taskId);
       await Promise.all([
-        load(), // Перезагружаем текущие задачи
+        load(),
         updateAssignedTasksCount(),
         updateMyTasksCount(),
         updateAvailableTasksCount()
@@ -60,14 +59,14 @@ export default function AssignedTasksPage() {
 
   async function handleRejectConfirm() {
     if (!rejectTaskId) return;
-    setActionLoading(`reject-${rejectTaskId}`); // Используем уникальный ключ для типа действия
+    setActionLoading(`reject-${rejectTaskId}`);
     try {
       await rejectTask(rejectTaskId, rejectComment || null);
       setShowRejectModal(false);
       setRejectComment("");
       setRejectTaskId(null);
       await Promise.all([
-        load(), // Перезагружаем текущие задачи
+        load(),
         updateAssignedTasksCount(),
         updateMyTasksCount(),
         updateAvailableTasksCount()
@@ -84,16 +83,15 @@ export default function AssignedTasksPage() {
     }
   }
 
-  // Функция для вызова отклонения (передается в TaskCard)
   const handleReject = (taskId) => {
     openRejectModal(taskId);
   };
 
   return (
-    <div className="logist-main"> {/* Обернем в logist-main для единообразия */}
+    <div className="logist-main">
       <div className="page">
-        <div className="page-header"> {/* Используем общий стиль заголовка */}
-          <h1 className="page-title">Назначенные задачи</h1> {/* Используем стиль заголовка как в MyTasksPage */}
+        <div className="page-header">
+          <h1 className="page-title">Назначенные задачи</h1>
         </div>
 
         <div className="cards">
@@ -105,20 +103,26 @@ export default function AssignedTasksPage() {
                 key={task.id}
                 className="task-card-wrapper"
                 style={{
-                  position: "relative", // Для позиционирования кнопок
+                  position: "relative",
                   borderRadius: "12px",
                   overflow: "hidden",
                   boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
                 }}
               >
-                {/* Передаем onClick, onAccept, onReject и статусы загрузки в TaskCard */}
+                {/* Отображение mont_reward */}
+                {task.montajnik_reward && (
+                  <div className="task-mont-reward">
+                    {task.montajnik_reward}
+                  </div>
+                )}
+                
                 <TaskCard
                   task={task}
                   onClick={handleTaskCardClick}
                   onAccept={() => handleAccept(task.id)}
                   onReject={() => handleReject(task.id)}
-                  isAccepting={actionLoading === `accept-${task.id}`} // Проверяем уникальный ключ
-                  isRejecting={actionLoading === `reject-${task.id}`} // Проверяем уникальный ключ
+                  isAccepting={actionLoading === `accept-${task.id}`}
+                  isRejecting={actionLoading === `reject-${task.id}`}
                 />
               </div>
             ))
@@ -127,8 +131,6 @@ export default function AssignedTasksPage() {
           )}
         </div>
 
-        {/* Модалка отклонения */}
-                {/* Модалка отклонения */}
         {showRejectModal && (
           <div className="modal-backdrop" onClick={() => setShowRejectModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>

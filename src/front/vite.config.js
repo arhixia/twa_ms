@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['compute-journalists-major-days.trycloudflare.com']
+    allowedHosts: ['enough-introduction-cat-favors.trycloudflare.com']
   },
 })
 
