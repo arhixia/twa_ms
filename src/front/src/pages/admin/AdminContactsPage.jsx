@@ -11,28 +11,36 @@ import {
 } from "../../api";
 import "../../styles/LogistPage.css";
 
-// Компонент автодополнения для компании
+// Компонент автодополнения для компании (скопирован из LogistContactsPage)
 function CompanyInput({ value, onChange, companies, placeholder }) {
   const [isOpen, setIsOpen] = useState(false);
   const [filteredCompanies, setFilteredCompanies] = useState(companies);
+  const [inputValue, setInputValue] = useState(value);
 
   useEffect(() => {
-    if (!value.trim()) {
+    setInputValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (!inputValue.trim()) {
       setFilteredCompanies(companies);
     } else {
-      const termLower = value.toLowerCase();
+      const termLower = inputValue.toLowerCase();
       setFilteredCompanies(
         companies.filter(company => company.name.toLowerCase().includes(termLower))
       );
     }
-  }, [value, companies]);
+  }, [inputValue, companies]);
 
   const handleInputChange = (e) => {
-    onChange(e.target.value);
+    const newValue = e.target.value;
+    setInputValue(newValue);
+    onChange(newValue);
     setIsOpen(true);
   };
 
   const handleCompanySelect = (company) => {
+    setInputValue(company.name);
     onChange(company.name);
     setIsOpen(false);
   };
@@ -41,55 +49,23 @@ function CompanyInput({ value, onChange, companies, placeholder }) {
   const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div className="searchable-select-container">
       <input
         type="text"
-        value={value}
+        value={inputValue}
         onChange={handleInputChange}
         onFocus={handleInputFocus}
         onBlur={handleInputBlur}
         placeholder={placeholder}
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          backgroundColor: '#1a1a1a',
-          color: '#e0e0e0',
-          fontSize: '14px',
-        }}
+        className="searchable-select-input"
       />
       {isOpen && filteredCompanies.length > 0 && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
+        <ul className="searchable-select-dropdown">
           {filteredCompanies.map((company) => (
             <li
               key={company.id}
               onClick={() => handleCompanySelect(company)}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                color: '#e0e0e0',
-                backgroundColor: '#2a2a2a',
-                borderBottom: '1px solid #3a3a3a',
-              }}
+              className="searchable-select-option"
               onMouseDown={(e) => e.preventDefault()}
             >
               {company.name}
@@ -97,27 +73,9 @@ function CompanyInput({ value, onChange, companies, placeholder }) {
           ))}
         </ul>
       )}
-      {isOpen && filteredCompanies.length === 0 && value.trim() !== '' && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+      {isOpen && filteredCompanies.length === 0 && inputValue.trim() !== '' && (
+        <ul className="searchable-select-dropdown">
+          <li className="searchable-select-no-results">
             Ничего не найдено
           </li>
         </ul>
@@ -133,7 +91,11 @@ function EditCompanyModal({ company, onClose, onSave }) {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      alert("Введите название компании");
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Введите название компании");
+      } else {
+        alert("Введите название компании");
+      }
       return;
     }
 
@@ -143,7 +105,12 @@ function EditCompanyModal({ company, onClose, onSave }) {
       onSave(updated);
       onClose();
     } catch (err) {
-      alert(err.response?.data?.detail || "Ошибка обновления компании");
+      const errorMsg = err.response?.data?.detail || "Ошибка обновления компании";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+      } else {
+        alert(`Ошибка: ${errorMsg}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -151,10 +118,10 @@ function EditCompanyModal({ company, onClose, onSave }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Редактировать компанию</h3>
-          <button className="add-btn" style={{ padding: '4px 8px' }} onClick={onClose}>×</button>
+          <h2>Редактировать компанию</h2>
+          <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
           <label className="dark-label">
@@ -164,20 +131,19 @@ function EditCompanyModal({ company, onClose, onSave }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Введите название"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
+              className="dark-select"
             />
           </label>
         </div>
-        <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-          <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={onClose}>Отмена</button>
-          <button className="add-btn" onClick={handleSubmit} disabled={saving}>
+        <div className="modal-actions">
+          <button 
+            className="gradient-button" 
+            onClick={handleSubmit} 
+            disabled={saving}
+            style={{
+              background: saving ? 'linear-gradient(to right, #94a3b8, #64748b)' : 'linear-gradient(to right, #10b981, #2563eb)'
+            }}
+          >
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
@@ -186,17 +152,21 @@ function EditCompanyModal({ company, onClose, onSave }) {
   );
 }
 
-
 function EditContactPersonModal({ contact, onClose, onSave, companies }) {
   const [name, setName] = useState(contact.name);
   const [position, setPosition] = useState(contact.position || "");
   const [phone, setPhone] = useState(contact.phone);
   const [companyId, setCompanyId] = useState(contact.company_id);
+  const [companyName, setCompanyName] = useState(companies.find(c => c.id === contact.company_id)?.name || "");
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async () => {
     if (!name.trim() || !companyId) {
-      alert("Заполните ФИО и выберите компанию");
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Заполните ФИО и выберите компанию");
+      } else {
+        alert("Заполните ФИО и выберите компанию");
+      }
       return;
     }
 
@@ -211,18 +181,33 @@ function EditContactPersonModal({ contact, onClose, onSave, companies }) {
       onSave(updated);
       onClose();
     } catch (err) {
-      alert(err.response?.data?.detail || "Ошибка обновления контакта");
+      const errorMsg = err.response?.data?.detail || "Ошибка обновления контакта";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+      } else {
+        alert(`Ошибка: ${errorMsg}`);
+      }
     } finally {
       setSaving(false);
     }
   };
 
+  const handleCompanyChange = (selectedCompanyName) => {
+    setCompanyName(selectedCompanyName);
+    const selectedCompany = companies.find(c => c.name === selectedCompanyName);
+    if (selectedCompany) {
+      setCompanyId(selectedCompany.id);
+    } else {
+      setCompanyId(null);
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Редактировать контактное лицо</h3>
-          <button className="add-btn" style={{ padding: '4px 8px' }} onClick={onClose}>×</button>
+          <h2>Редактировать контактное лицо</h2>
+          <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
           <label className="dark-label">
@@ -232,14 +217,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies }) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Введите ФИО"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
+              className="dark-select"
             />
           </label>
           <label className="dark-label">
@@ -249,14 +227,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies }) {
               value={position}
               onChange={(e) => setPosition(e.target.value)}
               placeholder="Введите должность (необязательно)"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
+              className="dark-select"
             />
           </label>
           <label className="dark-label">
@@ -266,39 +237,28 @@ function EditContactPersonModal({ contact, onClose, onSave, companies }) {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="Введите телефон (необязательно)"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
+              className="dark-select"
             />
           </label>
           <label className="dark-label">
             Компания
-            <select
-              value={companyId}
-              onChange={(e) => setCompanyId(Number(e.target.value))}
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
-            >
-              {companies.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+            <CompanyInput
+              value={companyName}
+              onChange={handleCompanyChange}
+              companies={companies}
+              placeholder="Выберите или создайте компанию"
+            />
           </label>
         </div>
-        <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-          <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={onClose}>Отмена</button>
-          <button className="add-btn" onClick={handleSubmit} disabled={saving}>
+        <div className="modal-actions">
+          <button 
+            className="gradient-button" 
+            onClick={handleSubmit} 
+            disabled={saving}
+            style={{
+              background: saving ? 'linear-gradient(to right, #94a3b8, #64748b)' : 'linear-gradient(to right, #10b981, #2563eb)'
+            }}
+          >
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
@@ -400,99 +360,92 @@ export default function AdminContactsPage() {
     }
   }
 
-const handleAddCompany = async () => {
-  if (!newCompanyName.trim()) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Введите название компании");
-    } else {
-      alert("Введите название компании");
+  const handleAddCompany = async () => {
+    if (!newCompanyName.trim()) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Введите название компании");
+      } else {
+        alert("Введите название компании");
+      }
+      return;
     }
-    return;
-  }
-  try {
-    const result = await adminAddCompany({ name: newCompanyName.trim() });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Компания "${result.name}" добавлена`);
-    } else {
-      alert(`Компания "${result.name}" добавлена`);
-    }
-    setNewCompanyName("");
-    setShowAddCompanyModal(false);
-    loadCompanies();
-  } catch (err) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(err.response?.data?.detail || "Ошибка добавления компании");
-    } else {
-      alert(err.response?.data?.detail || "Ошибка добавления компании");
-    }
-  }
-};
-
-const handleAddContact = async () => {
-  if (!newContactName.trim() || !newContactCompanyName.trim()) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Заполните ФИО и компанию");
-    } else {
-      alert("Заполните ФИО и компанию");
-    }
-    return;
-  }
-
-  const existingCompany = companies.find(c => c.name.toLowerCase() === newContactCompanyName.toLowerCase());
-  let companyId;
-
-  if (existingCompany) {
-    companyId = existingCompany.id;
-  } else {
     try {
-      const newCompany = await adminAddCompany({ name: newContactCompanyName.trim() });
-      companyId = newCompany.id;
-      setCompanies(prev => [...prev, newCompany]);
+      const result = await adminAddCompany({ name: newCompanyName.trim() });
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Компания "${result.name}" добавлена`);
+      } else {
+        alert(`Компания "${result.name}" добавлена`);
+      }
+      setNewCompanyName("");
+      setShowAddCompanyModal(false);
+      loadCompanies();
     } catch (err) {
-      console.error("Ошибка добавления компании:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось добавить компанию.";
+      const errorMsg = err.response?.data?.detail || "Ошибка добавления компании";
       if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
       } else {
         alert(`Ошибка: ${errorMsg}`);
       }
+    }
+  };
+
+  const handleAddContact = async () => {
+    if (!newContactName.trim() || !newContactCompanyName.trim()) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Заполните ФИО и компанию");
+      } else {
+        alert("Заполните ФИО и компанию");
+      }
       return;
     }
-  }
 
-  try {
-    const result = await adminAddContactPerson(companyId, {
-      name: newContactName.trim(),
-      phone: newContactPhone.trim(),
-      position: newContactPosition.trim(),
-    });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-    } else {
-      alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-    }
-    setNewContactName("");
-    setNewContactPhone("");
-    setNewContactPosition("");
-    setNewContactCompanyName("");
-    setShowAddContactModal(false);
+    const existingCompany = companies.find(c => c.name.toLowerCase() === newContactCompanyName.toLowerCase());
+    let companyId;
 
-    if (contacts[companyId]) {
-      setContacts(prev => ({
-        ...prev,
-        [companyId]: [...(prev[companyId] || []), result]
-      }));
+    if (!existingCompany) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Компания "${newContactCompanyName}" не найдена.`);
+      } else {
+        alert(`Компания "${newContactCompanyName}" не найдена.`);
+      }
+      return;
     }
-  } catch (err) {
-    console.error("Ошибка добавления контактного лица:", err);
-    const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
+
+    companyId = existingCompany.id;
+
+    try {
+      const result = await adminAddContactPerson(companyId, {
+        name: newContactName.trim(),
+        phone: newContactPhone.trim(),
+        position: newContactPosition.trim(),
+      });
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
+      } else {
+        alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
+      }
+      setNewContactName("");
+      setNewContactPhone("");
+      setNewContactPosition("");
+      setNewContactCompanyName("");
+      setShowAddContactModal(false);
+
+      if (contacts[companyId]) {
+        setContacts(prev => ({
+          ...prev,
+          [companyId]: [...(prev[companyId] || []), result]
+        }));
+      }
+    } catch (err) {
+      console.error("Ошибка добавления контактного лица:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+      } else {
+        alert(`Ошибка: ${errorMsg}`);
+      }
     }
-  }
-};
+  };
 
   const openEditCompanyModal = (company) => {
     setEditingCompany(company);
@@ -529,32 +482,22 @@ const handleAddContact = async () => {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Контакты</h1>
+          <h1 className="page-title">Контакты</h1>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <button className="add-btn" onClick={() => setShowAddCompanyModal(true)}>+ Компания</button>
-          <button className="add-btn" onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
+          <button className="gradient-button" onClick={() => setShowAddCompanyModal(true)}>+ Компания</button>
+          <button className="gradient-button" onClick={() => setShowAddContactModal(true)}>+ Контакт</button>
         </div>
 
         <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
           <label className="dark-label">Поиск по компаниям</label>
           <input
             type="text"
-            className="dark-input"
+            className="dark-select"
             placeholder="Поиск..."
             value={companySearchTerm}
             onChange={e => setCompanySearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #444',
-              borderRadius: '4px',
-              backgroundColor: '#1a1a1a',
-              color: '#e0e0e0',
-              fontSize: '14px',
-              boxSizing: 'border-box'
-            }}
           />
         </div>
 
@@ -570,14 +513,14 @@ const handleAddContact = async () => {
                 return (
                   <React.Fragment key={company.id}>
                     <div
-                      className="history-item clickable-history-item"
+                      className="profile-card clickable-history-item"
                       style={{
-                        padding: "8px",
-                        borderBottom: "1px solid #30363d",
-                        backgroundColor: "#0d1117",
+                        padding: "12px",
                         cursor: "pointer",
                         borderRadius: "8px",
                         transition: "background-color 0.2s ease",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        backgroundColor: "#1b2c3c",
                       }}
                       onClick={() => loadContactsForCompany(company.id)}
                     >
@@ -605,9 +548,9 @@ const handleAddContact = async () => {
                     {isExpanded && (
                       <div
                         style={{
-                          padding: "8px",
+                          padding: "12px",
                           backgroundColor: "#161b22",
-                          border: "1px solid #30363d",
+                          border: "1px solid rgba(255,255,255,0.08)",
                           borderRadius: "0 0 8px 8px",
                           marginTop: "-1px",
                         }}
@@ -619,12 +562,12 @@ const handleAddContact = async () => {
                             {companyContacts.map(contact => (
                               <div
                                 key={contact.id}
+                                className="profile-card"
                                 style={{ 
-                                  padding: '6px', 
-                                  border: '1px solid #444', 
-                                  borderRadius: '4px', 
-                                  backgroundColor: '#1a1a1a',
-                                  cursor: 'pointer' 
+                                  padding: '8px', 
+                                  cursor: 'pointer',
+                                  border: "1px solid rgba(255,255,255,0.08)",
+                                  backgroundColor: "#1b2c3c",
                                 }}
                                 onClick={(e) => { 
                                   e.stopPropagation(); // <-- Останавливаем всплытие, чтобы не вызвать loadContactsForCompany
@@ -653,12 +596,13 @@ const handleAddContact = async () => {
           )}
         </div>
 
+        {/* === Модальное окно добавления компании === */}
         {showAddCompanyModal && (
           <div className="modal-backdrop" onClick={() => setShowAddCompanyModal(false)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h3>Добавить компанию</h3>
-                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>×</button>
+                <h2>Добавить компанию</h2>
+                <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>×</button>
               </div>
               <div className="modal-body">
                 <label className="dark-label">
@@ -668,20 +612,14 @@ const handleAddContact = async () => {
                     value={newCompanyName}
                     onChange={(e) => setNewCompanyName(e.target.value)}
                     placeholder="Введите название"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
+                    className="dark-select"
                   />
                 </label>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>Отмена</button>
-                  <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddCompany(); }}>Сохранить</button>
-                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddCompany(); }}>
+                  Сохранить
+                </button>
               </div>
             </div>
           </div>
@@ -689,10 +627,10 @@ const handleAddContact = async () => {
 
         {showAddContactModal && (
           <div className="modal-backdrop" onClick={() => setShowAddContactModal(false)}>
-            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h3>Добавить контактное лицо</h3>
-                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>×</button>
+                <h2>Добавить контактное лицо</h2>
+                <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>×</button>
               </div>
               <div className="modal-body">
                 <label className="dark-label">
@@ -702,14 +640,7 @@ const handleAddContact = async () => {
                     value={newContactName}
                     onChange={(e) => setNewContactName(e.target.value)}
                     placeholder="Введите ФИО"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
+                    className="dark-select"
                   />
                 </label>
                 <label className="dark-label">
@@ -719,14 +650,7 @@ const handleAddContact = async () => {
                     value={newContactPosition}
                     onChange={(e) => setNewContactPosition(e.target.value)}
                     placeholder="Введите должность (необязательно)"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
+                    className="dark-select"
                   />
                 </label>
                 <label className="dark-label">
@@ -736,14 +660,7 @@ const handleAddContact = async () => {
                     value={newContactPhone}
                     onChange={(e) => setNewContactPhone(e.target.value)}
                     placeholder="Введите телефон (необязательно)"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
+                    className="dark-select"
                   />
                 </label>
                 <label className="dark-label">
@@ -752,13 +669,14 @@ const handleAddContact = async () => {
                     value={newContactCompanyName}
                     onChange={setNewContactCompanyName}
                     companies={companies}
-                    placeholder="Введите или выберите компанию"
+                    placeholder="Выберите компанию"
                   />
                 </label>
               </div>
-              <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-                <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>Отмена</button>
-                <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddContact(); }}>Сохранить</button>
+              <div className="modal-actions">
+                <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddContact(); }}>
+                  Сохранить
+                </button>
               </div>
             </div>
           </div>

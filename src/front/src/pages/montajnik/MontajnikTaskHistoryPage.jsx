@@ -1,5 +1,4 @@
 // front/src/pages/montajnik/MontajnikTaskHistoryPage.jsx
-
 import React, { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -88,7 +87,8 @@ export default function MontajnikTaskHistoryPage() {
       }
 
       const contactPerson = personsForCompany.find((cp) => cp.id === contactPersonId);
-      return contactPerson ? contactPerson.name : `Контакт ${contactPersonId}`;
+      // Проверяем, что contactPerson не null/undefined и у него есть name
+      return contactPerson && contactPerson.name ? contactPerson.name : `Контакт ${contactPersonId}`;
     },
     [contactPersonsCache]
   );

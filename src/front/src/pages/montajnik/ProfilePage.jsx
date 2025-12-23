@@ -359,19 +359,31 @@ export default function ProfilePage() {
 
                     {/* Блок оборудования */}
                     <div className="equipment-section">
-                      <div className="equipment-label">ОБОРУДОВАНИЕ:</div>
-                      <div className="equipment-list">
-                        {task.equipment && task.equipment.length > 0 ? (
-                          task.equipment.map((eq, index) => (
-                            <div key={index} className="equipment-item">
-                              {eq.equipment?.name || `Оборудование ${eq.equipment_id}`}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="equipment-item">Оборудование не назначено</div>
-                        )}
+              <div className="equipment-label">ОБОРУДОВАНИЕ:</div>
+              <div className="equipment-list">
+                {task.equipment && task.equipment.length > 0 ? (
+                  (() => {
+                    // Группируем оборудование по названию
+                    const groupedEquipment = task.equipment.reduce((acc, eq) => {
+                      const name = eq.equipment?.name || `Оборудование ${eq.equipment_id}`;
+                      if (!acc[name]) {
+                        acc[name] = 0;
+                      }
+                      acc[name]++;
+                      return acc;
+                    }, {});
+
+                    return Object.entries(groupedEquipment).map(([name, count], index) => (
+                      <div key={index} className="equipment-item">
+                        {count > 1 ? `${name} x${count}` : name}
                       </div>
-                    </div>
+                    ));
+                  })()
+                ) : (
+                  <div className="equipment-item">Оборудование не назначено</div>
+                )}
+              </div>
+            </div>
 
                     {/* Дата и время */}
                     <div className="task-scheduled-at">

@@ -6,17 +6,15 @@ import {
   reviewTechReport,
   getEquipmentList,
   getWorkTypes,
-  getTechCompaniesList,      // ✅ Новое
-  getTechContactPersonsByCompany, // ✅ Новое
-  getTechContactPersonPhone, // <--- Новый импорт
-  // --- НОВОЕ: Импорты для вложений отчётов ---
+  getTechCompaniesList,
+  getTechContactPersonsByCompany,
+  getTechContactPersonPhone,
   listReportAttachments,
   getAttachmentUrl,
 } from "../../api";
 import "../../styles/LogistPage.css";
 import ImageModal from "../../components/ImageModal";
 
-// --- НОВОЕ: Хук для загрузки вложений отчёта ---
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -53,18 +51,14 @@ export default function TechTaskDetailPage() {
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  // --- Состояния для модального окна отклонения отчёта тех.специалистом ---
   const [rejectModal, setRejectModal] = useState({ open: false, taskId: null, reportId: null });
   const [rejectComment, setRejectComment] = useState("");
-  const [equipment, setEquipment] = useState([]); // Состояние для списка оборудования
-  const [workTypes, setWorkTypes] = useState([]); // Состояние для списка видов работ
-  const [companies, setCompanies] = useState([]); // ✅ Новое
-  const [contactPersons, setContactPersons] = useState([]); // ✅ Новое
-  // ✅ Состояние для хранения телефона контактного лица
-  const [contactPersonPhone, setContactPersonPhone] = useState(null); // <--- Добавлено
+  const [equipment, setEquipment] = useState([]);
+  const [workTypes, setWorkTypes] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [contactPersons, setContactPersons] = useState([]);
+  const [contactPersonPhone, setContactPersonPhone] = useState(null);
   const [openImage, setOpenImage] = useState(null);
-
-  // --- НОВОЕ: Состояние для вложений отчётов ---
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
 
   useEffect(() => {
@@ -72,13 +66,12 @@ export default function TechTaskDetailPage() {
     loadTask();
   }, [id]);
 
-  // --- Функция для загрузки справочников ---
   async function loadRefs() {
     try {
       const [eqRes, wtRes, compRes] = await Promise.allSettled([
         getEquipmentList(),
         getWorkTypes(),
-        getTechCompaniesList(), // ✅ Новое
+        getTechCompaniesList(),
       ]);
 
       setEquipment(eqRes.status === "fulfilled" ? eqRes.value || [] : []);
@@ -89,7 +82,6 @@ export default function TechTaskDetailPage() {
     }
   }
 
-  // --- НОВОЕ: Функция для загрузки вложений отчётов ---
   const loadReportAttachments = async (reportId) => {
     try {
       const data = await listReportAttachments(reportId);
@@ -102,7 +94,7 @@ export default function TechTaskDetailPage() {
     }
   };
 
-   const handleImageClick = (imageUrl) => {
+  const handleImageClick = (imageUrl) => {
     setOpenImage(imageUrl);
   };
 
@@ -110,7 +102,7 @@ export default function TechTaskDetailPage() {
     setOpenImage(null);
   };
 
-    const STATUS_TRANSLATIONS = {
+  const STATUS_TRANSLATIONS = {
     new: "Создана",
     accepted: "Принята монтажником",
     on_the_road: "Выехал на работу",
@@ -123,21 +115,19 @@ export default function TechTaskDetailPage() {
     assigned: "Назначена",
   };
 
-  // --- НОВАЯ ФУНКЦЯ ДЛЯ ПОЛУЧЕНИЯ РУССКОГО НАЗВАНИЯ СТАТУСА ---
   function getStatusDisplayName(statusKey) {
-    return STATUS_TRANSLATIONS[statusKey] || statusKey || "—"; // Возврат "—" если statusKey null/undefined, иначе сам ключ, если перевод не найден
-}
+    return STATUS_TRANSLATIONS[statusKey] || statusKey || "—";
+  }
 
-const REPORT_APPROVAL_TRANSLATIONS = {
-  waiting: "Проверяется",
-  approved: "Принято",
-  rejected: "Отклонено",
-};
+  const REPORT_APPROVAL_TRANSLATIONS = {
+    waiting: "Проверяется",
+    approved: "Принято",
+    rejected: "Отклонено",
+  };
 
   function getReportApprovalDisplayName(approvalKey) {
-  return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
-}
-
+    return REPORT_APPROVAL_TRANSLATIONS[approvalKey] || approvalKey || "—";
+  }
 
   async function loadTask() {
     setLoading(true);
@@ -145,7 +135,6 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     try {
       const data = await fetchTechTaskDetail(id);
 
-      // безопасная инициализация полей
       const t = {
         ...data,
         equipment: data.equipment || [],
@@ -160,23 +149,18 @@ const REPORT_APPROVAL_TRANSLATIONS = {
 
       setTask(t);
 
-      // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
-      // Если contact_person_id есть, но contact_person_phone нет в data, загрузим его
       if (t.contact_person_id && !t.contact_person_phone) {
          try {
-            const { phone } = await getTechContactPersonPhone(t.contact_person_id); // <--- Вызываем эндпоинт
-            setContactPersonPhone(phone); // <--- Устанавливаем телефон для просмотра
-            // t.contact_person_phone = phone; // <--- Опционально: можно обновить и в task
+            const { phone } = await getTechContactPersonPhone(t.contact_person_id);
+            setContactPersonPhone(phone);
          } catch (err) {
             console.error("Ошибка загрузки телефона при инициализации задачи:", err);
-            setContactPersonPhone(null); // <--- Сброс при ошибке
+            setContactPersonPhone(null);
          }
       } else {
-        // Если телефон уже есть в data или contact_person_id отсутствует
         setContactPersonPhone(t.contact_person_phone || null);
       }
 
-      // --- НОВОЕ: Загрузка вложений для всех отчётов ---
       if (t.reports) {
         t.reports.forEach(r => {
           loadReportAttachments(r.id);
@@ -194,43 +178,35 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     }
   }
 
-  // --- Функция для принятия отчёта тех.специалистом ---
-async function handleTechApprove(taskId, reportId) {
-  if (!window.confirm("Принять отчёт как тех.специалист?")) return;
-  try {
-    // Вызываем НОВУЮ функцию API для ревью с approval: "approved"
-    // ❌ Убираем photos из payload
-    await reviewTechReport(taskId, reportId, { approval: "approved", comment: "" /*, photos: []*/ });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("✅ Отчёт принят тех.специалистом");
-    } else {
-      alert("✅ Отчёт принят тех.специалистом");
-    }
-    loadTask(); // Перезагружаем задачу для обновления отображения
-  } catch (err) {
-    console.error("Ошибка принятия отчёта:", err);
-    const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
+  async function handleTechApprove(taskId, reportId) {
+    if (!window.confirm("Принять отчёт как тех.специалист?")) return;
+    try {
+      await reviewTechReport(taskId, reportId, { approval: "approved", comment: "" });
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("✅ Отчёт принят тех.специалистом");
+      } else {
+        alert("✅ Отчёт принят тех.специалистом");
+      }
+      loadTask();
+    } catch (err) {
+      console.error("Ошибка принятия отчёта:", err);
+      const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+      } else {
+        alert(`Ошибка: ${errorMsg}`);
+      }
     }
   }
-}
 
-  // --- Функции для управления модальным окном отклонения тех.специалистом ---
   function handleRejectTechReport(taskId, reportId) {
     setRejectModal({ open: true, taskId, reportId });
   }
-
-
 
   function closeRejectModal() {
     setRejectModal({ open: false, taskId: null, reportId: null });
     setRejectComment("");
   }
-
-
 
   if (loading) return <div className="logist-main"><div className="empty">Загрузка задачи #{id}...</div></div>;
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
@@ -239,17 +215,33 @@ async function handleTechApprove(taskId, reportId) {
   return (
     <div className="logist-main">
       <div className="page">
-        <div className="page-header">
-          <h1>Задача #{task.id}</h1>
-          <button className="add-btn" onClick={() => navigate(-1)}>⬅️ Назад</button>
+        {/* Заголовок с ID задачи слева и кнопкой Назад справа */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h1 className="page-title">Задача #{task.id}</h1>
+          <button 
+            onClick={() => navigate(-1)} 
+            style={{ 
+              background: 'linear-gradient(to right, #10b981, #2563eb)', 
+              color: 'white', 
+              border: 'none', 
+              borderRadius: '6px', 
+              padding: '8px 16px', 
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            ← Назад
+          </button>
         </div>
 
         <div className="task-detail">
           <div className="task-view">
-            {/* ✅ Заменено client на company_name и contact_person_name */}
             <p><b>Компания:</b> {task.company_name || "—"}</p>
-            <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}</p>
-            {/* ===== НОВОЕ ПОЛЕ: ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+            <p><b>Контактное лицо:</b> {task.contact_person_name || "—"}{task.contact_person_position ? ` - ${task.contact_person_position}` : ""}</p>
             <p>
              <b>Телефон контактного лица:</b>{" "}
   {contactPersonPhone || task.contact_person_phone || "—"}
@@ -259,12 +251,9 @@ async function handleTechApprove(taskId, reportId) {
         const phone = contactPersonPhone || task.contact_person_phone;
         const telUrl = `tel:${phone}`;
 
-        // Если внутри Telegram Mini App
         if (window.Telegram?.WebApp) {
-          // Попробуем открыть в внешнем браузере
           window.open(telUrl, "_blank");
         } else {
-          // Обычный браузер
           window.location.href = telUrl;
         }
       }}
@@ -313,7 +302,6 @@ async function handleTechApprove(taskId, reportId) {
               {(task.equipment || [])
                 .map((e) => {
                   const eqName = equipment.find((eq) => eq.id === e.equipment_id)?.name;
-                  // ✅ Отображаем serial_number и quantity
                   return `${eqName || e.equipment_id}${e.serial_number ? ` (СН: ${e.serial_number})` : ''} x${e.quantity}`;
                 })
                 .join(", ") || "—"}
@@ -325,17 +313,16 @@ async function handleTechApprove(taskId, reportId) {
                 task.work_types.map(wt => {
                   const wtObj = workTypes.find(w => w.id === wt.work_type_id);
                   const name = wtObj?.name || wt.work_type_id;
-                  const count = wt.quantity || 1; // Берём quantity из объекта
+                  const count = wt.quantity || 1;
                   return `${name} (x${count})`;
                 }).join(", ")
               ) : "—"}
             </p>
-
           </div>
 
           <div className="section">
             <h3>История</h3>
-            <button className="add-btn" onClick={() => navigate(`/tech_supp/tasks/${id}/history`)}>
+            <button className="gradient-button" onClick={() => navigate(`/tech_supp/tasks/${id}/history`)}>
               Подробнее
             </button>
           </div>
@@ -344,7 +331,6 @@ async function handleTechApprove(taskId, reportId) {
             <h3>Отчёты монтажников</h3>
             {(task.reports || []).length ? (
               task.reports.map((r) => {
-                // --- ИЗМЕНЕНО: Извлечение выполненных работ и комментария ---
                 let performedWorks = "";
                 let comment = "";
                 if (r.text) {
@@ -359,21 +345,17 @@ async function handleTechApprove(taskId, reportId) {
                   }
                 }
 
-                // --- ИЗМЕНЕНО: Получение вложений из reportAttachmentsMap ---
                 const reportAttachments = reportAttachmentsMap[r.id] || [];
                 const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
 
                 return (
                   <div key={r.id} className="report">
-                    {/* #37: Выполнено: {типы работ} */}
                     <p>
                       <b>#{r.id}:</b> {performedWorks ? `Выполнено: ${performedWorks}` : "Нет выполненных работ"}
                     </p>
-                    {/* С новой строки — комментарий монтажника */}
                     {comment && (
                       <p>{comment}</p>
                     )}
-                    {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
                     {reportAttachmentsLoading ? (
                       <p>Загрузка вложений...</p>
                     ) : reportAttachments.length > 0 ? (
@@ -387,8 +369,8 @@ async function handleTechApprove(taskId, reportId) {
                           return (
                            <div
                                 key={att.id}
-                                style={{ cursor: 'zoom-in' }} // Меняем курсор
-                                onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                                style={{ cursor: 'zoom-in' }}
+                                onClick={() => handleImageClick(originalUrl)}
                               >
                                 <img
                                   src={thumbUrl}
@@ -402,19 +384,18 @@ async function handleTechApprove(taskId, reportId) {
                     ) : (
                       <p>Вложений нет</p>
                     )}
-                    {/* СО СЛЕДУЮЩЕЙ СТРОКИ — статусы проверки */}
                      <p>
-        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"} {/* <--- Используем новую функцию */}
+        <b>Логист:</b> {getReportApprovalDisplayName(r.approval_logist) || "—"}
         {task.requires_tech_supp === true && (
           <>
-            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"} {/* <--- Используем новую функцию */}
+            {" "} | <b>Тех.спец:</b> {getReportApprovalDisplayName(r.approval_tech) || "—"}
           </>
         )}
       </p>
                     
                     <div className="report-actions">
                       {r.approval_tech === "waiting" && (
-                        <button onClick={() => handleTechApprove(task.id, r.id)}>✅ Принять (Тех)</button>
+                        <button className="gradient-button" onClick={() => handleTechApprove(task.id, r.id)}>✅ Принять (Тех)</button>
                       )}
                     </div>
                   </div>
@@ -428,10 +409,10 @@ async function handleTechApprove(taskId, reportId) {
       </div>
             
             <ImageModal
-        isOpen={!!openImage} // Передаём true/false
+        isOpen={!!openImage}
         onClose={closeModal}
-        imageUrl={openImage} // Передаём URL изображения
-        altText="Вложение отчёта" // Опционально: текст по умолчанию
+        imageUrl={openImage}
+        altText="Вложение отчёта"
       />
 
     </div>

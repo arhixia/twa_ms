@@ -45,14 +45,25 @@ export default function TaskCard({ task, onClick, onAccept, onReject, onDelete, 
     : "—";
 
   // Рендеринг оборудования: используем equipment.name
+  
   const renderEquipment = () => {
     if (!task.equipment || task.equipment.length === 0) {
       return <div className="equipment-item">Оборудование не назначено</div>;
     }
 
-    return task.equipment.map((eq, index) => (
+    // Группируем оборудование по названию
+    const groupedEquipment = task.equipment.reduce((acc, eq) => {
+      const name = eq.equipment?.name || `Оборудование ${eq.equipment_id}`;
+      if (!acc[name]) {
+        acc[name] = 0;
+      }
+      acc[name]++;
+      return acc;
+    }, {});
+
+    return Object.entries(groupedEquipment).map(([name, count], index) => (
       <div key={index} className="equipment-item">
-        {eq.equipment?.name || `Оборудование ${eq.equipment_id}`}
+        {count > 1 ? `${name} x${count}` : name}
       </div>
     ));
   };

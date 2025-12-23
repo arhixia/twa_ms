@@ -247,11 +247,23 @@ export default function LogistProfilePage() {
               <div className="equipment-label">ОБОРУДОВАНИЕ:</div>
               <div className="equipment-list">
                 {task.equipment && task.equipment.length > 0 ? (
-                  task.equipment.map((eq, index) => (
-                    <div key={index} className="equipment-item">
-                      {eq.equipment?.name || `Оборудование ${eq.equipment_id}`}
-                    </div>
-                  ))
+                  (() => {
+                    // Группируем оборудование по названию
+                    const groupedEquipment = task.equipment.reduce((acc, eq) => {
+                      const name = eq.equipment?.name || `Оборудование ${eq.equipment_id}`;
+                      if (!acc[name]) {
+                        acc[name] = 0;
+                      }
+                      acc[name]++;
+                      return acc;
+                    }, {});
+
+                    return Object.entries(groupedEquipment).map(([name, count], index) => (
+                      <div key={index} className="equipment-item">
+                        {count > 1 ? `${name} x${count}` : name}
+                      </div>
+                    ));
+                  })()
                 ) : (
                   <div className="equipment-item">Оборудование не назначено</div>
                 )}

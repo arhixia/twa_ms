@@ -1,3 +1,4 @@
+// front/src/pages/admin/UsersPage.jsx
 import React, { useState, useEffect } from 'react';
 import { adminListUsers, adminCreateUser, adminChangeUserRole, adminDeactivateUser, adminActivateUser, adminUpdateUser } from '../../api';
 import UserCard from '../../components/UserCard';
@@ -50,111 +51,77 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Редактировать пользователя #{user.id}</h3>
-          <button className="add-btn" style={{ padding: '4px 8px' }} onClick={onClose}>×</button>
+          <h2>Редактировать пользователя #{user.id}</h2>
+          <button className="close" onClick={onClose}>×</button>
         </div>
         <form onSubmit={handleSubmit}>
-          <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}> {/* Добавлен стиль для gap */}
-            <label className="dark-label" style={{ margin: 0 }}> {/* Убран маргин */}
-              Имя
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #444",
-                  backgroundColor: "#1a1a1a",
-                  color: "#e0e0e0",
-                }}
-              />
-            </label>
-            <label className="dark-label" style={{ margin: 0 }}> {/* Убран маргин */}
-              Фамилия
-              <input
-                type="text"
-                name="lastname"
-                value={formData.lastname}
-                onChange={handleChange}
-                required
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #444",
-                  backgroundColor: "#1a1a1a",
-                  color: "#e0e0e0",
-                }}
-              />
-            </label>
-            <label className="dark-label" style={{ margin: 0 }}> {/* Убран маргин */}
-              Логин
-              <input
-                type="text"
-                name="login"
-                value={formData.login}
-                onChange={handleChange}
-                required
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #444",
-                  backgroundColor: "#1a1a1a",
-                  color: "#e0e0e0",
-                }}
-              />
-            </label>
-            <label className="dark-label" style={{ margin: 0 }}> {/* Убран маргин */}
-              Новый пароль (оставьте пустым, чтобы не менять)
-              <input
-                type="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                placeholder="Введите новый пароль"
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #444",
-                  backgroundColor: "#1a1a1a",
-                  color: "#e0e0e0",
-                }}
-              />
-            </label>
-            <label className="dark-label" style={{ margin: 0 }}> {/* Убран маргин */}
-              Роль
-              <select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="dark-select"
-                style={{
-                  width: "100%",
-                  padding: "8px",
-                  borderRadius: "4px",
-                  border: "1px solid #444",
-                  backgroundColor: "#1a1a1a",
-                  color: "#e0e0e0",
-                }}
-              >
-                <option value="admin">{roleDisplayNames.admin}</option>
-                <option value="logist">{roleDisplayNames.logist}</option>
-                <option value="montajnik">{roleDisplayNames.montajnik}</option>
-                <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
-              </select>
-            </label>
+          <div className="modal-body">
+            <div className="form-grid">
+              <label className="dark-label">
+                Имя
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  className="dark-select"
+                />
+              </label>
+              <label className="dark-label">
+                Фамилия
+                <input
+                  type="text"
+                  name="lastname"
+                  value={formData.lastname}
+                  onChange={handleChange}
+                  required
+                  className="dark-select"
+                />
+              </label>
+              <label className="dark-label">
+                Логин
+                <input
+                  type="text"
+                  name="login"
+                  value={formData.login}
+                  onChange={handleChange}
+                  required
+                  className="dark-select"
+                />
+              </label>
+              <label className="dark-label">
+                Новый пароль (оставьте пустым, чтобы не менять)
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  placeholder="Введите новый пароль"
+                  className="dark-select"
+                />
+              </label>
+              <label className="dark-label">
+                Роль
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                  className="dark-select"
+                >
+                  <option value="admin">{roleDisplayNames.admin}</option>
+                  <option value="logist">{roleDisplayNames.logist}</option>
+                  <option value="montajnik">{roleDisplayNames.montajnik}</option>
+                  <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
+                </select>
+              </label>
+            </div>
           </div>
-          <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-            <button type="button" className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={onClose}>Отмена</button>
-            <button type="submit" className="add-btn" disabled={saving}>
+          <div className="modal-actions">
+            <button type="button" className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={onClose}>Отмена</button>
+            <button type="submit" className="gradient-button" disabled={saving}>
               {saving ? 'Сохранение...' : 'Сохранить'}
             </button>
           </div>
@@ -327,76 +294,82 @@ function UsersPage() {
     setEditingUser(null);
   };
 
-  if (loading) return <div className="empty">Загрузка...</div>;
+  if (loading) return <div className="logist-main"><div className="empty">Загрузка...</div></div>;
 
   return (
-    <div>
-      <div className="page-header">
-        <h1>Пользователи</h1>
-        <button className="add-btn" onClick={() => setShowForm(!showForm)}>
-          {showForm ? 'Отмена' : 'Добавить пользователя'}
-        </button>
-      </div>
-      {showForm && (
-        <form onSubmit={handleCreate} className="task-detail">
-          <div className="form-grid">
-            <label>
-              Логин
-              <input type="text" name="login" value={formData.login} onChange={handleChange} required />
-            </label>
-            <label>
-              Пароль
-              <input type="password" name="password" value={formData.password} onChange={handleChange} required />
-            </label>
-            <label>
-              Имя
-              <input type="text" name="name" value={formData.name} onChange={handleChange} required />
-            </label>
-            <label>
-              Фамилия
-              <input type="text" name="lastname" value={formData.lastname} onChange={handleChange} required />
-            </label>
-            <label className="dark-label">
-              Роль
-              <select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="dark-select"
-              >
-                <option value="admin">{roleDisplayNames.admin}</option>
-                <option value="logist">{roleDisplayNames.logist}</option>
-                <option value="montajnik">{roleDisplayNames.montajnik}</option>
-                <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
-              </select>
-            </label>
-          </div>
-          <button type="submit" className="add-btn">Создать</button>
-        </form>
-      )}
-      <div className="cards">
-        {users.map(user => (
-          <UserCard
-            key={user.id}
-            user={user}
-            roleDisplayNames={roleDisplayNames}
-            onEditRole={handleRoleChange}
-            onDeactivate={handleDeactivate}
-            onActivate={handleActivate}
-            onEditUser={openEditUserModal} // Передаём функцию открытия модального окна
-          />
-        ))}
-      </div>
+    <div className="logist-main">
+      <div className="page">
+        <div className="page-header">
+          <h1 className="page-title">Пользователи</h1>
+          <button className="gradient-button" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Отмена' : 'Добавить пользователя'}
+          </button>
+        </div>
+        
+        {showForm && (
+          <form onSubmit={handleCreate} className="task-detail" style={{ marginBottom: '24px' }}>
+            <div className="form-grid">
+              <label className="dark-label">
+                Логин
+                <input type="text" name="login" value={formData.login} onChange={handleChange} required className="dark-select" />
+              </label>
+              <label className="dark-label">
+                Пароль
+                <input type="password" name="password" value={formData.password} onChange={handleChange} required className="dark-select" />
+              </label>
+              <label className="dark-label">
+                Имя
+                <input type="text" name="name" value={formData.name} onChange={handleChange} required className="dark-select" />
+              </label>
+              <label className="dark-label">
+                Фамилия
+                <input type="text" name="lastname" value={formData.lastname} onChange={handleChange} required className="dark-select" />
+              </label>
+              <label className="dark-label">
+                Роль
+                <select
+                  name="role"
+                  value={formData.role}
+                  onChange={handleChange}
+                  className="dark-select"
+                >
+                  <option value="admin">{roleDisplayNames.admin}</option>
+                  <option value="logist">{roleDisplayNames.logist}</option>
+                  <option value="montajnik">{roleDisplayNames.montajnik}</option>
+                  <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
+                </select>
+              </label>
+            </div>
+            <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="submit" className="gradient-button">Создать</button>
+            </div>
+          </form>
+        )}
+        
+        <div className="cards" style={{ marginTop: '24px' }}>
+          {users.map(user => (
+            <UserCard
+              key={user.id}
+              user={user}
+              roleDisplayNames={roleDisplayNames}
+              onEditRole={handleRoleChange}
+              onDeactivate={handleDeactivate}
+              onActivate={handleActivate}
+              onEditUser={openEditUserModal}
+            />
+          ))}
+        </div>
 
-      {/* Модальное окно редактирования пользователя */}
-      {showEditModal && editingUser && (
-        <EditUserModal
-          user={editingUser}
-          onClose={closeEditUserModal}
-          onSave={handleUserSave}
-          roleDisplayNames={roleDisplayNames}
-        />
-      )}
+        {/* Модальное окно редактирования пользователя */}
+        {showEditModal && editingUser && (
+          <EditUserModal
+            user={editingUser}
+            onClose={closeEditUserModal}
+            onSave={handleUserSave}
+            roleDisplayNames={roleDisplayNames}
+          />
+        )}
+      </div>
     </div>
   );
 }

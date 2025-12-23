@@ -19,10 +19,10 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
     if (!value.trim()) {
       setFilteredCategories(categories);
     } else {
-      const termLower = value.toLowerCase();
-      setFilteredCategories(
-        categories.filter(cat => cat.toLowerCase().includes(termLower))
-      );
+        const termLower = value.toLowerCase();
+        setFilteredCategories(
+            categories.filter(cat => cat.toLowerCase().includes(termLower))
+        );
     }
   }, [value, categories]);
 
@@ -41,6 +41,7 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
 
   return (
     <div style={{ position: 'relative', width: '100%' }}>
+      {/* Используем className="dark-select" для соответствия другим полям в модалке */}
       <input
         type="text"
         value={value}
@@ -48,15 +49,7 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
         onFocus={handleInputFocus}
         onBlur={handleInputBlur}
         placeholder={placeholder}
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          border: '1px solid #444',
-          borderRadius: '4px',
-          backgroundColor: '#1a1a1a',
-          color: '#e0e0e0',
-          fontSize: '14px',
-        }}
+        className="dark-select" // <--- Добавлен класс
       />
       {isOpen && filteredCategories.length > 0 && (
         <ul
@@ -133,125 +126,108 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
   const [techSuppRequire, setTechSuppRequire] = useState(workType.tech_supp_require);
   const [saving, setSaving] = useState(false);
 
-const handleSubmit = async () => {
-  if (!name.trim() || !category.trim() || price === null) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Заполните все обязательные поля");
-    } else {
-      alert("Заполните все обязательные поля");
+  const handleSubmit = async () => {
+    if (!name.trim() || !category.trim() || clientPrice === null || montPrice === null) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Заполните все обязательные поля");
+      } else {
+        alert("Заполните все обязательные поля");
+      }
+      return;
     }
-    return;
-  }
-  if (isNaN(price) || price <= 0) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Цена должна быть положительным числом");
-    } else {
-      alert("Цена должна быть положительным числом");
+    if (isNaN(clientPrice) || clientPrice <= 0 || isNaN(montPrice) || montPrice <= 0) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Цены должны быть положительными числами");
+      } else {
+        alert("Цены должны быть положительными числами");
+      }
+      return;
     }
-    return;
-  }
 
-  setSaving(true);
-  try {
-    const updated = await adminUpdateEquipment(equipment.id, {
-      name,
-      category,
-      price
-    });
-    onSave(updated);
-    onClose();
-  } catch (err) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(err.response?.data?.detail || "Ошибка обновления оборудования");
-    } else {
-      alert(err.response?.data?.detail || "Ошибка обновления оборудования");
+    setSaving(true);
+    try {
+      const updated = await adminUpdateWorkType(workType.id, {
+        name,
+        category,
+        client_price: clientPrice,
+        mont_price: montPrice,
+        tech_supp_require: techSuppRequire
+      });
+      onSave(updated);
+      onClose();
+    } catch (err) {
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(err.response?.data?.detail || "Ошибка обновления вида работы");
+      } else {
+        alert(err.response?.data?.detail || "Ошибка обновления вида работы");
+      }
+    } finally {
+      setSaving(false);
     }
-  } finally {
-    setSaving(false);
-  }
-};
+  };
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Редактировать вид работ</h3>
-          <button className="add-btn" style={{ padding: '4px 8px' }} onClick={onClose}>×</button>
+          <h2>Редактировать вид работ</h2>
+          <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <label className="dark-label">
-            Название
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Введите название"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
-            />
-          </label>
-          <label className="dark-label">
-            Категория
-            <CategoryInput
-              value={category}
-              onChange={setCategory}
-              categories={workTypeCategories}
-              placeholder="Введите или выберите категорию"
-            />
-          </label>
-          <label className="dark-label">
-            Цена клиента
-            <input
-              type="number"
-              value={clientPrice}
-              onChange={(e) => setClientPrice(parseFloat(e.target.value) || 0)}
-              placeholder="Введите цену клиента"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
-            />
-          </label>
-          <label className="dark-label">
-            Цена монтажника
-            <input
-              type="number"
-              value={montPrice}
-              onChange={(e) => setMontPrice(parseFloat(e.target.value) || 0)}
-              placeholder="Введите цену монтажника"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
-            />
-          </label>
-          <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <input
-              type="checkbox"
-              checked={techSuppRequire}
-              onChange={(e) => setTechSuppRequire(e.target.checked)}
-              style={{ margin: 0 }}
-            />
-            Требуется проверка тех.специалиста?
-          </label>
+          <div className="form-grid">
+            <label className="dark-label">
+              Название
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Введите название"
+                className="dark-select"
+              />
+            </label>
+            <label className="dark-label">
+              Категория
+              <CategoryInput
+                value={category}
+                onChange={setCategory}
+                categories={workTypeCategories}
+                placeholder="Введите или выберите категорию"
+              />
+            </label>
+            <label className="dark-label">
+              Цена клиента
+              <input
+                type="number"
+                value={clientPrice}
+                onChange={(e) => setClientPrice(parseFloat(e.target.value) || 0)}
+                placeholder="Введите цену клиента"
+                className="dark-select"
+              />
+            </label>
+            <label className="dark-label">
+              Цена монтажника
+              <input
+                type="number"
+                value={montPrice}
+                onChange={(e) => setMontPrice(parseFloat(e.target.value) || 0)}
+                placeholder="Введите цену монтажника"
+                className="dark-select"
+              />
+            </label>
+            <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={techSuppRequire}
+                onChange={(e) => setTechSuppRequire(e.target.checked)}
+                style={{ margin: 0 }}
+              />
+              Требуется проверка тех.специалиста?
+            </label>
+          </div>
         </div>
-        <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-          <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={onClose}>Отмена</button>
-          <button className="add-btn" onClick={handleSubmit} disabled={saving}>
+        <div className="modal-actions">
+          <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={onClose}>Отмена</button>
+          <button className="gradient-button" onClick={handleSubmit} disabled={saving}>
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
@@ -294,59 +270,47 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Редактировать оборудование</h3>
-          <button className="add-btn" style={{ padding: '4px 8px' }} onClick={onClose}>×</button>
+          <h2>Редактировать оборудование</h2>
+          <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <label className="dark-label">
-            Название
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Введите название"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
-            />
-          </label>
-          <label className="dark-label">
-            Категория
-            <CategoryInput
-              value={category}
-              onChange={setCategory}
-              categories={categories}
-              placeholder="Введите или выберите категорию"
-            />
-          </label>
-          <label className="dark-label">
-            Цена
-            <input
-              type="number"
-              value={price}
-              onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
-              placeholder="Введите цену"
-              style={{
-                width: "100%",
-                padding: "8px",
-                borderRadius: "4px",
-                border: "1px solid #444",
-                backgroundColor: "#1a1a1a",
-                color: "#e0e0e0",
-              }}
-            />
-          </label>
+          <div className="form-grid">
+            <label className="dark-label">
+              Название
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Введите название"
+                className="dark-select"
+              />
+            </label>
+            <label className="dark-label">
+              Категория
+              <CategoryInput
+                value={category}
+                onChange={setCategory}
+                categories={categories}
+                placeholder="Введите или выберите категорию"
+              />
+            </label>
+            <label className="dark-label">
+              Цена
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(parseFloat(e.target.value) || 0)}
+                placeholder="Введите цену"
+                className="dark-select"
+              />
+            </label>
+          </div>
         </div>
-        <div className="modal-actions" style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-          <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={onClose}>Отмена</button>
-          <button className="add-btn" onClick={handleSubmit} disabled={saving}>
+        <div className="modal-actions">
+          <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={onClose}>Отмена</button>
+          <button className="gradient-button" onClick={handleSubmit} disabled={saving}>
             {saving ? 'Сохранение...' : 'Сохранить'}
           </button>
         </div>
@@ -629,20 +593,22 @@ const handleAddWorkType = async () => {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Работы</h1>
+          <h1 className="page-title">Работы</h1>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          <button className="add-btn" onClick={() => setShowAddEquipmentModal(true)}>+ Оборудование</button>
-          <button className="add-btn" onClick={() => setShowAddWorkTypeModal(true)}>+ Вид работ</button>
+          <button className="gradient-button" onClick={() => setShowAddEquipmentModal(true)}>+ Оборудование</button>
+          <button className="gradient-button" onClick={() => setShowAddWorkTypeModal(true)}>+ Вид работ</button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'row', gap: '20px', height: '100%' }}>
           {/* === Оборудование === */}
+                    {/* === Оборудование === */}
           <div className="section" style={{ flex: 1, minHeight: '500px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <h3>Оборудование</h3>
-              <div style={{ width: '300px' }}>
+              {/* Поле поиска теперь ближе к заголовку */}
+              <div style={{ width: '400px' }}> 
                 <input
                   type="text"
                   value={equipmentSearchTerm}
@@ -650,12 +616,12 @@ const handleAddWorkType = async () => {
                   placeholder="🔍 Поиск..."
                   style={{
                     width: '100%',
-                    padding: '4px 8px',
+                    padding: '8px 12px 0px -10px',
                     border: '1px solid #444',
                     borderRadius: '4px',
                     backgroundColor: '#1a1a1a',
                     color: '#e0e0e0',
-                    fontSize: '12px',
+                    fontSize: '14px',
                   }}
                 />
               </div>
@@ -724,7 +690,8 @@ const handleAddWorkType = async () => {
           <div className="section" style={{ flex: 1, minHeight: '500px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
               <h3>Виды работ</h3>
-              <div style={{ width: '300px' }}>
+              {/* Поле поиска теперь ближе к заголовку */}
+              <div style={{ width: '400px' }}> 
                 <input
                   type="text"
                   value={workTypeSearchTerm}
@@ -732,12 +699,12 @@ const handleAddWorkType = async () => {
                   placeholder="🔍 Поиск..."
                   style={{
                     width: '100%',
-                    padding: '4px 8px',
+                    padding: '8px 12px 0px -10px',
                     border: '1px solid #444',
                     borderRadius: '4px',
                     backgroundColor: '#1a1a1a',
                     color: '#e0e0e0',
-                    fontSize: '12px',
+                    fontSize: '14px',
                   }}
                 />
               </div>
@@ -808,56 +775,44 @@ const handleAddWorkType = async () => {
           <div className="modal-backdrop" onClick={() => setShowAddEquipmentModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h3>Добавить оборудование</h3>
-                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>×</button>
+                <h2>Добавить оборудование</h2>
+                <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <label className="dark-label">
-                  Название
-                  <input
-                    type="text"
-                    value={newEquipmentName}
-                    onChange={(e) => setNewEquipmentName(e.target.value)}
-                    placeholder="Введите название"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  />
-                </label>
-                <label className="dark-label">
-                  Категория
-                  <CategoryInput
-                    value={newEquipmentCategory}
-                    onChange={setNewEquipmentCategory}
-                    categories={categories}
-                    placeholder="Введите или выберите категорию"
-                  />
-                </label>
-                <label className="dark-label">
-                  Цена
-                  <input
-                    type="number"
-                    value={newEquipmentPrice}
-                    onChange={(e) => setNewEquipmentPrice(e.target.value)}
-                    placeholder="Введите цену"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  />
-                </label>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>Отмена</button>
-                  <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddEquipment(); }}>Сохранить</button>
+                <div className="form-grid">
+                  <label className="dark-label">
+                    Название
+                    <input
+                      type="text"
+                      value={newEquipmentName}
+                      onChange={(e) => setNewEquipmentName(e.target.value)}
+                      placeholder="Введите название"
+                      className="dark-select"
+                    />
+                  </label>
+                  <label className="dark-label">
+                    Категория
+                    <CategoryInput
+                      value={newEquipmentCategory}
+                      onChange={setNewEquipmentCategory}
+                      categories={categories}
+                      placeholder="Введите или выберите категорию"
+                    />
+                  </label>
+                  <label className="dark-label">
+                    Цена
+                    <input
+                      type="number"
+                      value={newEquipmentPrice}
+                      onChange={(e) => setNewEquipmentPrice(e.target.value)}
+                      placeholder="Введите цену"
+                      className="dark-select"
+                    />
+                  </label>
+                </div>
+                <div className="modal-actions">
+                  <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>Отмена</button>
+                  <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddEquipment(); }}>Сохранить</button>
                 </div>
               </div>
             </div>
@@ -869,82 +824,63 @@ const handleAddWorkType = async () => {
           <div className="modal-backdrop" onClick={() => setShowAddWorkTypeModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h3>Добавить вид работ</h3>
-                <button className="add-btn" style={{ padding: '4px 8px' }} onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>×</button>
+                <h2>Добавить вид работ</h2>
+                <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <label className="dark-label">
-                  Название
-                  <input
-                    type="text"
-                    value={newWorkTypeName}
-                    onChange={(e) => setNewWorkTypeName(e.target.value)}
-                    placeholder="Введите название"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  />
-                </label>
-                <label className="dark-label">
-                  Категория
-                  <CategoryInput
-                    value={newWorkTypeCategory}
-                    onChange={setNewWorkTypeCategory}
-                    categories={workTypeCategories}
-                    placeholder="Введите или выберите категорию"
-                  />
-                </label>
-                <label className="dark-label">
-                  Цена клиента
-                  <input
-                    type="number"
-                    value={newWorkTypeClientPrice}
-                    onChange={(e) => setNewWorkTypeClientPrice(e.target.value)}
-                    placeholder="Введите цену клиента"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  />
-                </label>
-                <label className="dark-label">
-                  Цена монтажника
-                  <input
-                    type="number"
-                    value={newWorkTypeMontPrice}
-                    onChange={(e) => setNewWorkTypeMontPrice(e.target.value)}
-                    placeholder="Введите цену монтажника"
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "4px",
-                      border: "1px solid #444",
-                      backgroundColor: "#1a1a1a",
-                      color: "#e0e0e0",
-                    }}
-                  />
-                </label>
-                <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={newWorkTypeTechSupp}
-                    onChange={(e) => setNewWorkTypeTechSupp(e.target.checked)}
-                    style={{ margin: 0 }}
-                  />
-                  Требуется проверка тех.специалиста?
-                </label>
-                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '15px' }}>
-                  <button className="add-btn" style={{ backgroundColor: '#6c757d' }} onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>Отмена</button>
-                  <button className="add-btn" onClick={(e) => { e.stopPropagation(); handleAddWorkType(); }}>Сохранить</button>
+                <div className="form-grid">
+                  <label className="dark-label">
+                    Название
+                    <input
+                      type="text"
+                      value={newWorkTypeName}
+                      onChange={(e) => setNewWorkTypeName(e.target.value)}
+                      placeholder="Введите название"
+                      className="dark-select"
+                    />
+                  </label>
+                  <label className="dark-label">
+                    Категория
+                    <CategoryInput
+                      value={newWorkTypeCategory}
+                      onChange={setNewWorkTypeCategory}
+                      categories={workTypeCategories}
+                      placeholder="Введите или выберите категорию"
+                    />
+                  </label>
+                  <label className="dark-label">
+                    Цена клиента
+                    <input
+                      type="number"
+                      value={newWorkTypeClientPrice}
+                      onChange={(e) => setNewWorkTypeClientPrice(e.target.value)}
+                      placeholder="Введите цену клиента"
+                      className="dark-select"
+                    />
+                  </label>
+                  <label className="dark-label">
+                    Цена монтажника
+                    <input
+                      type="number"
+                      value={newWorkTypeMontPrice}
+                      onChange={(e) => setNewWorkTypeMontPrice(e.target.value)}
+                      placeholder="Введите цену монтажника"
+                      className="dark-select"
+                    />
+                  </label>
+                  <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={newWorkTypeTechSupp}
+                      onChange={(e) => setNewWorkTypeTechSupp(e.target.checked)}
+                      style={{ margin: 0 }}
+                    />
+                    Требуется проверка тех.специалиста?
+                  </label>
+                </div>
+                <div className="modal-actions">
+                  <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>Отмена</button>
+                  <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddWorkType(); }}>Сохранить</button>
                 </div>
               </div>
             </div>

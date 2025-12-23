@@ -45,7 +45,7 @@ import AvailableTaskDetailPage from "./pages/montajnik/AvailableTaskDetailPage";
 import ProfilePage from "./pages/montajnik/ProfilePage";
 import CompletedTaskDetailPage from "./pages/montajnik/CompletedTaskDetailPage";
 import AssignedTasksPage from "./pages/montajnik/AssignedTasksPage";
-
+import AssignedTaskDetailPage from "./pages/montajnik/AssignedTaskDetailPage";
 
 export default function App() {
   const { token, role } = useAuthStore();
@@ -114,6 +114,7 @@ export default function App() {
           <Route path="tasks/:id" element={<MontajnikTaskDetailPage />} />
           <Route path="tasks/:id/history" element={<MontajnikTaskHistoryPage />} />
           <Route path="tasks/available/:id" element={<AvailableTaskDetailPage />} />
+          <Route path="tasks/assigned/:id" element={<AssignedTaskDetailPage />} />
           <Route path="completed-tasks/:id" element={<CompletedTaskDetailPage />} />
           <Route path="me" element={<ProfilePage />} />
 

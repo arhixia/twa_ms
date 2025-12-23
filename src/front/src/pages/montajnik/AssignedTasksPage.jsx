@@ -17,8 +17,8 @@ export default function AssignedTasksPage() {
   const navigate = useNavigate(); // Получаем функцию навигации
 
   // Обработчик клика по карточке задачи
-  const handleTaskCardClick = (task) => {
-    navigate(`/montajnik/tasks/${task.id}`);
+   const handleTaskCardClick = (task) => {
+    navigate(`/montajnik/tasks/assigned/${task.id}`);
   };
 
   useEffect(() => { load(); }, []);
@@ -128,109 +128,37 @@ export default function AssignedTasksPage() {
         </div>
 
         {/* Модалка отклонения */}
+                {/* Модалка отклонения */}
         {showRejectModal && (
-          <div
-            className="modal-backdrop"
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              zIndex: 1000,
-            }}
-          >
-            <div
-              className="modal"
-              style={{
-                maxWidth: "500px",
-                background: "#0d1117",
-                borderRadius: "8px",
-                padding: "16px",
-                color: "white",
-              }}
-            >
-              <div
-                className="modal-header"
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <h3>Отклонить задачу #{rejectTaskId}</h3>
-                <button
-                  className="close"
-                  onClick={() => setShowRejectModal(false)}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    fontSize: "1.5em",
-                    color: "white",
-                    cursor: "pointer",
-                  }}
-                >
-                  ×
-                </button>
+          <div className="modal-backdrop" onClick={() => setShowRejectModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Отклонить задачу #{rejectTaskId}</h2>
+                <button className="close" onClick={() => setShowRejectModal(false)}>×</button>
               </div>
-
-              <div className="modal-body" style={{ marginTop: "8px" }}>
-                <label style={{ display: "block", color: "white" }}>
-                  Причина отклонения (необязательно):
+              <div className="modal-body">
+                <div className="section">
+                  <label className="dark-label">
+                    Причина отклонения (необязательно):
+                  </label>
                   <textarea
                     value={rejectComment}
                     onChange={(e) => setRejectComment(e.target.value)}
+                    rows="3"
                     placeholder="Можно оставить пустым..."
-                    style={{
-                      width: "100%",
-                      minHeight: "80px",
-                      backgroundColor: "#1a1a1a",
-                      color: "white",
-                      border: "1px solid #30363d",
-                      borderRadius: "8px",
-                      padding: "8px",
-                      marginTop: "4px",
-                    }}
+                    className="dark-select"
+                    style={{ width: '100%', resize: 'vertical' }}
                   />
-                </label>
+                </div>
               </div>
-
-              <div
-                className="modal-actions"
-                style={{
-                  marginTop: "12px",
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: "8px",
-                }}
-              >
+              <div className="modal-actions">
                 <button
-                  className="primary"
+                  className="gradient-button"
                   onClick={handleRejectConfirm}
-                  disabled={actionLoading === `reject-${rejectTaskId}`} // Проверяем уникальный ключ
-                  style={{
-                    background: "#b60205",
-                    color: "white",
-                    padding: "6px 12px",
-                    borderRadius: "4px",
-                  }}
+                  disabled={actionLoading === `reject-${rejectTaskId}`}
+                  style={{ background: 'linear-gradient(to right, #ef4444, #dc2626)' }}
                 >
-                  {actionLoading === `reject-${rejectTaskId}` ? "..." : "Подтвердить"} {/* Обновляем текст кнопки */}
-                </button>
-                <button
-                  onClick={() => setShowRejectModal(false)}
-                  style={{
-                    background: "#444",
-                    color: "white",
-                    padding: "6px 12px",
-                    borderRadius: "4px",
-                  }}
-                >
-                  Отмена
+                  {actionLoading === `reject-${rejectTaskId}` ? 'Отклонение...' : 'Подтвердить'}
                 </button>
               </div>
             </div>

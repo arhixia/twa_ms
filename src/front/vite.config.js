@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['motor-everyday-helping-similarly.trycloudflare.com']
+    allowedHosts: ['compute-journalists-major-days.trycloudflare.com']
   },
 })
 

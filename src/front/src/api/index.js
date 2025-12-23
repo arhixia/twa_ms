@@ -639,6 +639,11 @@ export async function fetchAvailableMontTaskDetail(id) {
   return (await api.get(`/montajnik/tasks/available/${id}`)).data;
 }
 
+export async function fetchAssignedMontTaskDetail(id) {
+  return (await api.get(`/montajnik/tasks/assigned/${id}`)).data;
+}
+
+
 
 export async function fetchMontTaskFullHistory(taskId) {
   return (await api.get(`/montajnik/tasks/${taskId}/history`)).data;

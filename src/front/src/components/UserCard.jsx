@@ -189,6 +189,6 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
       </div>
     </div>
   );
-}
+} 
 
 export default UserCard;

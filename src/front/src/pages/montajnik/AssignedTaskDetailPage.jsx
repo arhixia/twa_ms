@@ -1,17 +1,20 @@
-// front/src/pages/montajnik/AvailableTaskDetailPage.jsx
+// src/pages/montajnik/AssignedTaskDetailPage.jsx
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { fetchAvailableMontTaskDetail, acceptTask, getEquipmentList, getWorkTypes } from "../../api";
+import { fetchAssignedMontTaskDetail, acceptTask, rejectTask, getEquipmentList, getWorkTypes } from "../../api";
 import { getMontCompaniesList, getMontContactPersonsByCompany, getMontContactPersonPhone } from "../../api";
-import "../../styles/LogistPage.css";
 
-export default function AvailableTaskDetailPage() {
+
+export default function AssignedTaskDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [accepting, setAccepting] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectComment, setRejectComment] = useState("");
   const [equipment, setEquipment] = useState([]);
   const [workTypes, setWorkTypes] = useState([]);
   
@@ -58,7 +61,7 @@ export default function AvailableTaskDetailPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchAvailableMontTaskDetail(id);
+      const data = await fetchAssignedMontTaskDetail(id);
       setTask(data);
 
       if (data.contact_person_id) {
@@ -77,7 +80,7 @@ export default function AvailableTaskDetailPage() {
       console.error("Ошибка загрузки задачи:", err);
       setError(err.response?.data?.detail || err.message || "Ошибка загрузки задачи");
       if (err.response?.status === 404 || err.response?.status === 403) {
-         navigate("/montajnik/tasks/available");
+         navigate("/montajnik/tasks/assigned");
       }
     } finally {
       setLoading(false);
@@ -105,6 +108,31 @@ export default function AvailableTaskDetailPage() {
       }
     } finally {
       setAccepting(false);
+    }
+  };
+
+  const handleRejectTask = async () => {
+    try {
+      setRejecting(true);
+      await rejectTask(id, rejectComment || null);
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Задача отклонена!");
+      } else {
+        alert("Задача отклонена!");
+      }
+      setShowRejectModal(false);
+      setRejectComment("");
+      navigate("/montajnik/tasks/assigned");
+    } catch (err) {
+      console.error("Ошибка отклонения задачи:", err);
+      const errorMessage = err.response?.data?.detail || "Не удалось отклонить задачу.";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
+      } else {
+        alert(`Ошибка: ${errorMessage}`);
+      }
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -138,8 +166,6 @@ export default function AvailableTaskDetailPage() {
     );
   }
 
-  const isTaskAcceptable = task.status === 'new';
-
   return (
     <div className="logist-main">
       <div className="page">
@@ -166,17 +192,25 @@ export default function AvailableTaskDetailPage() {
           </button>
         </div>
 
-        {isTaskAcceptable && (
-            <div className="section" style={{ marginTop: '20px' }}>
-              <button
-                className="gradient-button"
-                onClick={handleAcceptTask}
-                disabled={accepting}
-              >
-                {accepting ? 'Принятие...' : '✅ Принять задачу'}
-              </button>
-            </div>
-          )}
+        {/* Кнопки действия под заголовком */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          <button 
+            className="gradient-button" 
+            onClick={handleAcceptTask}
+            disabled={accepting}
+            style={{ flex: '0 0 auto', minWidth: '150px' }}
+          >
+            {accepting ? 'Принятие...' : '✅ Принять задачу'}
+          </button>
+          
+          <button 
+            className="gradient-button" 
+            onClick={() => setShowRejectModal(true)}
+            style={{ flex: '0 0 auto', minWidth: '150px' }}
+          >
+            ❌ Отклонить задачу
+          </button>
+        </div>
 
         <div className="task-detail">
           <div className="task-view">
@@ -268,18 +302,45 @@ export default function AvailableTaskDetailPage() {
               </button>
             </div>
           </div>
-
-         
-          {!isTaskAcceptable && (
-             <div className="section" style={{ marginTop: '20px', padding: '10px', backgroundColor: '#161b22', borderRadius: '5px' }}>
-               <p style={{ margin: 0, color: '#e6eef8' }}>
-                 Задача в процессе работы <br></br>
-                 Статус задачи ({task.status}).
-               </p>
-             </div>
-           )}
         </div>
       </div>
+
+      {/* Модалка отклонения */}
+      {showRejectModal && (
+        <div className="modal-backdrop" onClick={() => setShowRejectModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Отклонить задачу #{id}</h2>
+              <button className="close" onClick={() => setShowRejectModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="section">
+                <label className="dark-label">
+                  Причина отклонения (необязательно):
+                </label>
+                <textarea
+                  value={rejectComment}
+                  onChange={(e) => setRejectComment(e.target.value)}
+                  rows="3"
+                  placeholder="Можно оставить пустым..."
+                  className="dark-select"
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button
+                className="gradient-button"
+                onClick={handleRejectTask}
+                disabled={rejecting}
+                style={{ background: 'linear-gradient(to right, #ef4444, #dc2626)' }}
+              >
+                {rejecting ? 'Отклонение...' : 'Подтвердить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

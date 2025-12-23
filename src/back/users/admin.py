@@ -300,7 +300,8 @@ async def admin_update_task(
     for k, v in payload_dict.items():
         if k not in {"equipment", "work_types"}:
             incoming_with_nulls[k] = v
-
+            
+    changed = [] # <--- Список изменений
     # --- Обработка assigned_user_id (может быть null) ---
     assigned_user_id_changed = False
     assignment_type_changed = False
@@ -350,7 +351,7 @@ async def admin_update_task(
 
     incoming_with_nulls.pop("assigned_user_id", None)
 
-    changed = [] # <--- Список изменений
+    
 
     for field, value in incoming.items():
         if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
