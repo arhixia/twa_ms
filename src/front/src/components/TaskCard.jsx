@@ -196,7 +196,7 @@ function getStatusLabel(status) {
     on_site: 'Прибыл',
     completed: 'Завершена',
     inspection: 'На проверке',
-    returned: 'Возвращена',
+    returned: 'На доработке',
     archived: 'Архив',
     assigned: 'Назначена',
     draft: 'Черновик' // ✅ Добавлен статус "Черновик"

@@ -101,7 +101,7 @@ export default function ActiveTasksPage() {
         { value: "started", label: "В процессе выполнения" },
         { value: "assigned", label: "Назначена" },
         { value: "inspection", label: "На проверке" },
-        { value: "returned", label: "Возвращена на доработку" },
+        { value: "returned", label: "На доработке" },
     ];
 
     // Преобразование опций для MultiSelectFilter

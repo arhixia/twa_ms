@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['enough-introduction-cat-favors.trycloudflare.com']
+    allowedHosts: ['clearance-not-flights-step.trycloudflare.com']
   },
 })
 

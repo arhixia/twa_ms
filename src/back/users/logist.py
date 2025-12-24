@@ -1576,6 +1576,47 @@ async def review_report(
     report.review_comment = comment
     report.reviewed_at_logist = datetime.now(timezone.utc)
 
+    if approval == "rejected" and getattr(current_user, "role", None) == Role.logist:
+    # Устанавливаем статус задачи как возвращенный при отклонении логистом
+        task.status = TaskStatus.returned
+        
+        # Создаем запись в истории
+        hist = TaskHistory(
+            task_id=task.id,
+            user_id=getattr(current_user, "id", None),
+            action=TaskStatus.returned,
+            event_type=TaskHistoryEventType.report_status_changed,
+            comment=f"Отчет отклонен логистом. Комментарий: {comment}" if comment else "Отчет отклонен логистом",
+            company_id=task.company_id,
+            contact_person_id=task.contact_person_id,
+            contact_person_phone=task.contact_person_phone,
+            vehicle_info=task.vehicle_info,
+            gos_number=task.gos_number,
+            scheduled_at=task.scheduled_at,
+            location=task.location,
+            comment_field=task.comment,
+            status=task.status.value if task.status else None,
+            assigned_user_id=task.assigned_user_id,
+            client_price=str(task.client_price) if task.client_price is not None else None,
+            montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
+            photo_required=task.photo_required,
+            assignment_type=task.assignment_type.value if task.assignment_type else None,
+            field_name="status",
+            old_value=task.status.value if task.status else None,
+            new_value=TaskStatus.returned.value,
+            related_entity_id=report.id,
+            related_entity_type="report",
+            equipment_snapshot=[
+                {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
+                for te in task.equipment_links
+            ],
+            work_types_snapshot=[
+                {"name": tw.work_type.name, "quantity": tw.quantity}
+                for tw in task.works
+            ],
+        )
+        db.add(hist)
+
     try:
         # if both approved -> finalize task
         if not requires_tech_review and report.approval_logist == ReportApproval.approved:
