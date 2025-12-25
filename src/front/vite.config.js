@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['supporting-scout-succeed-caribbean.trycloudflare.com']
+    allowedHosts: ['probably-favourite-investigated-pgp.trycloudflare.com']
   },
 })
 

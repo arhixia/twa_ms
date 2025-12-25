@@ -5,6 +5,7 @@ import { uploadFallback, deletePendingAttachment } from "../api";
 export default function FileUploader({ onUploaded, onUploading, onUploadError, onRemoved, taskId, reportId = null, maxFiles = 15 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
+ 
 
   useEffect(() => {
     // При изменении reportId можно обновить существующие файлы, если нужно
@@ -88,6 +89,7 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
     // Сбросим input, чтобы можно было снова выбрать те же файлы
     e.target.value = '';
   }
+  
 
   const removeLocal = async (id) => {
     const fileToRemove = files.find(f => f.id === id);

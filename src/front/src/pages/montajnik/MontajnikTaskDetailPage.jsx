@@ -110,6 +110,7 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   const [submitting, setSubmitting] = useState(false);
   const [uploadedAttachments, setUploadedAttachments] = useState([]);
 
+
   const handleAttachmentUploaded = (attachmentData) => {
     setUploadedAttachments(prev => [
       ...prev.filter(att => att.id !== attachmentData.tmpId),
@@ -248,9 +249,7 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
               taskId={taskId} 
               reportId={null}
             />
-            <p style={{ color: 'orange', fontSize: '0.9em', marginTop: '5px', marginBottom: '5px' }}>
-              ⚠️Фото будут привязаны к отчёту при его создании.
-            </p>
+           
             {pendingUploads.length > 0 && (
               <p style={{ color: 'yellow', fontSize: '0.9em', marginTop: '5px' }}>
                 🔄 Загружается вложений: {pendingUploads.length}

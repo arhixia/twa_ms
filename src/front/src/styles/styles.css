@@ -75,29 +75,44 @@
 }
 
 .logout-btn {
-  /* Градиентная кнопка "Выйти" */
-  background: linear-gradient(to right, #ef4444, #dc2626); /* Красный градиент */
-  color: white;
+  background: transparent;
   border: none;
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-size: 14px;
-  font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, transform 0.1s;
+  padding: 6px;
   display: flex;
   align-items: center;
-  gap: 6px; /* Расстояние между 🚪 и текстом */
+  justify-content: center;
+  transition: transform 0.15s, color 0.2s, background-color 0.2s;
+  border-radius: 4px;
 }
 
-.logout-btn:hover {
-  background: linear-gradient(to right, #f87171, #f97316); /* Светлее при наведении */
-  transform: translateY(-1px); /* Лёгкий подъём */
+.logout-btn svg {
+  color: #bb4242;
 }
 
+.logout-btn:hover svg {
+  color: #ef4444;
+}
+
+
+.logout-btn:hover svg {
+  stroke: #ef4444; /* яркий красный */
+}
+
+/* При нажатии — ещё более насыщенный цвет */
 .logout-btn:active {
-  background: linear-gradient(to right, #b60205, #991b1b); /* Темнее при нажатии */
-  transform: translateY(0);  /* Сброс */
+  background-color: rgba(239, 68, 68, 0.2);
+  transform: scale(1);
+}
+
+.logout-btn:active svg {
+  stroke: #dc2626;
+}
+
+/* Фокус для клавиатуры */
+.logout-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
 }
 
 .logist-nav a {

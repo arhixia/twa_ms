@@ -256,7 +256,7 @@ async def upload_fallback_report(
         size=len(data),
         uploader_id=getattr(current_user, "id", None),
         uploader_role=getattr(current_user, "role", None).value if getattr(current_user, "role", None) else None,
-        processed=False,
+        processed=True,
     )
     db.add(attach)
     await db.flush()
