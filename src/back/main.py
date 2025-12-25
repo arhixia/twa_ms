@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
 
     aiogram_task = None
-    notification_task = None # Добавляем переменную для задачи уведомлений
+    notification_task = None
 
     if BOT_TOKEN:
         aiogram_task = asyncio.create_task(start_polling())
@@ -43,7 +43,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        # shutdown
+
         logger.info("Остановка фоновых задач...")
         if aiogram_task:
             aiogram_task.cancel()
@@ -73,7 +73,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # добавь свой домен
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

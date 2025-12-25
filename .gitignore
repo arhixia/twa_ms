@@ -1,9 +1,7 @@
 __pycache__/
 *.pyc
-.env
 venv/
 tests/
-node_modules/
 
 
 

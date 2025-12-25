@@ -5,11 +5,10 @@ from aiogram.filters import Command
 from back.db.config import TOKEN as BOT_TOKEN
 from back.db.config import WEB_APP_URL
 
-# minimal aiogram v3 setup
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# correct registration for aiogram v3: use dp.message(filter)
+
 @dp.message(Command(commands=["start"]))
 async def handle_start(message: types.Message):
     if not WEB_APP_URL:
@@ -22,11 +21,8 @@ async def handle_start(message: types.Message):
 
 async def start_polling():
     try:
-        # in aiogram v3 we pass bot to start_polling
         await dp.start_polling(bot)
     except asyncio.CancelledError:
-        # graceful stop
         pass
     finally:
-        # ensure bot session closed
         await bot.session.close()

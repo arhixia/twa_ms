@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['clearance-not-flights-step.trycloudflare.com']
+    allowedHosts: ['supporting-scout-succeed-caribbean.trycloudflare.com']
   },
 })
 

@@ -47,10 +47,7 @@ async def admin_profile(db: AsyncSession = Depends(get_db), current_user: User =
         "name": current_user.name,
         "lastname": current_user.lastname,
         "role": current_user.role.value if current_user.role else None,
-        # Дополнительные поля можно добавить сюда при необходимости
     }
-
-
 
 
 async def require_admin(current_user:User=Depends(get_current_user)) -> User:
