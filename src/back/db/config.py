@@ -16,4 +16,5 @@ SECRET_KEY_S3 = os.environ.get('SECRET_KEY_S3')
 ENDPOINT_URL_S3 = os.environ.get('ENDPOINT_URL_S3')
 BUCKET_NAME_S3 = os.environ.get('BUCKET_NAME_S3')
 WEB_APP_URL = os.environ.get('WEB_APP_URL')
+REDIS_CLIENT_URL = os.environ.get('REDIS_CLIENT_URL')
 

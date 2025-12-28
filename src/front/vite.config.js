@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['probably-favourite-investigated-pgp.trycloudflare.com']
+    allowedHosts: ['enzyme-simplified-trains-lion.trycloudflare.com']
   },
 })
 
