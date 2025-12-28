@@ -170,7 +170,7 @@ export async function deleteArchivedTask(taskId) {
 
 // Получить список архивных задач (для логиста)
 export async function fetchLogistArchivedTasks() {
-  return (await api.get("/logist/archived-tasks/")).data;
+  return (await api.get("/logist/archived-tasks")).data;
 }
 
 // Получить детали архивной задачи (для логиста)
