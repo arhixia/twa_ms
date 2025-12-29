@@ -42,13 +42,6 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    // Убираем проверку isTgReady, если не требуется
-    // Если нужно, чтобы работало только в Mini App — оставьте эту проверку
-    // if (!isTgReady) {
-    //   setError("SDK Telegram WebApp не готово или не в контексте Mini App.");
-    //   return;
-    // }
-
     try {
       // Передаём telegramId, даже если null — backend должен это обрабатывать
       const data = await loginUser(login, password, telegramId);
@@ -89,7 +82,12 @@ export default function LoginPage() {
             required
             style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           />
-          <span className="input-icon">👤</span>
+          <span className="input-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </span>
         </div>
 
         {/* Поле Пароль */}
@@ -109,7 +107,18 @@ export default function LoginPage() {
             aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
             style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           >
-            {showPassword ? "👁️" : "👁️‍🗨️"}
+            {showPassword ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+                <line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+            )}
           </button>
         </div>
 

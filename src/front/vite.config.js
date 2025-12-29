@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['enzyme-simplified-trains-lion.trycloudflare.com']
+    allowedHosts: ['accommodate-instrumentation-debut-partition.trycloudflare.com']
   },
 })
 
