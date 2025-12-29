@@ -8,6 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 
+.env.local
+vite.config.js
+
 
 # Editor directories and files
 .vscode/*
