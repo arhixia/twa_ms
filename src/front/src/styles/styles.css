@@ -549,8 +549,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  max-width: 150px;
+  flex: 1;
+  min-width: 0; 
   padding: 12px 8px;
   background: var(--bg-card);
   border-radius: 12px;
@@ -559,6 +559,7 @@
   transition: all 0.2s;
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.05);
+  box-sizing: border-box;
 }
 
 .nav-item:hover {
@@ -902,3 +903,134 @@
     flex: 1;
   }
 }
+
+@media (max-width: 768px) {
+  .montajnik-nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .nav-item {
+    flex: 0 0 auto;
+    min-width: 120px; /* Фиксированная ширина для мобильных */
+  }
+}
+
+/* Адаптивные стили для мобильных устройств */
+@media (max-width: 768px) {
+  .section {
+    min-height: auto;
+    margin-bottom: 10px;
+  }
+  
+
+  
+  .page-title {
+    font-size: 1.5rem;
+  }
+  
+  .gradient-button {
+    padding: 10px 16px;
+    font-size: 14px;
+    width: 100%;
+    margin-bottom: 10px;
+  }
+  
+  .history-list {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .clickable-history-item {
+    padding: 10px;
+  }
+  
+  .dark-select {
+    padding: 10px;
+    font-size: 16px;
+  }
+  
+  .modal {
+    width: 95%;
+    margin: 0 auto;
+    padding: 15px;
+  }
+  
+  .modal-header h2 {
+    font-size: 1.2rem;
+  }
+  
+  .modal-actions {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .form-grid {
+    gap: 10px;
+  }
+  
+  .dark-label {
+    font-size: 14px;
+  }
+  
+  .history-item {
+    padding: 10px;
+  }
+  
+  .empty {
+    padding: 20px;
+    font-size: 14px;
+  }
+  
+  .logist-main {
+    padding: 5px;
+  }
+  
+  .page {
+    padding: 10px;
+  }
+  
+  .section {
+    padding: 10px;
+  }
+  
+  .clickable-history-item {
+    margin-bottom: 5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .history-list {
+    max-height: 300px;
+  }
+  
+  .clickable-history-item {
+    padding: 8px;
+  }
+  
+  .modal {
+    padding: 10px;
+  }
+  
+  .modal-header {
+    flex-direction: column;
+    align-items: flex-start;  
+    gap: 10px;
+  }
+  
+  .close {
+    font-size: 20px;
+    align-self: flex-end;
+  }
+  
+  .dark-select {
+    font-size: 14px;
+  }
+  
+  .gradient-button {
+    padding: 12px;
+    font-size: 16px;
+  }
+}
+

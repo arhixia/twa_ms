@@ -1,3 +1,4 @@
+// front/src/pages/admin/AdminPage.jsx
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import useAuthStore from '../../store/useAuthStore';
@@ -114,6 +115,17 @@ export default function AdminPage() {
             </svg>
           </div>
           <div className="nav-text">Работы</div>
+        </NavLink>
+        
+        <NavLink to="/admin/equipment" className="nav-item">
+          <div className="nav-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"></path>
+              <path d="M12 14a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"></path>
+              <path d="M12 14v6"></path>
+            </svg>
+          </div>
+          <div className="nav-text">Оборудование</div>
         </NavLink>
         
         <NavLink to="/admin/contacts" className="nav-item">

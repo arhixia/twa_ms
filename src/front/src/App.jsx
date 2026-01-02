@@ -34,6 +34,7 @@ import AdminProfilePage from "./pages/admin/AdminProfilePage";
 import AdminCompletedTaskDetailPage from "./pages/admin/AdminCompletedTaskDetailPage";
 import AdminWorkPage from "./pages/admin/AdminWorkPage";
 import AdminContactsPage from "./pages/admin/AdminContactsPage";
+import AdminEquipmentPage from "./pages/admin/AdminEquipmentPage";
 
 
 import MontajnikPage from "./pages/montajnik/MontajnikPage"; // <- Новый импорт
@@ -90,6 +91,7 @@ export default function App() {
           <Route path="work" element={<AdminWorkPage />} />
           <Route path="contacts" element={<AdminContactsPage />} />
           <Route path="me" element={<AdminProfilePage />} /> {/* Новый маршрут */}
+          <Route path="equipment" element={<AdminEquipmentPage />} />
         </Route>
       )}
 
