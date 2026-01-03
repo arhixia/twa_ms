@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['prohibited-passenger-configured-weekly.trycloudflare.com']
+    allowedHosts: ['replacing-several-boc-llp.trycloudflare.com']
   },
 })
 
