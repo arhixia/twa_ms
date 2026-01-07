@@ -99,18 +99,39 @@ export default function MontajnikTaskHistoryPage() {
   return (
     <div className="logist-main">
       <div className="page">
-        <div className="page-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h1>История задачи #{id}</h1>
-            <button className="gradient-button" onClick={() => navigate(-1)}>
-              ⬅️ Назад
+        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              className="icon-button"
+              title="Назад"
+              onClick={() => navigate(-1)}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '4px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M3.86 8.753l5.482 4.796c.646.566 1.658.106 1.658-.753V3.204a1 1 0 0 0-1.659-.753l-5.48 4.796a1 1 0 0 0 0 1.506z"/>
+              </svg>
             </button>
+            <h1 className="page-title">История задачи #{id}</h1>
           </div>
         </div>
 
-        <div className="history-list">
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {history.map((h) => {
+        <div className="history-list" style={{ 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '24px',
+          maxHeight: 'none',
+          overflowY: 'visible'
+        }}>
+          {history.map((h) => {
               let dateStr = "Invalid Date";
               try {
                 if (h.timestamp) {
@@ -132,12 +153,16 @@ export default function MontajnikTaskHistoryPage() {
               const companyName = getCompanyNameById(h.company_id);
 
               return (
-                <li key={h.id} style={{ 
-                  padding: '16px', 
-                  borderBottom: '1px solid var(--border-subtle)',
+                <li key={h.id} className="history-item" style={{ 
+                  marginBottom: '0',
+                  border: '2px solid var(--border-subtle)',
+                  borderRadius: '10px',
+                  padding: '16px',
+                  minHeight: '120px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
                   backgroundColor: 'var(--bg-card)',
-                  borderRadius: '8px',
-                  marginBottom: '8px'
                 }}>
                   {/* --- Заголовок записи истории --- */}
                   <div style={{ 
@@ -151,13 +176,16 @@ export default function MontajnikTaskHistoryPage() {
                       flex: '1 1 auto',
                       minWidth: '200px'
                     }}>
-                      <b style={{ color: '#e6eef8' }}>{dateStr}</b> — <span style={{ color: '#c9d1d9' }}>{userStr}</span>
+                      <b style={{ color: '#e6eef8', fontSize: '1.1em' }}>{dateStr}</b> — <span style={{ color: '#c9d1d9', fontSize: '1em' }}>{userStr}</span>
                     </div>
                     <div style={{ 
                       fontSize: '0.9em', 
                       color: '#8b949e',
                       flex: '0 0 auto',
-                      textAlign: 'right'
+                      textAlign: 'right',
+                      padding: '4px 8px',
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      borderRadius: '6px'
                     }}>
                       {eventTypeStr}
                     </div>
@@ -166,12 +194,19 @@ export default function MontajnikTaskHistoryPage() {
                   {/* --- Комментарий --- */}
                   <div style={{ 
                     marginTop: '12px',
-                    padding: '8px',
-                    backgroundColor: '#161b22',
-                    borderRadius: '4px',
-                    color: '#e6eef8'
+                    padding: '12px',
+                    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: '8px',
+                    color: '#e6eef8',
+                    border: '2px solid rgba(255, 255, 255, 0.08)',
+                    flex: 1
                   }}>
-                    <b>Комментарий:</b>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                      </svg>
+                      <b>Комментарий</b>
+                    </div>
                     {(() => {
                       try {
                         const parsed = JSON.parse(commentStr);
@@ -179,8 +214,8 @@ export default function MontajnikTaskHistoryPage() {
                           return (
                             <ul style={{ margin: '8px 0 0 0', paddingLeft: '16px' }}>
                               {parsed.map((item, idx) => (
-                                <li key={idx} style={{ color: '#c9d1d9' }}>
-                                  <b>{item.field || item.action || "—"}</b>: "{item.old || "—"}" → "{item.new || "—"}"
+                                <li key={idx} style={{ color: '#c9d1d9', marginBottom: '4px' }}>
+                                  <b style={{ color: '#79c0ff' }}>{item.field || item.action || "—"}</b>: "{item.old || "—"}" → "{item.new || "—"}"
                                 </li>
                               ))}
                             </ul>
@@ -199,7 +234,6 @@ export default function MontajnikTaskHistoryPage() {
                 </li>
               );
             })}
-          </ul>
         </div>
       </div>
     </div>
@@ -238,9 +272,10 @@ function StateSnapshotSection({ h, companyName, getContactPersonNameById, getSta
         <div style={{ 
           marginTop: '12px', 
           padding: '12px', 
-          backgroundColor: '#161b22', 
-          borderRadius: '4px', 
-          color: '#e6eef8' 
+          backgroundColor: 'rgba(255, 255, 255, 0.03)', 
+          borderRadius: '8px', 
+          color: '#e6eef8',
+          border: '2px solid rgba(255, 255, 255, 0.08)'
         }}>
           {/* === Адаптивная сетка для полей === */}
           <div style={{ 
@@ -249,118 +284,284 @@ function StateSnapshotSection({ h, companyName, getContactPersonNameById, getSta
             gap: '12px',
             rowGap: '8px'
           }}>
-            {/* Основная информация */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Компания:</b>
-              <span style={{ color: '#c9d1d9' }}>{companyName}</span>
+            {/* === ОСНОВНАЯ ИНФОРМАЦИЯ === */}
+            <div className="task-section" style={{ gridColumn: '1 / -1' }}>
+              <div className="task-section-header">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span>Клиент</span>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                  Компания:
+                </div>
+                <div className="task-field-value">
+                  {companyName}
+                </div>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                  </svg>
+                  Контактное лицо:
+                </div>
+                <div className="task-field-value">
+                  <ContactNameResolver
+                    contactPersonId={h.contact_person_id}
+                    companyId={h.company_id}
+                    getContactPersonNameById={getContactPersonNameById}
+                  />
+                </div>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                  </svg>
+                  Телефон:
+                </div>
+                <div className="task-field-value">
+                  {h.contact_person_phone || "—"}
+                </div>
+              </div>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Контакт:</b>
-              <ContactNameResolver
-                contactPersonId={h.contact_person_id}
-                companyId={h.company_id}
-                getContactPersonNameById={getContactPersonNameById}
-              />
+
+            {/* === АДРЕС И СТАТУС === */}
+            <div className="task-section" style={{ gridColumn: '1 / -1' }}>
+              <div className="task-section-header">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                <span>Адрес и статус</span>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                  </svg>
+                  Место/Адрес:
+                </div>
+                <div className="task-field-value">
+                  {h.location ? (
+                    <a href={`https://2gis.ru/search/${encodeURIComponent(h.location)}`} target="_blank" rel="noopener noreferrer">
+                      {h.location}
+                    </a>
+                  ) : "—"}
+                </div>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="9 11 12 14 22 4"></polyline>
+                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                  </svg>
+                  Статус:
+                </div>
+                <div className="task-field-value">
+                  {getStatusDisplayName(h.status)}
+                </div>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  Дата:
+                </div>
+                <div className="task-field-value">
+                  {h.scheduled_at ? new Date(h.scheduled_at).toLocaleString() : "—"}
+                </div>
+              </div>
             </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>ТС:</b>
-              <span style={{ color: '#c9d1d9' }}>{h.vehicle_info || "—"}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Гос. номер:</b>
-              <span style={{ color: '#c9d1d9' }}>{h.gos_number || "—"}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Дата:</b>
-              <span style={{ color: '#c9d1d9' }}>
-                {h.scheduled_at ? new Date(h.scheduled_at).toLocaleString() : "—"}
-              </span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Место/Адрес:</b>
-              <span style={{ color: '#c9d1d9' }}>
-                {h.location ? (
-                  <a
-                    href={`https://2gis.ru/search/${encodeURIComponent(h.location)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      color: '#1e88e5',
-                      textDecoration: 'none',
-                      fontWeight: 'bold'
-                    }}
+
+            {/* === ФИНАНСЫ === */}
+            <div className="task-section" style={{ gridColumn: '1 / -1' }}>
+              <div className="task-section-header">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="8" y1="3" x2="8" y2="21" />
+                  <path d="M8 3h6a4 4 0 0 1 0 8H8" />
+                  <line x1="6" y1="14" x2="14" y2="14" />
+                  <line x1="6" y1="18" x2="14" y2="18" />
+                </svg>
+                <span>Цена</span>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    {h.location}
-                  </a>
-                ) : "—"}
-              </span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Статус:</b>
-              <span style={{ color: '#c9d1d9' }}>{getStatusDisplayName(h.status)}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Монтажник:</b>
-              <span style={{ color: '#c9d1d9' }}>{h.assigned_user_name || "—"}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Комментарий:</b>
-              <span style={{ color: '#c9d1d9' }}>{h.comment_field || "—"}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Цена клиента:</b>
-              <span style={{ color: '#c9d1d9' }}>{h.client_price || "—"}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Награда монтажнику:</b>
-              <span style={{ color: '#c9d1d9' }}>{h.montajnik_reward || "—"}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Фото обязательно:</b>
-              <span style={{ color: '#c9d1d9' }}>{h.photo_required ? "Да" : "Нет"}</span>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Тип назначения:</b>
-              <span style={{ color: '#c9d1d9' }}>
-                {h.assignment_type === "broadcast" ? "в эфир" : 
-                 h.assignment_type === "individual" ? "персональная" : h.assignment_type || "—"}
-              </span>
+                    <line x1="8" y1="3" x2="8" y2="21" />
+                    <path d="M8 3h6a4 4 0 0 1 0 8H8" />
+                    <line x1="6" y1="14" x2="14" y2="14" />
+                    <line x1="6" y1="18" x2="14" y2="18" />
+                  </svg>
+                  Цена клиента:
+                </div>
+                <div className="task-field-value price">
+                  {h.client_price || "—"} ₽
+                </div>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="8" y1="3" x2="8" y2="21" />
+                    <path d="M8 3h6a4 4 0 0 1 0 8H8" />
+                    <line x1="6" y1="14" x2="14" y2="14" />
+                    <line x1="6" y1="18" x2="14" y2="18" />
+                  </svg>
+                  Награда монтажнику:
+                </div>
+                <div className="task-field-value price">
+                  {h.montajnik_reward || "—"} ₽
+                </div>
+              </div>
             </div>
 
-            {/* Оборудование */}
-            <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Оборудование:</b>
-              <span style={{ color: '#c9d1d9' }}>
-                {h.equipment_snapshot && h.equipment_snapshot.length > 0 ? (
-                  h.equipment_snapshot.map((e, idx) => (
-                    `${e.name}${e.serial_number ? ` (SN: ${e.serial_number})` : ''} x${e.quantity}`
-                  )).join(", ")
-                ) : "—"}
-              </span>
+            {/* === РАБОТА И ОБОРУДОВАНИЕ === */}
+            <div className="task-section" style={{ gridColumn: '1 / -1' }}>
+              <div className="task-section-header">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M9.972 2.508a.5.5 0 0 0-.16-.556l-.178-.129a5 5 0 0 0-2.076-.783C6.215.862 4.504 1.229 2.84 3.133H1.786a.5.5 0 0 0-.354.147L.146 4.567a.5.5 0 0 0 0 .706l2.571 2.579a.5.5 0 0 0 .708 0l1.286-1.2a.5.5 0 0 0 .146-.353V5.57l8.387 8.873A.5.5 0 0 0 14 14.5l1.5-1.5a.5.5 0 0 0 .017-.689l-9.129-8.63c.747-.456 1.772-.839 3.112-.839a.5.5 0 0 0 .472-.334"/>
+                </svg>
+                <span>Работа и оборудование</span>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M9.972 2.508a.5.5 0 0 0-.16-.556l-.178-.129a5 5 0 0 0-2.076-.783C6.215.862 4.504 1.229 2.84 3.133H1.786a.5.5 0 0 0-.354.147L.146 4.567a.5.5 0 0 0 0 .706l2.571 2.579a.5.5 0 0 0 .708 0l1.286-1.2a.5.5 0 0 0 .146-.353V5.57l8.387 8.873A.5.5 0 0 0 14 14.5l1.5-1.5a.5.5 0 0 0 .017-.689l-9.129-8.63c.747-.456 1.772-.839 3.112-.839a.5.5 0 0 0 .472-.334"/>
+                  </svg>
+                  Оборудование:
+                </div>
+                <div className="task-field-value">
+                  {h.equipment_snapshot && h.equipment_snapshot.length > 0 ? (
+                    <div className="task-equipment-list">
+                      {h.equipment_snapshot.map((e, idx) => (
+                        <div key={idx} className="task-equipment-item">
+                          {e.name} x{e.quantity} (СН: {e.serial_number || 'N/A'})
+                        </div>
+                      ))}
+                    </div>
+                  ) : "—"}
+                </div>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                  </svg>
+                  Виды работ:
+                </div>
+                <div className="task-field-value">
+                  {h.work_types_snapshot && h.work_types_snapshot.length > 0 ? (
+                    <div className="task-work-types-list">
+                      {h.work_types_snapshot.map((wt, idx) => (
+                        <div key={idx} className="task-work-type-item">
+                          {wt.name} x{wt.quantity}
+                        </div>
+                      ))}
+                    </div>
+                  ) : "—"}
+                </div>
+              </div>
+              
+              <div className="task-field">
+                <div className="task-field-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                  </svg>
+                  Фото обязательно:
+                </div>
+                <div className="task-field-value">
+                  {h.photo_required ? "Да" : "Нет"}
+                </div>
+              </div>
             </div>
 
-            {/* Виды работ */}
-            <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column' }}>
-              <b style={{ marginBottom: '4px', color: '#79c0ff' }}>Виды работ:</b>
-              <span style={{ color: '#c9d1d9' }}>
-                {h.work_types_snapshot && h.work_types_snapshot.length > 0 ? (
-                  h.work_types_snapshot.map((wt) => (
-                    `${wt.name} x${wt.quantity}`
-                  )).join(", ")
-                ) : "—"}
-              </span>
+            {/* === МОНТАЖНИК === */}
+            <div className="task-field">
+              <div className="task-field-label">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+                Монтажник:
+              </div>
+              <div className="task-field-value">
+                {h.assigned_user_name || h.assigned_user_id || "—"}
+              </div>
+            </div>
+            
+            {/* === КОММЕНТАРИЙ === */}
+            <div className="task-field">
+              <div className="task-field-label">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Комментарий:
+              </div>
+              <div className="task-field-value">
+                {h.comment_field || "—"}
+              </div>
             </div>
           </div>
         </div>

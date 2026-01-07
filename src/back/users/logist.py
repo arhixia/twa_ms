@@ -1449,10 +1449,8 @@ async def edit_task(
 
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
 
-        # --- ФОРМИРУЕМ РУССКИЙ КОММЕНТАРИЙ ---
-        changes_summary_ru = build_changes_summary_ru(all_changes)
-        comment = changes_summary_ru
-        logger.info(f"Комментарий для истории (русский): {comment}")
+        comment = "Задача обновлена"
+        logger.info(f"Комментарий для истории (костыль): {comment}")
 
         # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ ---
         equipment_snapshot_for_history = [
@@ -1703,7 +1701,7 @@ async def review_report(
             action = TaskStatus.inspection # Статус задачи не изменился, но отчёт проверялся
             hist_comment = f"Отчет проверен логистом"
             if comment:
-                hist_comment += f". Comment: {comment}"
+                hist_comment += f". Комментарий: {comment}"
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта) ---
             # Так как связи уже загружены через options в t_res, мы можем их использовать

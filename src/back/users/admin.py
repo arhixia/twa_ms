@@ -59,10 +59,12 @@ async def require_admin(current_user:User=Depends(get_current_user)) -> User:
 
 @router.get("/users", response_model=List[UserResponse], summary="Список всех пользователей (только админ)")
 async def admin_list_users(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
-    q = await db.execute(select(User))
+    q = await db.execute(
+        select(User)
+        .order_by(User.is_active.desc(), User.id) 
+    )
     users = q.scalars().all()
     return [UserResponse.model_validate(u) for u in users]
-
 
 
 @router.post("/users",response_model=UserResponse,status_code=status.HTTP_201_CREATED,summary="Создать пользователя (только админ)")
@@ -86,6 +88,7 @@ async def admin_create_user(
 
     await db.refresh(new_user)
     return UserResponse.model_validate(new_user)
+
 
 @router.patch("/users/{user_id}", dependencies=[Depends(require_roles(Role.admin))])
 async def admin_update_user(
@@ -627,10 +630,9 @@ async def admin_update_task(
 
         logger.info(f"Список 'all_changes' для истории: {all_changes}")
 
-        # --- ФОРМИРУЕМ РУССКИЙ КОММЕНТАРИЙ ---
-        changes_summary_ru = build_changes_summary_ru(all_changes)
-        comment = changes_summary_ru
-        logger.info(f"Комментарий для истории (русский): {comment}")
+        # --- КОСТЫЛЬ: Просто комментарий "Задача обновлена" ---
+        comment = "Задача обновлена"
+        logger.info(f"Комментарий для истории (костыль): {comment}")
 
         # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ ---
         equipment_snapshot_for_history = [
