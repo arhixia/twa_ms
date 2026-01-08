@@ -33,6 +33,7 @@ export default function TechSuppProfilePage() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showFilters, setShowFilters] = useState(false); // Фильтры изначально скрыты
 
   // Состояния для фильтров
   const [selectedFilters, setSelectedFilters] = useState({
@@ -52,6 +53,7 @@ export default function TechSuppProfilePage() {
   const [historyTasks, setHistoryTasks] = useState([]);
 
   // Дебаунс для поиска
+  const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebounce(selectedFilters.search, 500);
 
   useEffect(() => {
@@ -113,6 +115,12 @@ export default function TechSuppProfilePage() {
 
   const handleFilterChange = (field, value) => {
     let normalized;
+    if (field === 'search') {
+      setSearchInput(value);
+      setSelectedFilters(prev => ({ ...prev, [field]: value }));
+      return;
+    }
+    
     if (value === "" || value === null) normalized = [];
     else if (Array.isArray(value)) normalized = value;
     else normalized = [value];
@@ -139,87 +147,132 @@ export default function TechSuppProfilePage() {
 
         <div className="profile-overview">
           <div className="profile-card">
-            <h2>Информация</h2>
+            <div className="profile-card-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <h2>Информация</h2>
+            </div>
             <p><b>Имя:</b> {profile.name || "—"}</p>
             <p><b>Фамилия:</b> {profile.lastname || "—"}</p>
           </div>
 
           <div className="profile-card">
-            <h2>Статистика</h2>
+            <div className="profile-card-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+              </svg>
+              <h2>Статистика</h2>
+            </div>
             <p><b>Активные задачи:</b> {profile.active_checking_count || 0}</p>
             <p><b>Проверено задач:</b> {profile.completed_count || 0}</p>
           </div>
         </div>
 
         <div className="section">
-          <h3>История выполненных задач</h3>
-          <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
-            {/* Поиск */}
-            <div style={{ marginBottom: '12px', width: '100%' }}>
-              <label className="dark-label">Поиск</label>
-              <input
-                type="text"
-                className="dark-select"
-                placeholder="Поиск..."
-                value={selectedFilters.search}
-                onChange={e => handleFilterChange("search", e.target.value)}
-              />
-            </div>
-
-            <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', maxWidth: '100%' }}>
-              {/* Компания */}
-              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
-                <label className="dark-label">Компания</label>
-                <MultiSelectFilter
-                  options={companyOptions}
-                  selectedValues={selectedFilters.company_id}
-                  onChange={(values) => handleFilterChange("company_id", values)}
-                  placeholder="Все компании"
-                  maxHeight={200}
-                  width="100%" 
-                />
-              </div>
-
-              {/* Монтажник */}
-              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
-                <label className="dark-label">Монтажник</label>
-                <MultiSelectFilter
-                  options={montajnikOptions}
-                  selectedValues={selectedFilters.assigned_user_id}
-                  onChange={(values) => handleFilterChange("assigned_user_id", values)}
-                  placeholder="Все монтажники"
-                  maxHeight={200}
-                />
-              </div>
-
-              {/* Тип работы */}
-              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
-                <label className="dark-label">Тип работы</label>
-                <MultiSelectFilter
-                  options={workTypeOptions}
-                  selectedValues={selectedFilters.work_type_id}
-                  onChange={(values) => handleFilterChange("work_type_id", values)}
-                  placeholder="Все типы работ"
-                  maxHeight={200}
-                />
-              </div>
-
-              {/* Оборудование */}
-              <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
-                <label className="dark-label">Оборудование</label>
-                <MultiSelectFilter
-                  options={equipmentOptions}
-                  selectedValues={selectedFilters.equipment_id}
-                  onChange={(values) => handleFilterChange("equipment_id", values)}
-                  placeholder="Все оборудование"
-                  maxHeight={200}
-                />
-              </div>
-            </div>
+          <div 
+            className="toggle-filters"
+            style={{
+              marginBottom: '16px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              color: 'white',
+              fontSize: '16px',
+              fontWeight: '600',
+              fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            }}
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <span style={{
+              display: 'inline-block',
+              transform: showFilters ? 'rotate(90deg)' : 'rotate(0deg)',
+              transition: 'transform 0.2s ease',
+              fontSize: '16px'
+            }}>
+              ▶
+            </span>
+            Фильтры
           </div>
+
+          {showFilters && (
+            <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
+              {/* Поиск */}
+              <div style={{ marginBottom: '12px', width: '100%' }}>
+                <label className="dark-label">Поиск</label>
+                <input
+                  type="text"
+                  className="dark-select"
+                  placeholder="Поиск..."
+                  value={searchInput}
+                  onChange={e => handleFilterChange("search", e.target.value)}
+                />
+              </div>
+
+              <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', maxWidth: '100%' }}>
+                {/* Компания */}
+                <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                  <label className="dark-label">Компания</label>
+                  <MultiSelectFilter
+                    options={companyOptions}
+                    selectedValues={selectedFilters.company_id}
+                    onChange={(values) => handleFilterChange("company_id", values)}
+                    placeholder="Все компании"
+                    maxHeight={200}
+                    width="100%" 
+                  />
+                </div>
+
+                {/* Монтажник */}
+                <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                  <label className="dark-label">Монтажник</label>
+                  <MultiSelectFilter
+                    options={montajnikOptions}
+                    selectedValues={selectedFilters.assigned_user_id}
+                    onChange={(values) => handleFilterChange("assigned_user_id", values)}
+                    placeholder="Все монтажники"
+                    maxHeight={200}
+                  />
+                </div>
+
+                {/* Тип работы */}
+                <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                  <label className="dark-label">Тип работы</label>
+                  <MultiSelectFilter
+                    options={workTypeOptions}
+                    selectedValues={selectedFilters.work_type_id}
+                    onChange={(values) => handleFilterChange("work_type_id", values)}
+                    placeholder="Все типы работ"
+                    maxHeight={200}
+                  />
+                </div>
+
+                {/* Оборудование */}
+                <div style={{ width: '150px', minWidth: '150px', maxWidth: '150px', flex: '0 0 auto' }}>
+                  <label className="dark-label">Оборудование</label>
+                  <MultiSelectFilter
+                    options={equipmentOptions}
+                    selectedValues={selectedFilters.equipment_id}
+                    onChange={(values) => handleFilterChange("equipment_id", values)}
+                    placeholder="Все оборудование"
+                    maxHeight={200}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Добавляем минимальную высоту для контейнера задач */}
           <div style={{ minHeight: '300px' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4CAF50', fontWeight: 'bold', fontSize: '1.2em', marginBottom: '12px' }}>
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+              </svg>
+              История выполненных задач
+            </h3>
             {historyTasks && historyTasks.length > 0 ? (
               <div className="cards">
                 {historyTasks.map((task) => (

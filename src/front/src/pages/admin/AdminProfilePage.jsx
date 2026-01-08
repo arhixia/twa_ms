@@ -39,17 +39,24 @@ export default function AdminProfilePage() {
 
         <div className="profile-overview">
           <div className="profile-card">
-            <h2>Информация</h2>
-            <p>
-              <b>Имя:</b> {profile?.name || "—"}
-            </p>
-            <p>
-              <b>Фамилия:</b> {profile?.lastname || "—"}
-            </p>
+            <div className="profile-card-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <h2>Информация</h2>
+            </div>
+            <p><b>Имя:</b> {profile?.name || "—"}</p>
+            <p><b>Фамилия:</b> {profile?.lastname || "—"}</p>
           </div>
 
           <div className="profile-card">
-            <h2>Статистика</h2>
+            <div className="profile-card-header">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+              </svg>
+              <h2>Статистика</h2>
+            </div>
             <p><b>Всего задач:</b> {profile?.total_tasks || 0}</p>
             <p><b>Активных задач:</b> {profile?.active_tasks || 0}</p>
           </div>

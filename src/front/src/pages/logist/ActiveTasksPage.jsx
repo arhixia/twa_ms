@@ -26,6 +26,7 @@ export default function ActiveTasksPage() {
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [open, setOpen] = useState(false);
+    const [showFilters, setShowFilters] = useState(false);
 
     const [companies, setCompanies] = useState([]);
     const [montajniks, setMontajniks] = useState([]);
@@ -160,71 +161,99 @@ export default function ActiveTasksPage() {
                     />
                 </div>
 
-                <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', maxWidth: '100%' }}>
-                    {/* Статус */}
-                    <div style={{ minWidth: '150px' }}>
-                        <label className="dark-label">Статус</label>
-                        <MultiSelectFilter
-                            options={STATUS_OPTIONS}
-                            selectedValues={selectedFilters.status}
-                            onChange={(values) => handleFilterChange("status", values)}
-                            placeholder="Все статусы"
-                            maxHeight={200}
-                        />
-                    </div>
+                <div 
+    className="toggle-filters"
+    style={{
+        marginBottom: '16px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        color: 'white',
+        fontSize: '16px',
+        fontWeight: '600',
+        fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    }}
+    onClick={() => setShowFilters(!showFilters)}
+>
+    <span style={{
+        display: 'inline-block',
+        transform: showFilters ? 'rotate(90deg)' : 'rotate(0deg)',
+        transition: 'transform 0.2s ease',
+        fontSize: '16px'
+    }}>
+        ▶
+    </span>
+    Фильтры
+</div>
 
-                    {/* Компания */}
-                     <div style={{ minWidth: '150px' }}>
-                        <label className="dark-label">Компания</label>
-                        <MultiSelectFilter
-                            options={companyOptions}
-                            selectedValues={selectedFilters.company_id}
-                            onChange={(values) => handleFilterChange("company_id", values)}
-                            placeholder="Все компании"
-                            maxHeight={200}
-                            width="100%"
-                        />
-                    </div>
+                {showFilters && (
+                    <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', maxWidth: '100%' }}>
+                        {/* Статус */}
+                        <div style={{ minWidth: '150px' }}>
+                            <label className="dark-label">Статус</label>
+                            <MultiSelectFilter
+                                options={STATUS_OPTIONS}
+                                selectedValues={selectedFilters.status}
+                                onChange={(values) => handleFilterChange("status", values)}
+                                placeholder="Все статусы"
+                                maxHeight={200}
+                            />
+                        </div>
 
-                    {/* Монтажник */}
-                    <div style={{ minWidth: '150px' }}>
-                        <label className="dark-label">Монтажник</label>
-                        <MultiSelectFilter
-                            options={montajnikOptions}
-                            selectedValues={selectedFilters.assigned_user_id}
-                            onChange={(values) => handleFilterChange("assigned_user_id", values)}
-                            placeholder="Все монтажники"
-                            maxHeight={200}
-                            width="100%"
-                        />
-                    </div>
+                        {/* Компания */}
+                         <div style={{ minWidth: '150px' }}>
+                            <label className="dark-label">Компания</label>
+                            <MultiSelectFilter
+                                options={companyOptions}
+                                selectedValues={selectedFilters.company_id}
+                                onChange={(values) => handleFilterChange("company_id", values)}
+                                placeholder="Все компании"
+                                maxHeight={200}
+                                width="100%"
+                            />
+                        </div>
 
-                    {/* Тип работы */}
-                    <div style={{ minWidth: '150px' }}>
-                        <label className="dark-label">Тип работы</label>
-                        <MultiSelectFilter
-                            options={workTypeOptions}
-                            selectedValues={selectedFilters.work_type_id}
-                            onChange={(values) => handleFilterChange("work_type_id", values)}
-                            placeholder="Все типы работ"
-                            maxHeight={200}
-                            width="100%"
-                        />
-                    </div>
+                        {/* Монтажник */}
+                        <div style={{ minWidth: '150px' }}>
+                            <label className="dark-label">Монтажник</label>
+                            <MultiSelectFilter
+                                options={montajnikOptions}
+                                selectedValues={selectedFilters.assigned_user_id}
+                                onChange={(values) => handleFilterChange("assigned_user_id", values)}
+                                placeholder="Все монтажники"
+                                maxHeight={200}
+                                width="100%"
+                            />
+                        </div>
 
-                    {/* Оборудование */}
-                    <div style={{ minWidth: '150px' }}>
-                        <label className="dark-label">Оборудование</label>
-                        <MultiSelectFilter
-                            options={equipmentOptions}
-                            selectedValues={selectedFilters.equipment_id}
-                            onChange={(values) => handleFilterChange("equipment_id", values)}
-                            placeholder="Все оборудование"
-                            maxHeight={200}
-                            width="100%"
-                        />
+                        {/* Тип работы */}
+                        <div style={{ minWidth: '150px' }}>
+                            <label className="dark-label">Тип работы</label>
+                            <MultiSelectFilter
+                                options={workTypeOptions}
+                                selectedValues={selectedFilters.work_type_id}
+                                onChange={(values) => handleFilterChange("work_type_id", values)}
+                                placeholder="Все типы работ"
+                                maxHeight={200}
+                                width="100%"
+                            />
+                        </div>
+
+                        {/* Оборудование */}
+                        <div style={{ minWidth: '150px' }}>
+                            <label className="dark-label">Оборудование</label>
+                            <MultiSelectFilter
+                                options={equipmentOptions}
+                                selectedValues={selectedFilters.equipment_id}
+                                onChange={(values) => handleFilterChange("equipment_id", values)}
+                                placeholder="Все оборудование"
+                                maxHeight={200}
+                                width="100%"
+                            />
+                        </div>
                     </div>
-                </div>
+                )}
 
                 <div className="cards">
                     {loading ? (
