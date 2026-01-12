@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['competent-respect-howto-relief.trycloudflare.com']
+    allowedHosts: ['beatles-excellent-joy-vip.trycloudflare.com']
   },
 })
 
