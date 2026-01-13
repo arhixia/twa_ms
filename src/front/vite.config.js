@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['correct-quarters-actions-sandra.trycloudflare.com']
+    allowedHosts: ['entered-reynolds-restrict-miracle.trycloudflare.com']
   },
 })
 

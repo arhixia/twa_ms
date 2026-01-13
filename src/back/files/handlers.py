@@ -94,10 +94,11 @@ async def validate_and_process_attachment(attachment_id: int):
             
 
 
-async def delete_object_from_s3(storage_key: str):
+async def delete_object_from_s3(storage_key: str, thumb_key: str = None):
     s3 = get_s3_client()
-    try:
-        await s3.delete_object(storage_key)
-    except Exception:
-        # логировать, но не бросать
-        pass
+    await s3.delete_object(storage_key)
+    if thumb_key:
+        try:
+            await s3.delete_object(thumb_key)
+        except Exception as e:
+            print(f"[ERROR] Не удалось удалить миниатюру {thumb_key}: {e}")
