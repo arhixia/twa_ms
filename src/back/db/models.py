@@ -10,10 +10,9 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.dialects.postgresql import JSONB
 
 
-UTC_PLUS_5 = ZoneInfo("Asia/Yekaterinburg")
 
 def now_ekb():
-    return datetime.now(UTC_PLUS_5)
+    return datetime.now()
 
 
 class FileType(enum.Enum):

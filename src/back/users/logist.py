@@ -497,8 +497,7 @@ async def patch_draft(
     if not task:
         raise HTTPException(status_code=404, detail="Черновик не найден")
 
-    # Сохраняем *старые* значения связей для *проверки изменений* и *пересчёта цен*
-    # ✅ Обновляем получение старых данных с учетом quantity и serial_number
+    
     old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
     old_equipment_with_sn_qty = [
         (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links

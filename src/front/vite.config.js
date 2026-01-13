@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['eden-photographer-artist-mic.trycloudflare.com']
+    allowedHosts: ['correct-quarters-actions-sandra.trycloudflare.com']
   },
 })
 
