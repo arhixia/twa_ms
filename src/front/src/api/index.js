@@ -237,12 +237,26 @@ export async function uploadFallback(file, taskId, reportId = null) {
     url += `&report_id=${reportId}`;
   }
 
-  const res = await api.post(
-    url,
-    form,
-    { headers: { "Content-Type": "multipart/form-data" } }
-  );
-  return res.data; 
+  try {
+    const res = await api.post(
+      url,
+      form,
+      { 
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 300000 
+      }
+    );
+    return res.data; 
+  } catch (error) {
+    console.error('Upload error details:', {
+      message: error.message,
+      response: error.response,
+      request: error.request
+    });
+    
+    // Перебросьте ошибку дальше
+    throw error;
+  }
 }
 
 export async function deletePendingAttachment(storageKey) {

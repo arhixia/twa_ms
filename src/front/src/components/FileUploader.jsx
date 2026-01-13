@@ -1,6 +1,41 @@
-// front/src/components/FileUploader.jsx
 import React, { useState, useEffect } from "react";
 import { uploadFallback, deletePendingAttachment } from "../api";
+
+// Функция для сжатия изображения
+async function compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        
+        img.onload = () => {
+            // Вычисляем новые размеры
+            let { width, height } = img;
+            if (width > height) {
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+            } else {
+                if (height > maxHeight) {
+                    width = (width * maxHeight) / height;
+                    height = maxHeight;
+                }
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            // Рисуем изображение на canvas
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            // Конвертируем обратно в Blob
+            canvas.toBlob(resolve, 'image/jpeg', quality);
+        };
+        
+        img.src = URL.createObjectURL(file);
+    });
+}
 
 export default function FileUploader({ onUploaded, onUploading, onUploadError, onRemoved, taskId, reportId = null, maxFiles = 15 }) {
   const [files, setFiles] = useState([]);
@@ -12,46 +47,107 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
   }, [reportId]);
 
   async function handleFile(e) {
-    const selectedFiles = Array.from(e.target.files); // Получаем все выбранные файлы
+    const selectedFiles = Array.from(e.target.files);
+    
     if (selectedFiles.length === 0) return;
 
     // Проверяем количество файлов
     if (files.length + selectedFiles.length > maxFiles) {
-      const remainingSlots = maxFiles - files.length;
-      if (remainingSlots <= 0) {
-        alert("⚠️ Достигнут лимит файлов");
-        return;
-      }
-      // Ограничиваем количество файлов до оставшихся слотов
-      selectedFiles.splice(remainingSlots);
+        const remainingSlots = maxFiles - files.length;
+        if (remainingSlots <= 0) {
+            if (window.Telegram?.WebApp) {
+                window.Telegram.WebApp.showAlert("⚠️ Достигнут лимит файлов");
+            } else {
+                alert("⚠️ Достигнут лимит файлов");
+            }
+            return;
+        }
+        selectedFiles.splice(remainingSlots);
     }
 
     const newFilesToProcess = [];
 
     for (const f of selectedFiles) {
-      if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
-        alert(`❌ Файл ${f.name} неподдерживаемого типа`);
-        continue;
-      }
+        // Проверяем тип файла
+        if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
+            if (window.Telegram?.WebApp) {
+                window.Telegram.WebApp.showAlert(`❌ Файл ${f.name} неподдерживаемого типа`);
+            } else {
+                alert(`❌ Файл ${f.name} неподдерживаемого типа`);
+            }
+            continue;
+        }
 
-      const preview = URL.createObjectURL(f);
-      const fileId = `tmp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const placeholder = {
-        id: fileId,
-        name: f.name, // Добавим имя файла для информации
-        preview,
-        uploading: true,
-        uploadProgress: 0,
-        error: null,
-      };
-      newFilesToProcess.push({ file: f, placeholder });
+        // Сжимаем изображение
+        try {
+            console.log(`[COMPRESS] Original size: ${(f.size/1024).toFixed(1)}KB`);
+            
+            let compressedFile = f;
+            // Для PNG конвертируем в JPEG
+            if (f.type === 'image/png') {
+                compressedFile = await compressImage(f, 1200, 1200, 0.7);
+                compressedFile.name = f.name.replace(/\.[^/.]+$/, ".jpg"); // меняем расширение
+            } else {
+                compressedFile = await compressImage(f, 1200, 1200, 0.7);
+                compressedFile.name = f.name;
+            }
+            
+            console.log(`[COMPRESS] Compressed size: ${(compressedFile.size/1024).toFixed(1)}KB`);
+            
+            // Проверяем, если сжатое изображение все равно больше 200KB, уменьшаем качество
+            let quality = 0.7;
+            while (compressedFile.size > 200 * 1024 && quality > 0.1) {
+                quality -= 0.1;
+                compressedFile = await compressImage(f, 1200, 1200, quality);
+                console.log(`[COMPRESS] Retrying with quality ${quality}, size: ${(compressedFile.size/1024).toFixed(1)}KB`);
+            }
+            
+            // Если все равно больше 200KB, уменьшаем размеры
+            if (compressedFile.size > 200 * 1024) {
+                compressedFile = await compressImage(f, 800, 800, 0.5);
+                console.log(`[COMPRESS] Final compression, size: ${(compressedFile.size/1024).toFixed(1)}KB`);
+            }
+            
+            // Финальная проверка размера
+            if (compressedFile.size > 200 * 1024) {
+                if (window.Telegram?.WebApp) {
+                    window.Telegram.WebApp.showAlert(`❌ Файл ${f.name} после сжатия все равно слишком большой (${(compressedFile.size/1024).toFixed(1)}KB). Максимум: 200KB`);
+                } else {
+                    alert(`❌ Файл ${f.name} после сжатия все равно слишком большой (${(compressedFile.size/1024).toFixed(1)}KB). Максимум: 200KB`);
+                }
+                continue;
+            }
+
+            // Создаем превью
+            const preview = URL.createObjectURL(compressedFile);
+            const fileId = `tmp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            const placeholder = {
+                id: fileId,
+                name: compressedFile.name,
+                preview,
+                uploading: true,
+                uploadProgress: 0,
+                error: null,
+            };
+            newFilesToProcess.push({ file: compressedFile, placeholder });
+        } catch (error) {
+            console.error('Error compressing file:', error);
+            if (window.Telegram?.WebApp) {
+                window.Telegram.WebApp.showAlert(`❌ Ошибка сжатия файла ${f.name}`);
+            }
+            continue;
+        }
     }
 
-    if (newFilesToProcess.length === 0) return; // Нет подходящих файлов
+    if (newFilesToProcess.length === 0) return;
 
     if (!taskId) {
-      alert("❌ Невозможно загрузить файлы: задача не создана");
-      return;
+        if (window.Telegram?.WebApp) {
+            window.Telegram.WebApp.showAlert("❌ Невозможно загрузить файлы: задача не создана");
+        } else {
+            alert("❌ Невозможно загрузить файлы: задача не создана");
+        }
+        return;
     }
 
     // Добавляем все подготовленные файлы в состояние
@@ -60,35 +156,45 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
 
     // Загружаем каждый файл асинхронно
     for (const { file, placeholder } of newFilesToProcess) {
-      if (onUploading) onUploading(placeholder.id);
+        if (onUploading) onUploading(placeholder.id);
 
-      try {
-        const res = await uploadFallback(file, taskId, reportId);
-        console.log("[DEBUG] uploadFallback response:", res);
+        try {
+            const res = await uploadFallback(file, taskId, reportId);
+            console.log("[DEBUG] uploadFallback response:", res);
 
-        const item = {
-          id: res.attachment_id,
-          tmpId: placeholder.id,      // Сохраняем временный ID
-          storage_key: res.storage_key,
-          name: file.name,
-          preview: placeholder.preview,
-          uploading: false
-        };
+            const item = {
+                id: res.attachment_id,
+                tmpId: placeholder.id,
+                storage_key: res.storage_key,
+                name: file.name,
+                preview: placeholder.preview,
+                uploading: false
+            };
 
-        setFiles((s) => s.map(x => (x.id === placeholder.id ? item : x)));
-        if (onUploaded) onUploaded(item);
-      } catch (err) {
-        console.error(err);
-        const errorMsg = err.response?.data?.detail || err.message || "Ошибка загрузки";
-        setFiles((s) => s.map(x => (x.id === placeholder.id ? { ...x, uploading: false, error: errorMsg } : x)));
-        if (onUploadError) onUploadError(placeholder.id, errorMsg);
-      }
+            setFiles((s) => s.map(x => (x.id === placeholder.id ? item : x)));
+            if (onUploaded) onUploaded(item);
+        } catch (err) {
+            console.error('Upload error:', err);
+            
+            let errorMsg = 'Ошибка загрузки';
+            if (err.response?.status === 413) {
+                errorMsg = 'Файл слишком большой';
+            } else if (err.response?.status === 401 || err.response?.status === 403) {
+                errorMsg = 'Ошибка авторизации';
+            } else if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+                errorMsg = 'Время ожидания истекло';
+            } else if (err.response?.data?.detail) {
+                errorMsg = err.response.data.detail;
+            }
+            
+            setFiles((s) => s.map(x => (x.id === placeholder.id ? { ...x, uploading: false, error: errorMsg } : x)));
+            if (onUploadError) onUploadError(placeholder.id, errorMsg);
+        }
     }
 
     setLoading(false);
-    // Сбросим input, чтобы можно было снова выбрать те же файлы
     e.target.value = '';
-  }
+}
   
 
   const removeLocal = async (id) => {
@@ -134,7 +240,7 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
           accept="image/*"
           onChange={handleFile}
           disabled={loading || !taskId}
-          multiple // <--- ДОБАВЛЕН АТРИБУТ multiple
+          multiple
           style={{ display: 'none' }} // Скрываем оригинальный input
         />
       </label>

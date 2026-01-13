@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['entered-reynolds-restrict-miracle.trycloudflare.com']
+    allowedHosts: ['gentleman-fixes-station-amplifier.trycloudflare.com']
   },
 })
 

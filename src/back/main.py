@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import logging
 import os
+import time
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,6 +17,7 @@ from back.db.config import TOKEN as BOT_TOKEN,WEB_APP_URL
 from back.db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from back.db.models import  User
+from starlette.middleware.base import BaseHTTPMiddleware
 import asyncio
 from aiogram import Bot, Dispatcher, types
 
@@ -25,6 +27,33 @@ from back.bot_worker import start_polling
 from back.utils.notify import periodic_notification_task
 
 logger = logging.getLogger(__name__)
+
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        request_id = f"{int(start_time)}-{hash(str(request.url)) % 10000}"
+        
+        # Логируем начало запроса
+        logger.info(f"[{request_id}] REQUEST STARTED - Method: {request.method}, URL: {request.url.path}")
+        
+        # Логируем заголовки, которые могут содержать информацию о размере
+        content_length = request.headers.get('content-length')
+        content_type = request.headers.get('content-type')
+        logger.info(f"[{request_id}] Headers - Content-Length: {content_length}, Content-Type: {content_type}")
+        
+        try:
+            response = await call_next(request)
+            process_time = time.time() - start_time
+            logger.info(f"[{request_id}] REQUEST COMPLETED - Status: {response.status_code}, Time: {process_time:.2f}s")
+            return response
+        except Exception as e:
+            process_time = time.time() - start_time
+            logger.error(f"[{request_id}] REQUEST FAILED - Error: {str(e)}, Time: {process_time:.2f}s")
+            raise
+
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -70,6 +99,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RequestLoggingMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -78,6 +108,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+
 
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])

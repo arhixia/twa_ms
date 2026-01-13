@@ -30,7 +30,7 @@ async def validate_and_process_attachment(attachment_id: int):
             except Exception as e:
                 print(f"[DEBUG] S3 head failed: {e}") # <--- Добавить
                 att.error_text = f"S3 head failed: {e}"
-                att.processed = True # <--- Помечаем как обработанное, но с ошибкой
+                att.processed = False # <--- Помечаем как обработанное, но с ошибкой
                 await db.flush()
                 return
 
@@ -39,7 +39,7 @@ async def validate_and_process_attachment(attachment_id: int):
             if ctype not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
                 print(f"[DEBUG] Invalid content type: {ctype}") # <--- Добавить
                 att.error_text = f"Invalid content type: {ctype}"
-                att.processed = True # <--- Помечаем как обработанное, но с ошибкой
+                att.processed = False # <--- Помечаем как обработанное, но с ошибкой
                 await db.flush()
                 return
 
@@ -52,7 +52,7 @@ async def validate_and_process_attachment(attachment_id: int):
             except Exception as e:
                 print(f"[DEBUG] S3 get failed: {e}") # <--- Добавить
                 att.error_text = f"S3 get failed: {e}"
-                att.processed = True # <--- Помечаем как обработанное, но с ошибкой
+                att.processed = True 
                 await db.flush()
                 return
 
