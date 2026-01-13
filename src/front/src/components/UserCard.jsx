@@ -1,3 +1,4 @@
+// UserCard.jsx
 import React from 'react';
 
 // Вспомогательная функция для обрезки строки
@@ -9,179 +10,186 @@ const truncateName = (str) => {
 };
 
 function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate, onEditUser }) {
-  const roleColor = {
-    admin: '#e57373',
-    logist: '#64b5f6',
-    montajnik: '#81c784',
-    tech_supp: '#ffb74d',
-  }[user.role] || '#ffffff';
+  // Цвета ролей в соответствии с дизайном
+  const roleColors = {
+    admin: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)',
+    logist: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fdba74 100%)',
+    montajnik: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
+    tech_supp: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 50%, #d8b4fe 100%)',
+  };
 
   const handleRoleChange = (e) => {
     onEditRole(user.id, e.target.value);
   };
 
-  const handleDeactivateClick = () => {
+  const handleDeactivateClick = (e) => {
+    e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал onClick на карточке
     onDeactivate(user.id);
   };
 
-  const handleActivateClick = () => {
+  const handleActivateClick = (e) => {
+    e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал onClick на карточке
     onActivate(user.id);
   };
 
-  // Обработчик клика на кнопку редактирования
-  const handleEditClick = (e) => {
-    e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал onClick на карточке
+  // Обработчик клика на карточку
+  const handleCardClick = () => {
     onEditUser(user); // Вызываем функцию открытия модального окна редактирования
   };
 
-  // Формируем полное имя и применяем обрезку
   const fullName = `${user.name} ${user.lastname}`;
   const displayName = truncateName(fullName);
+
+  const roleBg = roleColors[user.role] || 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)';
 
   return (
     <div
       className="card"
       style={{
-        borderLeft: `5px solid ${roleColor}`,
-        padding: '12px',
-        backgroundColor: '#0d1117',
-        borderRadius: '8px',
-        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-        marginBottom: '12px',
+        padding: '16px',
+        backgroundColor: 'var(--bg-card)',
+        borderRadius: '12px',
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        marginBottom: '16px',
+        border: '1px solid var(--border-subtle)',
+        position: 'relative',
+        minHeight: '160px',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        cursor: 'pointer'
       }}
+      onClick={handleCardClick}
     >
+      {/* Статус активности в верхнем правом углу */}
       <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '8px',
+          position: 'absolute',
+          top: '12px',
+          right: '12px',
+          padding: '4px 8px',
+          borderRadius: '16px',
+          fontSize: '12px',
+          fontWeight: '600',
+          color: user.is_active ? '#10b981' : '#ef4444',
+          background: 'rgba(255, 255, 255, 0.05)',
+          minWidth: '60px',
+          textAlign: 'center'
         }}
       >
+        {user.is_active ? 'Активен' : 'Неактивен'}
+      </div>
+
+      {/* Статус роли в верхнем левом углу */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          padding: '4px 8px',
+          borderRadius: '16px',
+          fontSize: '12px',
+          fontWeight: '600',
+          color: '#1f2937',
+          background: roleBg,
+          minWidth: '60px',
+          textAlign: 'center'
+        }}
+      >
+        {roleDisplayNames[user.role] || user.role}
+      </div>
+
+      {/* Основной контент */}
+      <div style={{ flex: 1, marginTop: '30px' }}>
         <h3
           style={{
-            margin: '0',
+            margin: '0 0 8px 0',
             color: 'white',
             fontSize: '1.1em',
-            whiteSpace: 'nowrap', // Запрещаем перенос строки
-            overflow: 'hidden',   // Скрываем переполнение
-            textOverflow: 'ellipsis', // Добавляем многоточие
-            maxWidth: '70%' // Ограничиваем ширину, чтобы кнопки всегда были видны
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '100%'
           }}
-          title={`${user.name} ${user.lastname}`} // Показываем полное имя при наведении
+          title={`${user.name} ${user.lastname}`}
         >
           {displayName}
         </h3>
-        <div
+        <p
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
+            margin: '4px 0',
+            color: '#c9d1d9',
+            fontSize: '0.9em'
           }}
         >
-          <span
-            style={{
-              color: user.is_active ? 'green' : 'red',
-              fontWeight: 'bold',
-              fontSize: '0.9em',
-            }}
-          >
-            {user.is_active ? 'Активен' : 'Неактивен'}
-          </span>
-        </div>
+          <strong>Логин:</strong> {user.login}
+        </p>
+        <p
+          style={{
+            margin: '4px 0',
+            color: '#c9d1d9',
+            fontSize: '0.9em'
+          }}
+        >
+          <strong>Telegram ID:</strong> {user.telegram_id || '—'}
+        </p>
       </div>
-      <p
-        style={{
-          margin: '4px 0',
-          color: '#c9d1d9',
-        }}
-      >
-        <strong>Логин:</strong> {user.login}
-      </p>
-      <p
-        style={{
-          margin: '4px 0',
-          color: '#c9d1d9',
-        }}
-      >
-        <strong>Роль:</strong> {roleDisplayNames[user.role] || user.role}
-      </p>
-      <p
-        style={{
-          margin: '4px 0',
-          color: '#c9d1d9',
-        }}
-      >
-        <strong>Telegram ID:</strong> {user.telegram_id || '—'}
-      </p>
+
       <div
         style={{
-          display: 'flex',
-          gap: '8px',
-          marginTop: '10px',
-          flexWrap: 'wrap',
-          alignItems: 'center'
+          position: 'absolute',
+          bottom: '12px',
+          right: '12px',
+          zIndex: 2
         }}
       >
-        {/* Кнопка редактирования */}
-        <button
-          className="edit-user-btn"
-          onClick={handleEditClick}
-          style={{
-            backgroundColor: '#2962FF',
-            color: 'white',
-            border: 'none',
-            padding: '6px 12px',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '0.9em',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            transition: 'background-color 0.2s',
-          }}
-          onMouseEnter={(e) => {e.target.style.backgroundColor = '#2962FF'}}
-          onMouseLeave={(e) => {e.target.style.backgroundColor = '#2962FF'}}
-        >
-          ✏️ Редактировать
-        </button>
-
-        {/* Кнопки активации/деактивации */}
-        {user.is_active ? (
+        {user.is_active && (
           <button
             className="deactivate-btn"
             onClick={handleDeactivateClick}
             style={{
-              backgroundColor: '#ff9800',
-              color: 'white',
-              border: 'none',
-              padding: '6px 12px',
-              borderRadius: '4px',
+              backgroundColor: 'transparent',
+              color: '#ef4444',
+              border: '1px solid #ef4444',
+              padding: '4px 8px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              fontSize: '0.9em',
-              transition: 'background-color 0.2s',
+              fontSize: '0.8em',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
-            onMouseEnter={(e) => (e.target.style.backgroundColor = '#e68a00')}
-            onMouseLeave={(e) => (e.target.style.backgroundColor = '#ff9800')}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = 'transparent';
+            }}
           >
             Деактивировать
           </button>
-        ) : (
+        )}
+        
+        {!user.is_active && (
           <button
             className="activate-btn"
             onClick={handleActivateClick}
             style={{
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              padding: '6px 12px',
-              borderRadius: '4px',
+              backgroundColor: 'transparent',
+              color: '#10b981',
+              border: '1px solid #10b981',
+              padding: '4px 8px',
+              borderRadius: '6px',
               cursor: 'pointer',
-              fontSize: '0.9em',
-              transition: 'background-color 0.2s',
+              fontSize: '0.8em',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap'
             }}
-            onMouseEnter={(e) => (e.target.style.backgroundColor = '#45a049')}
-            onMouseLeave={(e) => (e.target.style.backgroundColor = '#4CAF50')}
+            onMouseEnter={(e) => {
+              e.target.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.backgroundColor = 'transparent';
+            }}
           >
             Активировать
           </button>
@@ -189,6 +197,6 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
       </div>
     </div>
   );
-} 
+}
 
 export default UserCard;

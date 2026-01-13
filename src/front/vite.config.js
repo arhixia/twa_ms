@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['beatles-excellent-joy-vip.trycloudflare.com']
+    allowedHosts: ['eden-photographer-artist-mic.trycloudflare.com']
   },
 })
 

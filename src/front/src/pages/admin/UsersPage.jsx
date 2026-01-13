@@ -1,4 +1,4 @@
-// front/src/pages/admin/UsersPage.jsx
+// UsersPage.jsx (обновленный стиль модального окна и добавление отступов между карточками)
 import React, { useState, useEffect } from 'react';
 import { adminListUsers, adminCreateUser, adminChangeUserRole, adminDeactivateUser, adminActivateUser, adminUpdateUser } from '../../api';
 import UserCard from '../../components/UserCard';
@@ -51,10 +51,10 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ padding: '20px' }}>
         <div className="modal-header">
           <h2>Редактировать пользователя #{user.id}</h2>
-          <button className="close" onClick={onClose}>×</button>
+          <button className="close" onClick={onClose} style={{ color: 'white', background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
         </div>
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
@@ -120,7 +120,14 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
             </div>
           </div>
           <div className="modal-actions">
-            <button type="button" className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={onClose}>Отмена</button>
+            <button 
+              type="button" 
+              className="gradient-button" 
+              style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} 
+              onClick={onClose}
+            >
+              Отмена
+            </button>
             <button type="submit" className="gradient-button" disabled={saving}>
               {saving ? 'Сохранение...' : 'Сохранить'}
             </button>
@@ -285,7 +292,6 @@ function UsersPage() {
     setUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
     setShowEditModal(false);
     setEditingUser(null);
-    // fetchUsers(); // Убрана, так как локальное обновление быстрее
   };
 
   // Функция закрытия модального окна редактирования
@@ -346,7 +352,7 @@ function UsersPage() {
           </form>
         )}
         
-        <div className="cards" style={{ marginTop: '24px' }}>
+        <div className="cards" style={{ marginTop: '24px', gap: '24px' }}>
           {users.map(user => (
             <UserCard
               key={user.id}
