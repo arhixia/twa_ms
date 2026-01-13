@@ -1,4 +1,6 @@
 import json
+import logging
+import time
 from fastapi import APIRouter, Body, Depends, HTTPException, BackgroundTasks, UploadFile, File, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
@@ -20,13 +22,15 @@ from back.files.handlers import delete_object_from_s3
 
 router = APIRouter()
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class InitMultipartIn(BaseModel):
     filename: str
     content_type: str
     size: int
     task_id: Optional[int] = None
-    report_id: Optional[int] = None  
+    report_id: Optional[int] = None  # НОВОЕ: ID отчёта
     draft: Optional[bool] = False
 
 
@@ -44,7 +48,7 @@ class CompleteMultipartIn(BaseModel):
     upload_id: str
     parts: List[Dict[str, Any]]
     task_id: Optional[int] = None
-    report_id: Optional[int] = None 
+    report_id: Optional[int] = None  # НОВОЕ: ID отчёта
     original_name: Optional[str] = None
     mime_type: Optional[str] = None
     size: Optional[int] = None
@@ -70,7 +74,7 @@ async def init_multipart(
     if user_role not in (Role.logist, Role.montajnik, Role.tech_supp, Role.admin):
         raise HTTPException(status_code=403, detail="Forbidden")
 
-
+    # Размер и mime проверки
     if payload.size is None or payload.size <= 0 or payload.size > 10 * 1024 ** 3:
         raise HTTPException(status_code=400, detail="Invalid size, max 10 GiB")
     if payload.content_type not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
@@ -78,9 +82,9 @@ async def init_multipart(
 
     s3 = get_s3_client()
 
-  
+    # --- НОВОЕ: Проверка report_id ---
     if payload.report_id:
-        
+        # Загрузить отчёт и проверить, что он принадлежит задаче и автор - текущий пользователь
         report_res = await db.execute(
             select(TaskReport)
             .where(TaskReport.id == payload.report_id, TaskReport.task_id == payload.task_id)
@@ -90,15 +94,15 @@ async def init_multipart(
             raise HTTPException(status_code=404, detail="Отчёт не найден или не принадлежит задаче")
         if report.author_id != current_user.id:
             raise HTTPException(status_code=403, detail="Только автор отчёта может добавлять к нему вложения")
-        
+        # Убедиться, что текущий пользователь - монтажник
         if current_user.role != Role.montajnik:
             raise HTTPException(status_code=403, detail="Только монтажник может добавлять вложения к отчёту")
 
-    
+    # Генерируем ключ в зависимости от наличия report_id
     if payload.report_id:
         key = s3.key_for_report_attachment(payload.task_id or 0, payload.report_id, payload.filename)
     else:
-       
+        # Если report_id нет, используем старую логику
         key = s3.key_for_task(payload.task_id or 0, payload.filename)
 
     upload_id = await s3.create_multipart_upload(key, content_type=payload.content_type)
@@ -112,7 +116,7 @@ async def init_multipart(
     )
 
 
-
+# Клиент завершил upload частей — завершаем multipart и создаём запись в БД
 @router.post("/complete-multipart")
 async def complete_multipart(
     background_tasks: BackgroundTasks,
@@ -125,22 +129,22 @@ async def complete_multipart(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     s3 = get_s3_client()
- 
+    # Complete in S3
     try:
         await s3.complete_multipart_upload(payload.storage_key, payload.upload_id, payload.parts)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"S3 complete failed: {e}")
 
-
+    # optional: head_object for verification
     try:
         meta = await s3.head_object(payload.storage_key)
     except Exception:
         meta = {}
 
-    
+    # --- НОВОЕ: Проверка report_id перед созданием записи ---
     report = None
     if payload.report_id:
-      
+        # Загрузить отчёт и проверить, что он принадлежит задаче и автор - текущий пользователь
         report_res = await db.execute(
             select(TaskReport)
             .where(TaskReport.id == payload.report_id, TaskReport.task_id == payload.task_id)
@@ -149,10 +153,10 @@ async def complete_multipart(
         if not report or report.author_id != current_user.id or current_user.role != Role.montajnik:
             raise HTTPException(status_code=403, detail="Недостаточно прав для добавления вложения к отчёту")
 
-  
+    # Создаём запись TaskAttachment
     attach = TaskAttachment(
         task_id=payload.task_id if payload.task_id is not None else 0,
-        report_id=payload.report_id,  
+        report_id=payload.report_id,  # Указываем report_id если есть
         storage_key=payload.storage_key,
         file_type=FileType.photo,
         original_name=payload.original_name,
@@ -167,9 +171,9 @@ async def complete_multipart(
     await db.commit()
     await db.refresh(attach)
 
- 
-    if attach.report_id and report: 
-     
+    # --- НОВОЕ: Обновить photos_json у отчёта ---
+    if attach.report_id and report: # report уже загружен выше
+        # Получить все storage_key вложений этого отчёта
         attachments_res = await db.execute(
             select(TaskAttachment.storage_key)
             .where(TaskAttachment.report_id == attach.report_id)
@@ -179,7 +183,7 @@ async def complete_multipart(
         await db.flush()
         await db.commit()
 
-   
+    # запуск обработки: thumbnail, checksum, validation
     background_tasks.add_task(validate_and_process_attachment, attach.id)
     return {"attachment_id": attach.id, "storage_key": attach.storage_key}
 
@@ -194,92 +198,129 @@ async def upload_fallback_report(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Загрузка файла в S3 с созданием записи TaskAttachment для отчёта.
-    """
- 
-    user_role = getattr(current_user, "role", None)
-    if user_role not in (Role.logist, Role.montajnik, Role.tech_supp, Role.admin):
-        raise HTTPException(status_code=403, detail="Forbidden")
+    start_time = time.time()
+    timestamp = datetime.now().isoformat()
 
-    
-    if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
-        raise HTTPException(status_code=400, detail="Unsupported content_type")
 
-    
-    report = None
-    if report_id:
-       
-        report_res = await db.execute(
-            select(TaskReport)
-            .where(TaskReport.id == report_id, TaskReport.task_id == task_id)
-        )
-        report = report_res.scalars().first()
-        if not report:
-            raise HTTPException(status_code=404, detail="Отчёт не найден или не принадлежит задаче")
-        if report.author_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Только автор отчёта может добавлять к нему вложения")
+    logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] REQUEST STARTED")
+    logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] User ID: {getattr(current_user, 'id', 'unknown')}, Role: {getattr(current_user, 'role', 'unknown')}")
+    logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Task ID: {task_id}, Report ID: {report_id}")
+    logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] File name: {file.filename}, Content-Type: {file.content_type}")
+
+    try:
+        # Проверки прав
+        user_role = getattr(current_user, "role", None)
+        if user_role not in (Role.logist, Role.montajnik, Role.tech_supp, Role.admin):
+            logger.warning(f"[{timestamp}] [UPLOAD_FALLBACK] Forbidden for user {getattr(current_user, 'id', 'unknown')}, role: {user_role}")
+            raise HTTPException(status_code=403, detail="Forbidden")
+
+        # Проверка mime
+        if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
+            logger.warning(f"[{timestamp}] [UPLOAD_FALLBACK] Unsupported content_type: {file.content_type}")
+            raise HTTPException(status_code=400, detail="Unsupported content_type")
+
+        # --- НОВОЕ: Проверка report_id ---
+        report = None
+        if report_id:
+            logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Checking report {report_id} for task {task_id}")
+            report_res = await db.execute(
+                select(TaskReport)
+                .where(TaskReport.id == report_id, TaskReport.task_id == task_id)
+            )
+            report = report_res.scalars().first()
+            if not report:
+                logger.warning(f"[{timestamp}] [UPLOAD_FALLBACK] Report {report_id} not found or doesn't belong to task {task_id}")
+                raise HTTPException(status_code=404, detail="Отчёт не найден или не принадлежит задаче")
+            if report.author_id != current_user.id:
+                logger.warning(f"[{timestamp}] [UPLOAD_FALLBACK] User {current_user.id} is not author of report {report_id}")
+                raise HTTPException(status_code=403, detail="Только автор отчёта может добавлять к нему вложения")
+            # Убедиться, что текущий пользователь - монтажник
+            if current_user.role != Role.montajnik:
+                logger.warning(f"[{timestamp}] [UPLOAD_FALLBACK] User {current_user.id} is not montajnik but trying to add attachment to report")
+                raise HTTPException(status_code=403, detail="Только монтажник может добавлять вложения к отчёту")
+
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Starting to read file: {file.filename}")
         
-        if current_user.role != Role.montajnik:
-            raise HTTPException(status_code=403, detail="Только монтажник может добавлять вложения к отчёту")
+        # Чтение файла
+        data = await file.read()
+        file_size = len(data)
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] File read successfully. Size: {file_size} bytes")
 
-    
-    data = await file.read()
-    if len(data) > 10 * 1024 ** 3:
-        raise HTTPException(status_code=400, detail="File too large")
+        if file_size > 10 * 1024 ** 3:
+            logger.warning(f"[{timestamp}] [UPLOAD_FALLBACK] File too large: {file_size} bytes")
+            raise HTTPException(status_code=400, detail="File too large")
 
-    s3 = get_s3_client()
+        s3 = get_s3_client()
 
-   
-    if report_id:
-        key = s3.key_for_report_attachment(task_id, report_id, file.filename)
-    else:
-      
-        key = s3.key_for_task(task_id, file.filename)
+        # Генерируем ключ с учётом report_id
+        if report_id:
+            key = s3.key_for_report_attachment(task_id, report_id, file.filename)
+        else:
+            key = s3.key_for_task(task_id, file.filename)
 
-   
-    await s3.put_object(
-        key,
-        data,
-        content_type=file.content_type,
-        content_disposition="inline"
-    )
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Generated S3 key: {key}")
 
-    
-    attach = TaskAttachment(
-        task_id=task_id,
-        report_id=report_id,  
-        storage_key=key,
-        file_type=FileType.photo,
-        original_name=file.filename,
-        mime_type=file.content_type,
-        size=len(data),
-        uploader_id=getattr(current_user, "id", None),
-        uploader_role=getattr(current_user, "role", None).value if getattr(current_user, "role", None) else None,
-        processed=True,
-    )
-    db.add(attach)
-    await db.flush()
-    await db.commit()
-    await db.refresh(attach)
-
-   
-    if attach.report_id and report:
-        attachments_res = await db.execute(
-            select(TaskAttachment.storage_key)
-            .where(TaskAttachment.report_id == attach.report_id)
+        # Загрузка в S3
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Starting upload to S3...")
+        await s3.put_object(
+            key,
+            data,
+            content_type=file.content_type,
+            content_disposition="inline"
         )
-        keys = [row[0] for row in attachments_res.fetchall()]
-        report.photos_json = json.dumps(keys)
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Successfully uploaded to S3: {key}")
+
+        # Создаем запись в БД
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Creating database record...")
+        attach = TaskAttachment(
+            task_id=task_id,
+            report_id=report_id,
+            storage_key=key,
+            file_type=FileType.photo,
+            original_name=file.filename,
+            mime_type=file.content_type,
+            size=file_size,
+            uploader_id=getattr(current_user, "id", None),
+            uploader_role=getattr(current_user, "role", None).value if getattr(current_user, "role", None) else None,
+            processed=True,
+        )
+        db.add(attach)
         await db.flush()
         await db.commit()
+        await db.refresh(attach)
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Database record created: {attach.id}")
 
-  
-    background_tasks.add_task(validate_and_process_attachment, attach.id)
+        # --- НОВОЕ: Обновить photos_json у отчёта ---
+        if attach.report_id and report:
+            attachments_res = await db.execute(
+                select(TaskAttachment.storage_key)
+                .where(TaskAttachment.report_id == attach.report_id)
+            )
+            keys = [row[0] for row in attachments_res.fetchall()]
+            report.photos_json = json.dumps(keys)
+            await db.flush()
+            await db.commit()
+            logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Updated report {report_id} photos_json with {len(keys)} attachments")
 
-    return {"attachment_id": attach.id, "storage_key": key}
+        # Фоновая обработка
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] Scheduling background task for attachment ID: {attach.id}")
+        background_tasks.add_task(validate_and_process_attachment, attach.id)
 
+        duration = time.time() - start_time
+        logger.info(f"[{timestamp}] [UPLOAD_FALLBACK] SUCCESSFUL, took {duration:.2f}s, attachment ID: {attach.id}")
 
+        return {"attachment_id": attach.id, "storage_key": key}
+
+    except HTTPException:
+        # Логируем HTTP ошибки
+        logger.error(f"[{timestamp}] [UPLOAD_FALLBACK] HTTPException raised")
+        raise
+    except Exception as e:
+        duration = time.time() - start_time
+        logger.error(f"[{timestamp}] [UPLOAD_FALLBACK] ERROR occurred after {duration:.2f}s: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}") 
+
+# Список вложений задачи
 @router.get("/attachments/tasks/{task_id}/attachments", response_model=List[AttachmentOut])
 async def list_attachments(
     task_id: int,
@@ -304,13 +345,13 @@ async def list_attachments(
     for it in items:
         url = None
         try:
-            url = await s3.presign_get(it.storage_key, expires=15000)  
+            url = await s3.presign_get(it.storage_key, expires=15000)  # 1 час
         except Exception:
             url = None
         out.append(AttachmentOut(
             id=it.id,
             storage_key=it.storage_key,
-            presigned_url=url, 
+            presigned_url=url,  
             thumb_key=it.thumb_key,
             uploader_id=it.uploader_id,
             uploaded_at=it.uploaded_at,
@@ -326,7 +367,7 @@ async def list_report_attachments(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-  
+    # Загрузить отчёт и связанную задачу, чтобы проверить права
     report_res = await db.execute(
         select(TaskReport)
         .options(selectinload(TaskReport.task))
@@ -338,7 +379,7 @@ async def list_report_attachments(
 
     task = report.task
 
-    
+    # Проверить права доступа: автор отчёта, создатель задачи (логист), исполнитель (монтажник), админ
     allowed = False
     if report.author_id == getattr(current_user, "id", None):
         allowed = True
@@ -348,8 +389,9 @@ async def list_report_attachments(
         allowed = True
     elif getattr(current_user, "role", None) == Role.admin:
         allowed = True
-    elif getattr(current_user, "role", None) == Role.tech_supp: 
-
+    elif getattr(current_user, "role", None) == Role.tech_supp: # тех.спец может смотреть, если его просят
+        # Проверим, требуется ли тех.проверка для задачи
+        # Загрузим работы задачи
         task_works_res = await db.execute(
             select(TaskWork).where(TaskWork.task_id == task.id).options(selectinload(TaskWork.work_type))
         )
@@ -361,7 +403,7 @@ async def list_report_attachments(
     if not allowed:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-   
+    # Загрузить вложения отчёта
     res = await db.execute(
         select(TaskAttachment)
         .where(TaskAttachment.report_id == report_id, TaskAttachment.deleted_at.is_(None), TaskAttachment.processed == True)
@@ -372,7 +414,7 @@ async def list_report_attachments(
     for it in items:
         url = None
         try:
-            url = await s3.presign_get(it.storage_key, expires=15000)  
+            url = await s3.presign_get(it.storage_key, expires=15000)  # 1 час
         except Exception:
             url = None
         out.append(AttachmentOut(
@@ -394,37 +436,32 @@ class DeleteOut(BaseModel):
 
 
 
-
-@router.delete("/pending/{storage_key:path}") 
+@router.delete("/pending/{storage_key:path}")
 async def delete_pending_attachment(
     background_tasks: BackgroundTasks,
     storage_key: str = Path(..., description="Storage key в S3"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    """
-    Удаляет вложение, которое ещё не привязано к отчёту (report_id = null).
-    Используется для отмены загрузки вложений перед созданием отчёта.
-    """
-    
     res = await db.execute(
         select(TaskAttachment)
         .where(
             TaskAttachment.storage_key == storage_key,
-            TaskAttachment.report_id.is_(None), 
-            TaskAttachment.uploader_id == current_user.id, 
+            TaskAttachment.report_id.is_(None),
+            TaskAttachment.uploader_id == current_user.id,
         )
     )
     attachment = res.scalars().first()
     if not attachment:
         raise HTTPException(status_code=404, detail="Вложение не найдено или не может быть удалено")
 
-   
+    thumb_to_delete = attachment.thumb_key
+
     await db.delete(attachment)
     await db.commit()
 
-   
-    background_tasks.add_task(delete_object_from_s3, attachment.storage_key)
+    # Передаём thumb_key в фоновую задачу
+    background_tasks.add_task(delete_object_from_s3, attachment.storage_key, thumb_to_delete)
 
     return {"detail": "Вложение удалено"}
 
@@ -434,14 +471,14 @@ async def get_attachment(
     full_path: str = Path(..., description="Storage key в S3"),
     db: AsyncSession = Depends(get_db),
 ):
-    print(f"[DEBUG] get_attachment called with full_path: {full_path}") 
+    print(f"[DEBUG] get_attachment called with full_path: {full_path}") # <--- Используем full_path
 
     res = await db.execute(
         select(TaskAttachment)
         .where(
             (
-                (TaskAttachment.storage_key == full_path) |  
-                (TaskAttachment.thumb_key == full_path)    
+                (TaskAttachment.storage_key == full_path) |  # <--- Используем full_path
+                (TaskAttachment.thumb_key == full_path)     # <--- Используем full_path
             ),
             TaskAttachment.deleted_at.is_(None)
         )
