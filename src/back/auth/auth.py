@@ -38,9 +38,9 @@ router = APIRouter(
 )
 
 
-#
+
 # Утилитарные функции
-#
+
 
 
 def get_password_hash(password: str) -> str:
@@ -52,7 +52,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(
-    user: User,  # передаём объект пользователя
+    user: User,  
     expires_delta: Optional[timedelta] = None
 ) -> str:
     expire = datetime.now(timezone.utc) + (
@@ -69,9 +69,8 @@ def create_access_token(
 
 
 
-#
-# Оснавная логика авторизации
-#
+
+# Основная логика авторизации
 
 
 async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
@@ -137,9 +136,8 @@ async def get_current_user(
     return user
 
 
-#
-#API-ендпоинты
-#
+
+#api
 
 
 @router.post(
@@ -153,10 +151,10 @@ async def register_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Только админ может регистрировать новых пользователей
+  
     if current_user.role != Role.admin:
         raise HTTPException(status_code=403, detail="Недостаточно прав")
-    # Проверяем, что telegram_id ещё не занят
+    
     result = await db.execute(select(User).where(User.telegram_id == user_in.telegram_id))
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Пользователь уже существует")
@@ -208,7 +206,7 @@ async def logout(token: str = Depends(oauth2_scheme)):
 
 @router.post("/token_with_tg", response_model=Token)
 async def login_for_access_with_telegram(
-    login_data: LoginWithTelegramRequest, # Принимаем нашу новую схему
+    login_data: LoginWithTelegramRequest, 
     db: AsyncSession = Depends(get_db)
 ):
     login = login_data.username
@@ -220,17 +218,15 @@ async def login_for_access_with_telegram(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверный логин или пароль")
 
     if telegram_id is not None:
-        # Проверим, не занят ли этот telegram_id другим пользователем
         existing_user_with_tg_id = await db.execute(select(User).where(User.telegram_id == telegram_id))
         existing_user_with_tg_id = existing_user_with_tg_id.scalars().first()
         if existing_user_with_tg_id and existing_user_with_tg_id.id != user.id:
             logger.info(f"Telegram ID {telegram_id} был перезаписан с пользователя {existing_user_with_tg_id.id} на {user.id}")
 
-        # Обновляем telegram_id и, возможно, chat_id у текущего пользователя
         user.telegram_id = telegram_id
 
         await db.commit()
-        await db.refresh(user) # Обновляем объект, чтобы убедиться, что telegram_id установлен
+        await db.refresh(user)
         logger.info(f"Telegram ID {telegram_id} успешно привязан к пользователю {user.id}")
 
 
