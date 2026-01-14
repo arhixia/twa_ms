@@ -14,6 +14,7 @@ import {
   getMontContactPersonPhone,
   listReportAttachments,
   getAttachmentUrl,
+  deletePendingAttachment
 } from "../../api";
 import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
@@ -104,17 +105,67 @@ function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, ta
   );
 }
 
-// --- Новый компонент: Модальное окно создания отчёта ---
 function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSubmitSuccess }) {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadedAttachments, setUploadedAttachments] = useState([]);
 
+  // Функция для очистки вложений
+  const cleanupAttachments = async () => {
+    const attachmentsToDelete = uploadedAttachments.filter(att => !att.uploading && !att.error);
+    if (attachmentsToDelete.length > 0) {
+      console.log(`[CLEANUP] Attempting to delete ${attachmentsToDelete.length} attachments on modal close.`);
+      // ИСПРАВЛЕНО: используем for...of вместо forEach для корректной обработки async/await
+      for (const attachment of attachmentsToDelete) {
+        try {
+          console.log(`[CLEANUP] Deleting attachment: ${attachment.storage_key}`);
+          // ИСПРАВЛЕНО: используем напрямую импортированную функцию deletePendingAttachment
+          // Убедитесь, что вы импортировали её в этом файле (в том же файле, где CreateReportModal)
+          // import { deletePendingAttachment } from "../api"; // или путь к api файлу
+          await deletePendingAttachment(attachment.storage_key);
+          console.log(`[CLEANUP] Successfully deleted attachment: ${attachment.storage_key}`);
+        } catch (err) {
+          console.error(`[CLEANUP] Failed to delete attachment: ${attachment.storage_key}`, err);
+          // В реальном приложении можно добавить уведомление пользователю об ошибке удаления
+          // Но мы всё равно продолжим процесс закрытия
+        }
+      }
+      // Очищаем состояние после попытки удаления
+      setUploadedAttachments([]);
+      console.log('[CLEANUP] State cleared after deletion attempts.');
+    } else {
+      console.log('[CLEANUP] No attachments to delete.');
+    }
+  };
+
+  // Функция для безопасного закрытия с очисткой
+  const safeClose = async () => {
+    await cleanupAttachments(); // Ждем завершения очистки
+    onClose(); // Теперь закрываем модальное окно
+  };
+
+  // Измененный handleClose: проверяем наличие вложений и спрашиваем подтверждение
+  const handleClose = async () => {
+    const completedUploads = uploadedAttachments.filter(att => !att.uploading && !att.error);
+    if (completedUploads.length > 0) {
+      const confirmMessage = `⚠️ У вас есть ${completedUploads.length} загруженных фото. Закрыть без создания отчета?`;
+      const confirmed = window.confirm(confirmMessage);
+      if (confirmed) {
+        await safeClose(); // Выполняем очистку и закрытие, если подтверждено
+      }
+      // Если не подтверждено (нажата "Отмена"), ничего не делаем, окно остается открытым
+    } else {
+      // Если нет загруженных вложений, просто закрываем
+      await safeClose();
+    }
+  };
+
+  // ... остальные функции и рендер ...
 
   const handleAttachmentUploaded = (attachmentData) => {
     setUploadedAttachments(prev => [
       ...prev.filter(att => att.id !== attachmentData.tmpId),
-      { 
+      {
         id: attachmentData.id,
         storage_key: attachmentData.storage_key,
         uploading: false,
@@ -198,7 +249,7 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
         alert("Отчёт создан и отправлен на проверку!");
       }
       onSubmitSuccess && onSubmitSuccess();
-      onClose();
+      onClose(); // onClose вызовет useEffect cleanup - НЕТ, теперь onClose просто закрывает без очистки, потому что при успешной отправке вложения становятся частью отчета
     } catch (err) {
       console.error("Ошибка при создании/отправке отчёта:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось создать или отправить отчёт.";
@@ -217,11 +268,11 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   const successfulUploadsCount = uploadedAttachments.filter(att => !att.uploading && !att.error).length;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={handleClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>Добавить отчёт по задаче #{taskId}</h2>
-          <button className="close" onClick={onClose}>×</button>
+          <button className="close" onClick={handleClose}>×</button> {/* Используем handleClose */}
         </div>
 
         <div className="modal-body">
@@ -241,15 +292,15 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
 
           <div className="section">
             <label className="dark-label">Фото:</label>
-            <FileUploader 
+            <FileUploader
               onUploaded={handleAttachmentUploaded}
               onUploading={handleAttachmentUploading}
               onUploadError={handleAttachmentUploadError}
               onRemoved={handleAttachmentRemoved}
-              taskId={taskId} 
+              taskId={taskId}
               reportId={null}
             />
-           
+
             {pendingUploads.length > 0 && (
               <p style={{ color: 'yellow', fontSize: '0.9em', marginTop: '5px' }}>
                 🔄 Загружается вложений: {pendingUploads.length}
@@ -302,6 +353,7 @@ export default function MontajnikTaskDetailPage() {
   const [attachments, setAttachments] = useState([]);
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
   const [openImage, setOpenImage] = useState(null);
+  const [currentOpenReportModal, setCurrentOpenReportModal] = useState(null);
 
   const isReportInReview = (report) => {
     const logistWaiting = report.approval_logist === null || report.approval_logist === 'waiting';
@@ -536,21 +588,24 @@ export default function MontajnikTaskDetailPage() {
       {/* Кнопки действия под заголовком */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
   {showAddReportButton && (
-    <button 
-      className="gradient-button" 
-      onClick={() => setShowReportModal(true)}
-      style={{ flex: '0 0 auto', minWidth: '150px', display: 'flex', alignItems: 'center', gap: '6px' }}
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-        <polyline points="14 2 14 8 20 8"></polyline>
-        <line x1="16" y1="13" x2="8" y2="13"></line>
-        <line x1="16" y1="17" x2="8" y2="17"></line>
-        <polyline points="10 9 9 9 8 9"></polyline>
-      </svg>
-      Добавить отчет
-    </button>
-  )}
+  <button
+    className="gradient-button"
+    onClick={() => {
+      setShowReportModal(true);
+      setCurrentOpenReportModal(parseInt(id, 10)); // Запоминаем ID задачи
+    }}
+    style={{ flex: '0 0 auto', minWidth: '150px', display: 'flex', alignItems: 'center', gap: '6px' }}
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+      <line x1="16" y1="13" x2="8" y2="13"></line>
+      <line x1="16" y1="17" x2="8" y2="17"></line>
+      <polyline points="10 9 9 9 8 9"></polyline>
+    </svg>
+    Добавить отчет
+  </button>
+)}
   
   {(() => {
     const statusFlow = {
@@ -1096,14 +1151,17 @@ export default function MontajnikTaskDetailPage() {
     )}
 
     {showReportModal && (
-      <CreateReportModal
-        taskId={parseInt(id, 10)}
-        taskWorkTypes={taskWorkTypeIds}
-        allWorkTypes={workTypes}
-        onClose={() => setShowReportModal(false)}
-        onSubmitSuccess={loadTask}
-      />
-    )}
+  <CreateReportModal
+    taskId={parseInt(id, 10)}
+    taskWorkTypes={taskWorkTypeIds}
+    allWorkTypes={workTypes}
+    onClose={() => {
+      setShowReportModal(false);
+      setCurrentOpenReportModal(null); // Очищаем ID задачи
+    }}
+    onSubmitSuccess={loadTask}
+  />
+)}
 
   </div>
 );

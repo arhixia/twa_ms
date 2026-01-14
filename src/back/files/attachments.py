@@ -447,8 +447,8 @@ async def delete_pending_attachment(
         select(TaskAttachment)
         .where(
             TaskAttachment.storage_key == storage_key,
-            TaskAttachment.report_id.is_(None),
             TaskAttachment.uploader_id == current_user.id,
+            TaskAttachment.deleted_at.is_(None)
         )
     )
     attachment = res.scalars().first()
@@ -460,7 +460,6 @@ async def delete_pending_attachment(
     await db.delete(attachment)
     await db.commit()
 
-    # Передаём thumb_key в фоновую задачу
     background_tasks.add_task(delete_object_from_s3, attachment.storage_key, thumb_to_delete)
 
     return {"detail": "Вложение удалено"}

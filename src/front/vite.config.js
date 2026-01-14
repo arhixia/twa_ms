@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['gentleman-fixes-station-amplifier.trycloudflare.com']
+    allowedHosts: ['actually-investments-acknowledged-discounted.trycloudflare.com']
   },
 })
 

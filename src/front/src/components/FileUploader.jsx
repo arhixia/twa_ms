@@ -2,14 +2,14 @@ import React, { useState, useEffect } from "react";
 import { uploadFallback, deletePendingAttachment } from "../api";
 
 // Функция для сжатия изображения
-async function compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 0.7) {
+async function compressImage(file, maxWidth = 1024, maxHeight = 1024, quality = 0.7) {
     return new Promise((resolve) => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = new Image();
         
         img.onload = () => {
-            // Вычисляем новые размеры
+            // Вычисляем новые размеры, сохраняя пропорции
             let { width, height } = img;
             if (width > height) {
                 if (width > maxWidth) {
@@ -26,7 +26,8 @@ async function compressImage(file, maxWidth = 1200, maxHeight = 1200, quality = 
             canvas.width = width;
             canvas.height = height;
             
-            // Рисуем изображение на canvas
+            // Рисуем изображение на canvas с сглаживанием
+            ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(img, 0, 0, width, height);
             
             // Конвертируем обратно в Blob
@@ -80,35 +81,38 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
 
         // Сжимаем изображение
         try {
-            console.log(`[COMPRESS] Original size: ${(f.size/1024).toFixed(1)}KB`);
+            console.log(`[COMPRESS] Original: ${f.name}, size: ${(f.size/1024).toFixed(1)}KB, type: ${f.type}`);
             
             let compressedFile = f;
+            
             // Для PNG конвертируем в JPEG
             if (f.type === 'image/png') {
-                compressedFile = await compressImage(f, 1200, 1200, 0.7);
+                compressedFile = await compressImage(f, 1024, 1024, 0.7);
                 compressedFile.name = f.name.replace(/\.[^/.]+$/, ".jpg"); // меняем расширение
             } else {
-                compressedFile = await compressImage(f, 1200, 1200, 0.7);
+                compressedFile = await compressImage(f, 1024, 1024, 0.7);
                 compressedFile.name = f.name;
             }
             
-            console.log(`[COMPRESS] Compressed size: ${(compressedFile.size/1024).toFixed(1)}KB`);
+            console.log(`[COMPRESS] After 1st compression: ${(compressedFile.size/1024).toFixed(1)}KB`);
             
-            // Проверяем, если сжатое изображение все равно больше 200KB, уменьшаем качество
+            // Проверяем размер и при необходимости сжимаем дальше
             let quality = 0.7;
-            while (compressedFile.size > 200 * 1024 && quality > 0.1) {
-                quality -= 0.1;
-                compressedFile = await compressImage(f, 1200, 1200, quality);
-                console.log(`[COMPRESS] Retrying with quality ${quality}, size: ${(compressedFile.size/1024).toFixed(1)}KB`);
+            let maxWidth = 1024;
+            
+            // Если все еще больше 200KB, пробуем уменьшить качество и размер
+            while (compressedFile.size > 200 * 1024 && (quality > 0.2 || maxWidth > 640)) {
+                if (quality > 0.2) {
+                    quality -= 0.1;
+                } else if (maxWidth > 640) {
+                    maxWidth -= 128;
+                }
+                
+                compressedFile = await compressImage(f, maxWidth, maxWidth, quality);
+                console.log(`[COMPRESS] Retry: size=${(compressedFile.size/1024).toFixed(1)}KB, quality=${quality}, max=${maxWidth}`);
             }
             
-            // Если все равно больше 200KB, уменьшаем размеры
-            if (compressedFile.size > 200 * 1024) {
-                compressedFile = await compressImage(f, 800, 800, 0.5);
-                console.log(`[COMPRESS] Final compression, size: ${(compressedFile.size/1024).toFixed(1)}KB`);
-            }
-            
-            // Финальная проверка размера
+            // Финальная проверка
             if (compressedFile.size > 200 * 1024) {
                 if (window.Telegram?.WebApp) {
                     window.Telegram.WebApp.showAlert(`❌ Файл ${f.name} после сжатия все равно слишком большой (${(compressedFile.size/1024).toFixed(1)}KB). Максимум: 200KB`);
