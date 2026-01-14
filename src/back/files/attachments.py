@@ -2,6 +2,7 @@ import json
 import logging
 import time
 from fastapi import APIRouter, Body, Depends, HTTPException, BackgroundTasks, UploadFile, File, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -470,14 +471,14 @@ async def get_attachment(
     full_path: str = Path(..., description="Storage key в S3"),
     db: AsyncSession = Depends(get_db),
 ):
-    print(f"[DEBUG] get_attachment called with full_path: {full_path}") # <--- Используем full_path
+    print(f"[DEBUG] get_attachment called with full_path: {full_path}")
 
     res = await db.execute(
         select(TaskAttachment)
         .where(
             (
-                (TaskAttachment.storage_key == full_path) |  # <--- Используем full_path
-                (TaskAttachment.thumb_key == full_path)     # <--- Используем full_path
+                (TaskAttachment.storage_key == full_path) |
+                (TaskAttachment.thumb_key == full_path)
             ),
             TaskAttachment.deleted_at.is_(None)
         )
@@ -490,10 +491,33 @@ async def get_attachment(
 
     s3 = get_s3_client()
     try:
-        url = await s3.presign_get(full_path, expires=3600)
-        print(f"[DEBUG] Generated presigned URL: {url}")
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=url)
+        # Получаем объект из S3 напрямую
+        async with s3.get_client() as client:
+            response = await client.get_object(Bucket=s3.bucket_name, Key=full_path)
+            body_stream = response["Body"]
+
+            # Получаем метаданные
+            content_type = response.get("ContentType", "application/octet-stream")
+            # content_length = int(response.get("ContentLength", 0)) # Не используем вручную
+            last_modified = response.get("LastModified")
+
+            # Функция для потоковой передачи данных
+            async def iter_content():
+                async for chunk in body_stream:
+                    yield chunk
+                    
+            return StreamingResponse(
+                iter_content(),
+                media_type=content_type,
+                headers={
+                    # "Content-Length": str(content_length), # Убираем это
+                    "Last-Modified": last_modified.isoformat() if last_modified else "" if last_modified else ""
+                    # Добавьте другие заголовки, если нужно, но не Content-Length
+                }
+            )
+    except client.exceptions.NoSuchKey:
+        print(f"[DEBUG] Object {full_path} not found in S3")
+        raise HTTPException(status_code=404, detail="Файл не найден в S3")
     except Exception as e:
-        print(f"[DEBUG] get_attachment: S3 presign failed for {full_path}: {e}")
+        print(f"[DEBUG] get_attachment: S3 get failed for {full_path}: {e}")
         raise HTTPException(status_code=500, detail="Ошибка получения файла из S3")

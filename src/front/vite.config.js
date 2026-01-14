@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['actually-investments-acknowledged-discounted.trycloudflare.com']
+    allowedHosts: ['finally-pasta-pose-memory.trycloudflare.com']
   },
 })
 
