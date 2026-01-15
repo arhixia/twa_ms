@@ -268,6 +268,80 @@ async def admin_update_task(
     if task.is_draft:
         raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
 
+    # --- ПРОВЕРКА ОБЯЗАТЕЛЬНЫХ ПОЛЕЙ ПОСЛЕ ОБНОВЛЕНИЯ (основная логика будет ниже) ---
+    # Сначала загружаем оригинальные данные из patch
+    original_patch_data = patch.model_dump()
+
+    # Подготовим словарь current_values, который будет хранить итоговые значения после всех изменений
+    # Инициализируем текущими значениями из задачи
+    current_values = {
+        "contact_person_id": task.contact_person_id,
+        "vehicle_info": task.vehicle_info,
+        "scheduled_at": task.scheduled_at,
+        "gos_number": task.gos_number,
+        "location": task.location,
+        "comment": task.comment,
+    }
+
+    # Обновляем current_values значениями из patch, если они переданы (включая None)
+    for field_name in ["contact_person_id", "vehicle_info", "scheduled_at", "gos_number", "location", "comment"]:
+        if field_name in original_patch_data:
+            current_values[field_name] = original_patch_data[field_name]
+
+    # Проверяем work_types и equipment
+    if "work_types" in original_patch_data:
+        work_types_value = original_patch_data["work_types"]
+        if work_types_value is not None:
+            current_values["work_types"] = len(work_types_value)  # Количество переданных ID
+        else:
+            current_values["work_types"] = 0
+    else:
+        # Если не передано, считаем текущее количество
+        current_wt_count_res = await db.execute(
+            select(func.count(TaskWork.id)).where(TaskWork.task_id == task.id)
+        )
+        current_values["work_types"] = current_wt_count_res.scalar_one()
+
+    if "equipment" in original_patch_data:
+        equipment_value = original_patch_data["equipment"]
+        if equipment_value is not None:
+            current_values["equipment"] = len(equipment_value)  # Количество переданных элементов
+        else:
+            current_values["equipment"] = 0
+    else:
+        # Если не передано, считаем текущее количество
+        current_eq_count_res = await db.execute(
+            select(func.count(TaskEquipment.id)).where(TaskEquipment.task_id == task.id)
+        )
+        current_values["equipment"] = current_eq_count_res.scalar_one()
+
+
+    # Проверяем обязательные поля
+    required_fields = {
+        "contact_person_id": "Контактное лицо",
+        "vehicle_info": "Информация о транспорте", 
+        "scheduled_at": "Дата и время",
+        "gos_number": "Гос. номер",
+        "location": "Местоположение",
+        "comment": "Комментарий",
+        "work_types": "Виды работ",
+    }
+
+    missing_fields = []
+    for field_name, field_label in required_fields.items():
+        value = current_values.get(field_name)
+        if field_name == "work_types":
+            if value == 0:  # Если количество равно 0
+                missing_fields.append(field_label)
+        else:
+            if value is None:
+                missing_fields.append(field_label)
+
+    if missing_fields:
+        raise HTTPException(status_code=400, detail=f"Заполните все поля: {', '.join(missing_fields)}")
+
+
+    # --- Продолжаем основную логику обновления ---
     # --- СОХРАНЯЕМ СТАРЫЕ ЗНАЧЕНИЯ ---
     old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
     old_equipment_with_sn_qty = [
@@ -283,8 +357,7 @@ async def admin_update_task(
 
     logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
 
-    incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
-    logger.info(f"Полный incoming dict: {incoming}")
+    incoming = original_patch_data  # Используем оригинальный словарь
 
     # --- normalize assigned_user_id ---
     if "assigned_user_id" in incoming:
@@ -381,7 +454,7 @@ async def admin_update_task(
         old_co_id = task.company_id
         old_cp_phone = task.contact_person_phone
 
-        if contact_person_id:
+        if contact_person_id is not None:
             cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
             contact_person = cp_res.scalars().first()
             if not contact_person:
@@ -951,7 +1024,7 @@ async def admin_get_task_by_id(
         if r.photos_json:
             try:
                 keys = json.loads(r.photos_json)
-                photos = keys # Возвращаем список storage_key
+                photos = keys 
             except Exception:
                 photos = []
         reports.append({

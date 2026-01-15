@@ -713,10 +713,292 @@ export default function DraftDetailPage() {
       <div className="task-detail">
         {edit ? (
           <div className="form-grid">
-            {/* --- ФОРМА РЕДАКТИРОВАНИЯ --- */}
-            {/* (ваш текущий код формы) */}
-          </div>
-        ) : (
+      {/* ===== Компания ===== */}
+      <label className="dark-label">
+        Компания
+        {/* --- 1. Поле поиска --- */}
+        <SearchableCompanySelect
+          availableCompanies={companies}
+          onSelect={(companyId) => {
+            setField("company_id", companyId);
+            if (companyId) {
+              handleCompanyChangeForForm(companyId); // Загружаем контактные лица
+            } else {
+              setContactPersons([]);
+              setField("contact_person_id", null);
+              setField("contact_person_phone", null);
+            }
+          }}
+          selectedCompanyId={form.company_id} // Не используется в этом компоненте, но передаём для совместимости
+        />
+        {/* --- 2. Отображение выбранной компании --- */}
+        {form.company_id && (
+          <SelectedCompanyDisplay
+            company={companies.find(c => c.id === form.company_id)}
+            onRemove={() => {
+              setField("company_id", null);
+              setContactPersons([]);
+              setField("contact_person_id", null);
+              setField("contact_person_phone", null);
+            }}
+          />
+        )}
+      </label>
+      
+      {/* --- Контактное лицо --- */}
+      <label className="dark-label">
+        Контактное лицо
+        <select
+          value={form.contact_person_id || ""}
+          onChange={(e) => {
+            const val = e.target.value ? parseInt(e.target.value, 10) : null;
+            setField("contact_person_id", val);
+            if (val) {
+              handleContactPersonChangeForForm(val);
+            } else {
+              setField("contact_person_phone", null);
+            }
+          }}
+          disabled={!form.company_id} // Отключаем, если не выбрана компания
+          className="dark-select"
+        >
+          <option value="">Выберите контактное лицо</option>
+          {contactPersons.map(cp => (
+            <option key={cp.id} value={cp.id}>{cp.name}</option>
+          ))}
+        </select>
+        {loadingPhone && <span style={{ fontSize: '0.8em', color: '#888' }}>Загрузка телефона...</span>}
+      </label>
+      
+      {/* ===== ТЕЛЕФОН КОНТАКТНОГО ЛИЦА ===== */}
+      <label className="dark-label">
+        Телефон контактного лица:
+        <input
+          type="text"
+          value={form.contact_person_phone || ""}
+          readOnly
+          placeholder="Выберите контактное лицо"
+          className="dark-select"
+          style={{ cursor: "not-allowed" }}
+        />
+        {form.contact_person_phone && (
+          <a
+            href={`tel:${form.contact_person_phone}`}
+            style={{
+              display: 'inline-block',
+              marginTop: '4px',
+              fontSize: '0.9em',
+              color: '#bb86fc',
+              textDecoration: 'none',
+            }}
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.href = `tel:${form.contact_person_phone}`;
+            }}
+          >
+          </a>
+        )}
+      </label>
+      
+      <label className="dark-label">
+        ТС 
+        <input
+          value={form.vehicle_info || ""}
+          onChange={(e) => setField("vehicle_info", e.target.value)}
+          className="dark-select"
+        />
+      </label>
+      
+      <label className="dark-label">
+        Гос. номер
+        <input
+          value={form.gos_number || ""}
+          onChange={(e) => setField("gos_number", e.target.value)}
+          className="dark-select"
+        />
+      </label>
+      
+      <label className="dark-label">
+        Дата и время
+        <input
+          type="datetime-local"
+          value={
+            form.scheduled_at
+              ? (() => {
+                  const date = new Date(form.scheduled_at); 
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                  const day = String(date.getDate()).padStart(2, '0');
+                  const hours = String(date.getHours()).padStart(2, '0');
+                  const minutes = String(date.getMinutes()).padStart(2, '0');
+                  return `${year}-${month}-${day}T${hours}:${minutes}`;
+                })()
+              : ""
+          }
+          onChange={(e) => setField("scheduled_at", e.target.value)} 
+          className="dark-select"
+        />
+      </label>
+      
+      <label className="dark-label">
+        Место/адрес
+        <textarea
+          value={form.location || ""}
+          onChange={(e) => setField("location", e.target.value)}
+          rows="3"
+          className="dark-select"
+          style={{ resize: "vertical", marginTop: "4px" }}
+        />
+      </label>
+      
+      <label className="dark-label">
+        Комментарий
+        <textarea
+          value={form.comment || ""}
+          onChange={(e) => setField("comment", e.target.value)}
+          rows="3"
+          className="dark-select"
+          style={{ resize: "vertical", marginTop: "4px" }}
+        />
+      </label>
+      
+      {/* Цены — только для отображения, не редактируются */}
+      {/* ===== Оборудование (редактирование с умным поиском) ===== */}
+      <label className="dark-label">Оборудование</label>
+      {/* --- Список выбранных элементов (название - поле серийного номера) --- */}
+      <div className="equipment-list-container">
+        {(form.equipment || []).map((item, index) => {
+          const eq = equipment.find((e) => e.id === item.equipment_id);
+          return (
+            <div key={index} className="equipment-item-row">
+              {/* Название оборудования */}
+              <div className="equipment-item-name">
+                {eq?.name || `ID ${item.equipment_id}`}
+              </div>
+              {/* Поле ввода серийного номера */}
+              <div>
+                <input
+                  type="text"
+                  placeholder="Серийный номер"
+                  value={item.serial_number || ""}
+                  onChange={(e) => updateEquipmentItemInForm(index, "serial_number", e.target.value)}
+                  className="equipment-item-serial"
+                />
+              </div>
+              {/* Кнопка удаления (удаляет конкретную строку/единицу) */}
+              <button
+                type="button"
+                onClick={() => removeEquipmentItemFromForm(index)}
+                className="equipment-item-remove"
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      {/* --- Выбор нового оборудования через SearchableSelect --- */}
+      <SearchableEquipmentSelect
+        availableEquipment={equipment}
+        onSelect={addEquipmentItemToForm}
+        selectedItems={form.equipment} // Не используется в фильтрации, т.к. разрешено дублирование
+      />
+      
+      {/* ===== Виды работ (редактирование с умным поиском) ===== */}
+      <label className="dark-label">Виды работ</label>
+      {/* --- Отображение выбранных типов работ с количеством --- */}
+      <div className="work-types-container">
+        {(() => {
+          const counts = {};
+          (form.work_types_ids || []).forEach(id => {
+            counts[id] = (counts[id] || 0) + 1;
+          });
+          const uniqueWorkTypesWithCounts = Object.entries(counts).map(([id, count]) => ({
+            id: parseInt(id, 10),
+            count,
+          }));
+          return uniqueWorkTypesWithCounts.map(({ id, count }) => {
+            const wt = workTypes.find((w) => w.id === id);
+            if (!wt) return null;
+            return (
+              <div
+                key={id}
+                className="work-type-tag"
+              >
+                {wt.name} (x{count}) {/* ✅ Отображаем название и количество */}
+                <span
+                  className="work-type-tag-remove"
+                  onClick={() => removeWorkTypeItemFromForm(id)}
+                >
+                  ×
+                </span>
+              </div>
+            );
+          });
+        })()}
+      </div>
+      {/* --- Выбор нового типа работы через SearchableSelect --- */}
+      <SearchableWorkTypeSelect
+        availableWorkTypes={workTypes}
+        onSelect={addWorkTypeItemToForm}
+        selectedWorkTypeIds={form.work_types_ids} // Не используется в фильтрации, т.к. разрешено дублирование
+      />
+      
+      <label className="dark-label">
+        Тип назначения
+        <select
+          value={form.assignment_type || ""}
+          onChange={(e) => {
+            const newType = e.target.value;
+            setField("assignment_type", newType);
+            if (newType === "broadcast") {
+                setField("assigned_user_id", null);
+            }
+          }}
+          className="dark-select"
+        >
+          {assignmentTypeOptions.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.display}
+            </option>
+          ))}
+        </select>
+      </label>
+      
+      {form.assignment_type === "individual" && (
+        <div>
+          <label className="dark-label">
+            Назначить монтажника
+          </label>
+          {/* --- Отображение выбранного монтажника --- */}
+          {form.assigned_user_id && (
+            <div style={{ padding: '4px 8px', marginBottom: '8px', border: '1px solid #30363d', borderRadius: '4px', backgroundColor: '#161b22', color: '#c9d1d9' }}>
+              {/* ✅ Отображаем имя и фамилию монтажника */}
+              Выбран: {montajniks.find(m => m.id === form.assigned_user_id)?.name || 'ID:'} {montajniks.find(m => m.id === form.assigned_user_id)?.lastname || form.assigned_user_id}
+              <button
+                type="button"
+                // ✅ ИСПРАВЛЕНО: вызываем новую функцию
+                onClick={clearAssignedUserAndSetBroadcast}
+                style={{ marginLeft: '8px', padding: '2px 4px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          <SearchableMontajnikSelect
+            availableMontajniks={montajniks}
+            onSelect={(userId) => {
+               setField("assigned_user_id", userId);
+               if (form.assignment_type !== "individual") {
+                  setField("assignment_type", "individual");
+               }
+            }}
+            selectedUserId={form.assigned_user_id}
+          />
+        </div>
+      )}
+    </div>
+  ) : (
           <div className="task-view">
             {/* === ОСНОВНАЯ ИНФОРМАЦИЯ === */}
             <div className="task-section">

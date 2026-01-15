@@ -62,6 +62,7 @@ export default function AdminTaskDetailPage() {
   const [montajniks, setMontajniks] = useState([]);
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
   const [openImage, setOpenImage] = useState(null);
+  
 
   useEffect(() => {
     if (isNaN(taskId)) {
@@ -681,13 +682,14 @@ export default function AdminTaskDetailPage() {
       setEdit(false);
       loadTask();
     } catch (err) {
-      console.error(err);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Ошибка при сохранении");
-      } else {
-        alert("Ошибка при сохранении"); // Резервный вариант
-      }
-    }
+  console.error(err);
+  const errorMsg = err.response?.data?.detail || "Ошибка при сохранении";
+  if (window.Telegram?.WebApp) {
+    window.Telegram.WebApp.showAlert(errorMsg);
+  } else {
+    alert(errorMsg);
+  }
+  }
   }
 
   // --- НОВАЯ ФУНКЦИЯ ДЛЯ УДАЛЕНИЯ ЗАДАЧИ ---
@@ -1467,101 +1469,117 @@ export default function AdminTaskDetailPage() {
             <>
               {/* === РАЗДЕЛИТЕЛЬНАЯ ЛИНИЯ === */}
               <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.35)', margin: '16px 0' }}></div>
-              <div className="section">
-                {/* --- ЗАГОЛОВОК С ИКОНКОЙ --- */}
-                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4CAF50', fontWeight: 'bold', fontSize: '1.2em', marginBottom: '12px' }}>
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                    <polyline points="14 2 14 8 20 8"></polyline>
-                    <line x1="16" y1="13" x2="8" y2="13"></line>
-                    <line x1="16" y1="17" x2="8" y2="17"></line>
-                    <polyline points="10 9 9 9 8 9"></polyline>
-                  </svg>
-                  Отчёты монтажников
-                </h3>
-                {(task.reports || []).length ? (
-                  task.reports.map((r) => {
-                    // --- ИЗМЕНЕНО: Извлечение выполненных работ и комментария ---
-                    let performedWorks = "";
-                    let comment = "";
-                    if (r.text) {
-                      const lines = r.text.split(" ");
-                      if (lines[0].startsWith("Выполнено: ")) {
-                        performedWorks = lines[0].substring("Выполнено: ".length);
-                      }
-                      if (lines.length > 1) {
-                        comment = lines.slice(1).join(" ");
-                      } else if (!r.text.startsWith("Выполнено: ")) {
-                        comment = r.text;
-                      }
-                    }
+            <div className="section">
+  {/* --- ЗАГОЛОВОК С ИКОНКОЙ --- */}
+  <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4CAF50', fontWeight: 'bold', fontSize: '1.2em', marginBottom: '12px' }}>
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+      <line x1="16" y1="13" x2="8" y2="13"></line>
+      <line x1="16" y1="17" x2="8" y2="17"></line>
+      <polyline points="10 9 9 9 8 9"></polyline>
+    </svg>
+    Отчёты монтажников
+  </h3>
+  {(task.reports || []).length ? (
+    task.reports.map((r) => {
+      // --- Извлечение комментария из текста ---
+      let comment = "";
+      if (r.text) {
+        // Проверяем формат: "Выполнено: [типы работ]\n\n[комментарий]"
+        if (r.text.includes("Выполнено:")) {
+          const parts = r.text.split("Выполнено:");
+          if (parts.length > 1) {
+            const afterPerformed = parts[1]; // Все после "Выполнено:"
+            
+            // Разбиваем по двойному переносу строки (стандартный формат при создании отчета)
+            const sections = afterPerformed.split(/\n\s*\n/);
+            
+            // Если есть вторая секция (после двойного переноса строк), это комментарий
+            if (sections.length > 1) {
+              comment = sections[1].trim();
+            } else {
+              // Если нет двойного переноса, значит комментария нет
+              comment = "Комментариев нет";
+            }
+          }
+        } else {
+          // Если нет "Выполнено:", то весь текст - это комментарий
+          comment = r.text.trim();
+        }
+        
+        // Убираем лишние пробелы и очищаем комментарий
+        comment = comment.replace(/^\s+|\s+$/g, '');
+      }
 
-                    // --- ИЗМЕНЕНО: Получение вложений из reportAttachmentsMap ---
-                    const reportAttachments = reportAttachmentsMap[r.id] || [];
-                    const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
+      // Если комментарий пустой, показываем "Комментариев нет"
+      const displayComment = comment ? comment : "Комментариев нет";
 
-                    // --- Определение цвета для статуса ---
-                    const statusColors = {
-                      waiting: '#FFC107',
-                      approved: '#4CAF50',
-                      rejected: '#F44336'
-                    };
+      // --- Получение вложений из reportAttachmentsMap ---
+      const reportAttachments = reportAttachmentsMap[r.id] || [];
+      const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
 
-                    return (
-                      <div key={r.id} className="report" style={{ padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-                        {/* #37: Выполнено: {типы работ} */}
-                        <p>
-                          <b>#{r.id}:</b> {performedWorks ? `Выполнено: ${performedWorks}` : "Нет выполненных работ"}
-                        </p>
-                        {/* С новой строки — комментарий монтажника */}
-                        {comment && (
-                          <p>{comment}</p>
-                        )}
-                        {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
-                        {reportAttachmentsLoading ? (
-                          <p>Загрузка вложений...</p>
-                        ) : reportAttachments.length > 0 ? (
-                          <div className="attached-list">
-                            {reportAttachments.map((att, idx) => {
-                              const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
-                              const thumbUrl = att.thumb_key
-                                ? getAttachmentUrl(att.thumb_key)
-                                : originalUrl;
+      // --- Определение цвета для статуса ---
+      const statusColors = {
+        waiting: '#FFC107',
+        approved: '#4CAF50',
+        rejected: '#F44336'
+      };
 
-                              return (
-                                <div
-                                  key={att.id}
-                                  style={{ cursor: 'zoom-in' }} // Меняем курсор
-                                  onClick={() => handleImageClick(originalUrl)} // Обработчик клика
-                                >
-                                  <img
-                                    src={thumbUrl}
-                                    alt={`Report attachment ${idx}`}
-                                    style={{ maxHeight: 100 }}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p>Вложений нет</p>
-                        )}
-                        {/* СО СЛЕДУЮЩЕЙ СТРОКИ — статусы проверки */}
-                        <p>
-                          <b>Логист:</b> <span style={{ color: statusColors[r.approval_logist] || '#e0e0e0', fontWeight: 'bold' }}>{getReportApprovalDisplayName(r.approval_logist) || "—"}</span>
-                          {task.requires_tech_supp === true && (
-                            <>
-                              {" "} | <b>Тех.спец:</b> <span style={{ color: statusColors[r.approval_tech] || '#e0e0e0', fontWeight: 'bold' }}>{getReportApprovalDisplayName(r.approval_tech) || "—"}</span>
-                            </>
-                          )}
-                        </p>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="empty">Отчётов пока нет</div>
-                )}
-              </div>
+      return (
+        <div key={r.id} className="report" style={{ padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          {/* Номер задачи */}
+          <p>
+            <b>#{r.id}</b>
+          </p>
+          
+          {/* Комментарий монтажника */}
+          <p><b>Комментарий монтажника:</b> {displayComment}</p>
+          
+          {/* Вложения */}
+          {reportAttachmentsLoading ? (
+            <p>Загрузка вложений...</p>
+          ) : reportAttachments.length > 0 ? (
+            <div className="attached-list">
+              {reportAttachments.map((att, idx) => {
+                const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+                const thumbUrl = att.thumb_key
+                  ? getAttachmentUrl(att.thumb_key)
+                  : originalUrl;
+
+                return (
+                  <div
+                    key={att.id}
+                    style={{ cursor: 'zoom-in' }} // Меняем курсор
+                    onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                  >
+                    <img
+                      src={thumbUrl}
+                      alt={`Report attachment ${idx}`}
+                      style={{ maxHeight: 100 }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p>Вложений нет</p>
+          )}
+          <p>
+            <b>Логист:</b> <span style={{ color: statusColors[r.approval_logist] || '#e0e0e0', fontWeight: 'bold' }}>{getReportApprovalDisplayName(r.approval_logist) || "—"}</span>
+            {task.requires_tech_supp === true && (
+              <>
+                {" "} | <b>Тех.спец:</b> <span style={{ color: statusColors[r.approval_tech] || '#e0e0e0', fontWeight: 'bold' }}>{getReportApprovalDisplayName(r.approval_tech) || "—"}</span>
+              </>
+            )}
+          </p>
+        </div>
+      );
+    })
+  ) : (
+    <div className="empty">Отчётов пока нет</div>
+  )}
+</div>
             </>
           )}
         </div>

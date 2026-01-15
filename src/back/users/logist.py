@@ -417,7 +417,6 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_name = task.contact_person.name if task.contact_person else None
 
-    # ✅ Формируем список equipment как TaskEquipmentItem
     equipment_items = [
         {
             "id": te.id, # ID записи TaskEquipment
@@ -758,8 +757,62 @@ async def publish_task(
     data = payload.model_dump()
     draft_id = data.get("draft_id")
 
+    required_fields = {
+        "contact_person_id": "Контактное лицо",
+        "vehicle_info": "Информация о транспорте", 
+        "scheduled_at": "Дата и время",
+        "gos_number": "Гос. номер",
+        "location": "Местоположение",
+        "comment": "Комментарий",
+        "work_types": "Виды работ",
+    }
+
+    # Для проверки используем актуальные данные - из черновика или из payload
     if draft_id:
-        # --- Публикация из черновика ---
+        res = await db.execute(select(Task).where(Task.id == draft_id, Task.is_draft == True))
+        existing_task = res.scalars().first()
+        if not existing_task:
+            raise HTTPException(status_code=404, detail="Черновик не найден")
+        
+        current_data = {
+            "contact_person_id": existing_task.contact_person_id,
+            "vehicle_info": existing_task.vehicle_info,
+            "scheduled_at": existing_task.scheduled_at,
+            "gos_number": existing_task.gos_number,
+            "location": existing_task.location,
+            "comment": existing_task.comment,
+        }
+        
+        # Получаем связанные данные из черновика
+        current_wt_res = await db.execute(
+            select(TaskWork).where(TaskWork.task_id == existing_task.id)
+        )
+        current_work_items = current_wt_res.scalars().all()
+        current_data["work_types"] = current_work_items
+        
+        current_eq_res = await db.execute(
+            select(TaskEquipment).where(TaskEquipment.task_id == existing_task.id)
+        )
+        current_equipment_items = current_eq_res.scalars().all()
+        current_data["equipment"] = current_equipment_items
+        
+    else:
+        current_data = data
+
+    missing_fields = []
+    for field_name, field_label in required_fields.items():
+        value = current_data.get(field_name)
+        if field_name == "work_types":
+            if not value or (hasattr(value, '__len__') and len(value) == 0):
+                missing_fields.append(field_label)
+        else:
+            if value is None:
+                missing_fields.append(field_label)
+
+    if missing_fields:
+        raise HTTPException(status_code=400, detail=f"Заполните все поля!")
+
+    if draft_id:
         res = await db.execute(select(Task).where(Task.id == draft_id, Task.is_draft == True))
         task = res.scalars().first()
         if not task:
@@ -833,7 +886,6 @@ async def publish_task(
 
         task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
         task.montajnik_reward = calculated_works_cost_for_mont
-
 
         task.is_draft = False # Меняем статус на опубликованную задачу
 
@@ -1014,7 +1066,7 @@ async def publish_task(
             task_id=task.id,
             user_id=current_user.id,
             action=task.status,
-            event_type=TaskHistoryEventType.created, # или published
+            event_type=TaskHistoryEventType.created, 
             comment=f"Задача #{task.id} опубликована",
             company_id=task.company_id,
             contact_person_id=task.contact_person_id,
@@ -1030,12 +1082,9 @@ async def publish_task(
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
             gos_number = task.gos_number,
-            # --- НОВЫЕ ПОЛЯ ---
             equipment_snapshot=equipment_snapshot_for_history,
             work_types_snapshot=work_types_snapshot_for_history,
         ))
-
-
 
     await db.commit()
     await db.refresh(task)
@@ -1055,6 +1104,8 @@ async def publish_task(
     return {"id": task.id}
 
 
+
+
 @router.patch("/tasks/{task_id}", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
 async def edit_task(
     background_tasks: BackgroundTasks,
@@ -1067,7 +1118,6 @@ async def edit_task(
 
     _ensure_logist_or_403(current_user)
 
-    # Загружаем задачу и *старые* связи для истории
     result = await db.execute(
         select(Task)
         .where(Task.id == task_id)
@@ -1084,23 +1134,77 @@ async def edit_task(
     if task.is_draft:
         raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
 
-    # --- СОХРАНЯЕМ СТАРЫЕ ЗНАЧЕНИЯ ---
-    old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
-    old_equipment_with_sn_qty = [
-        (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
-    ]
-    old_contact_person_name = task.contact_person.name if task.contact_person else None
-    old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-    old_contact_person_phone = task.contact_person.phone if task.contact_person else None
-    old_client_price = task.client_price
-    old_montajnik_reward = task.montajnik_reward
-    old_assigned_user_id = task.assigned_user_id
-    old_assignment_type = task.assignment_type
+    # Загружаем исходные данные для проверки
+    original_patch_data = patch.model_dump()
+    current_values = {
+        "contact_person_id": task.contact_person_id,
+        "vehicle_info": task.vehicle_info,
+        "scheduled_at": task.scheduled_at,
+        "gos_number": task.gos_number,
+        "location": task.location,
+        "comment": task.comment,
+    }
 
-    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
+    # Обновляем current_values значениями из patch, если они переданы (включая None)
+    for field_name in ["contact_person_id", "vehicle_info", "scheduled_at", "gos_number", "location", "comment"]:
+        if field_name in original_patch_data:
+            current_values[field_name] = original_patch_data[field_name]
 
-    # incoming - это только поля, которые были переданы в payload
-    incoming = {k: v for k, v in patch.model_dump().items() if v is not None}
+    if "work_types" in original_patch_data:
+        work_types_value = original_patch_data["work_types"]
+        if work_types_value is not None:
+            current_values["work_types"] = len(work_types_value)  # Количество переданных ID
+        else:
+            current_values["work_types"] = 0
+    else:
+        # Если не передано, считаем текущее количество
+        current_wt_count_res = await db.execute(
+            select(func.count(TaskWork.id)).where(TaskWork.task_id == task.id)
+        )
+        current_values["work_types"] = current_wt_count_res.scalar_one()
+
+    if "equipment" in original_patch_data:
+        equipment_value = original_patch_data["equipment"]
+        if equipment_value is not None:
+            current_values["equipment"] = len(equipment_value)  # Количество переданных элементов
+        else:
+            current_values["equipment"] = 0
+    else:
+        # Если не передано, считаем текущее количество
+        current_eq_count_res = await db.execute(
+            select(func.count(TaskEquipment.id)).where(TaskEquipment.task_id == task.id)
+        )
+        current_values["equipment"] = current_eq_count_res.scalar_one()
+
+
+    # Проверяем обязательные поля
+    required_fields = {
+        "contact_person_id": "Контактное лицо",
+        "vehicle_info": "Информация о транспорте", 
+        "scheduled_at": "Дата и время",
+        "gos_number": "Гос. номер",
+        "location": "Местоположение",
+        "comment": "Комментарий",
+        "work_types": "Виды работ",
+    }
+
+    missing_fields = []
+    for field_name, field_label in required_fields.items():
+        value = current_values.get(field_name)
+        if field_name == "work_types":
+            if value == 0:  # Если количество равно 0
+                missing_fields.append(field_label)
+        else:
+            if value is None:
+                missing_fields.append(field_label)
+
+    if missing_fields:
+        raise HTTPException(status_code=400, detail=f"Заполните все поля: {', '.join(missing_fields)}")
+
+
+    # --- Продолжаем основную логику обновления ---
+    # incoming - это только поля, которые были переданы в payload (включая None)
+    incoming = original_patch_data  # Теперь используем оригинальный словарь
 
     # --- normalize assigned_user_id ---
     if "assigned_user_id" in incoming:
@@ -1110,19 +1214,12 @@ async def edit_task(
     work_types_data = incoming.pop("work_types", None)
     logger.info(f"equipment_data: {equipment_data}, work_types_data: {work_types_data}")
 
-    payload_dict = patch.model_dump() # Это включает null-значения
-
-    incoming_with_nulls = {}
-    for k, v in payload_dict.items():
-        if k not in {"equipment", "work_types"}:
-            incoming_with_nulls[k] = v
-
     changed = []
     # --- Обработка assigned_user_id (может быть null) ---
     assigned_user_id_changed = False
     assignment_type_changed = False
-    if "assigned_user_id" in incoming_with_nulls:
-        new_assigned_user_id = incoming_with_nulls["assigned_user_id"]
+    if "assigned_user_id" in incoming:
+        new_assigned_user_id = incoming["assigned_user_id"]
 
         if new_assigned_user_id is None:
             old_val = task.assigned_user_id
@@ -1165,10 +1262,8 @@ async def edit_task(
 
             logger.info("Назначен монтажник → статус переведен в assigned")
 
-    incoming_with_nulls.pop("assigned_user_id", None)
 
-  
-
+    # --- Обновление прямых полей ---
     for field, value in incoming.items():
         if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
             continue
@@ -1189,15 +1284,16 @@ async def edit_task(
             changed.append((field, old_val, value))
             logger.info(f"Поле '{field}' помечено как изменённое: {old_cmp} -> {new_cmp}")
 
+
     # --- Обновление contact_person_id, company_id и contact_person_phone ---
     contact_person_changed = False
-    if "contact_person_id" in incoming_with_nulls:
-        contact_person_id = incoming_with_nulls["contact_person_id"]
+    if "contact_person_id" in incoming:
+        contact_person_id = incoming["contact_person_id"]
         old_cp_id = task.contact_person_id
         old_co_id = task.company_id
         old_cp_phone = task.contact_person_phone
 
-        if contact_person_id:
+        if contact_person_id is not None:
             cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
             contact_person = cp_res.scalars().first()
             if not contact_person:
@@ -1219,6 +1315,7 @@ async def edit_task(
             contact_person_changed = True
 
         logger.info(f"Поле 'contact_person_id', 'company_id', 'contact_person_phone' обновлены")
+
 
     # --- Обновление оборудования ---
     equipment_changed = False
@@ -1309,6 +1406,24 @@ async def edit_task(
         changed.append(("work_types", "old_work_set", work_types_data))
         logger.info("Типы работ помечены как изменённые")
 
+
+    # --- Сохраняем старые значения для истории ---
+    old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
+    old_equipment_with_sn_qty = [
+        (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
+    ]
+    old_contact_person_name = task.contact_person.name if task.contact_person else None
+    old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
+    old_contact_person_phone = task.contact_person.phone if task.contact_person else None
+    old_client_price = task.client_price
+    old_montajnik_reward = task.montajnik_reward
+    old_assigned_user_id = task.assigned_user_id
+    old_assignment_type = task.assignment_type
+
+    logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
+
+
+    # --- Продолжаем остальную логику ---
     # --- Пересчёт цен ---
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
@@ -1855,10 +1970,10 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
 
 @router.get("/drafts")
 async def get_all_dafts(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    # Загружаем черновики с контактным лицом, компанией и оборудованием
     q = select(Task).where(
         Task.is_draft == True,
-        Task.status != TaskStatus.completed
+        Task.status != TaskStatus.completed,
+        Task.created_by == getattr(current_user, "id", None)
     ).options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),

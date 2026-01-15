@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['finally-pasta-pose-memory.trycloudflare.com']
+    allowedHosts: ['bridge-governments-compete-sally.trycloudflare.com']
   },
 })
 

@@ -742,7 +742,7 @@ async function saveEdit() {
       client_price: undefined,
       montajnik_reward: undefined,
       gos_number: form.gos_number || null,
-      contact_person_phone: undefined, // Не отправляем, сервер сам возьмёт по contact_person_id
+      contact_person_phone: undefined, 
       assigned_user_name: undefined,
     };
     await editTask(id, payload);
@@ -752,14 +752,15 @@ async function saveEdit() {
       alert("✅ Изменения сохранены");
     }
     setEdit(false);
-    loadTask(); // Перезагружаем данные
+    loadTask(); 
   } catch (err) {
-    console.error(err);
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Ошибка при сохранении");
-    } else {
-      alert("Ошибка при сохранении");
-    }
+  console.error(err);
+  const errorMsg = err.response?.data?.detail || "Ошибка при сохранении";
+  if (window.Telegram?.WebApp) {
+    window.Telegram.WebApp.showAlert(errorMsg);
+  } else {
+    alert(errorMsg);
+  }
   }
 }
 
@@ -1556,7 +1557,7 @@ async function handleApproveReport(taskId, reportId) {
             <>
             <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.35)', margin: '16px 0' }}></div>
 
-              <div className="section">
+             <div className="section">
   {/* --- ЗАГОЛОВОК С ИКОНКОЙ --- */}
   <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4CAF50', fontWeight: 'bold', fontSize: '1.2em', marginBottom: '12px' }}>
     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1570,20 +1571,38 @@ async function handleApproveReport(taskId, reportId) {
   </h3>
   {(task.reports || []).length ? (
     task.reports.map((r) => {
-      // --- Извлечение выполненных работ и комментария ---
-      let performedWorks = "";
+      // --- Извлечение комментария из текста ---
       let comment = "";
       if (r.text) {
-        const lines = r.text.split("\n");
-        if (lines[0].startsWith("Выполнено: ")) {
-          performedWorks = lines[0].substring("Выполнено: ".length);
+        // Проверяем формат: "Выполнено: [типы работ]\n\n[комментарий]"
+        if (r.text.includes("Выполнено:")) {
+          const parts = r.text.split("Выполнено:");
+          if (parts.length > 1) {
+            const afterPerformed = parts[1]; // Все после "Выполнено:"
+            
+            // Разбиваем по двойному переносу строки (стандартный формат при создании отчета)
+            const sections = afterPerformed.split(/\n\s*\n/);
+            
+            // Если есть вторая секция (после двойного переноса строк), это комментарий
+            if (sections.length > 1) {
+              comment = sections[1].trim();
+            } else {
+              // Если нет двойного переноса, значит комментария нет
+              comment = "Комментариев нет";
+            }
+          }
+        } else {
+          // Если нет "Выполнено:", то весь текст - это комментарий
+          comment = r.text.trim();
         }
-        if (lines.length > 1) {
-          comment = lines.slice(1).join("\n");
-        } else if (!r.text.startsWith("Выполнено: ")) {
-          comment = r.text;
-        }
+        
+        // Убираем лишние пробелы и очищаем комментарий
+        comment = comment.replace(/^\s+|\s+$/g, '');
       }
+
+      // Если комментарий пустой, показываем "Комментариев нет"
+      const displayComment = comment ? comment : "Комментариев нет";
+
       // --- Получение вложений из reportAttachmentsMap ---
       const reportAttachments = reportAttachmentsMap[r.id] || [];
       const reportAttachmentsLoading = !reportAttachmentsMap.hasOwnProperty(r.id);
@@ -1597,15 +1616,15 @@ async function handleApproveReport(taskId, reportId) {
 
       return (
         <div key={r.id} className="report" style={{ padding: '12px', borderRadius: '8px', marginBottom: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          {/* #37: Выполнено: {типы работ} */}
+          {/* Номер задачи */}
           <p>
-            <b>#{r.id}:</b> {performedWorks ? `Выполнено: ${performedWorks}` : "Нет выполненных работ"}
+            <b>#{r.id}</b>
           </p>
-          {/* С новой строки — комментарий монтажника */}
-          {comment && (
-            <p>{comment}</p>
-          )}
-          {/* СО СЛЕДУЮЩЕЙ СТРОКИ — вложения */}
+          
+          {/* Комментарий монтажника */}
+          <p><b>Комментарий монтажника:</b> {displayComment}</p>
+          
+          {/* Вложения */}
           {reportAttachmentsLoading ? (
             <p>Загрузка вложений...</p>
           ) : reportAttachments.length > 0 ? (
@@ -1615,24 +1634,27 @@ async function handleApproveReport(taskId, reportId) {
                 const thumbUrl = att.thumb_key
                   ? getAttachmentUrl(att.thumb_key)
                   : originalUrl;
-                 return (
-                    <div
-                      key={att.id}
-                      style={{ cursor: 'zoom-in' }}
-                      onClick={() => handleImageClick(originalUrl)}
-                    >
-                      <img
-                        src={thumbUrl}
-                        alt={`Report attachment ${idx}`}
-                        style={{ maxHeight: 100 }}
-                      />
-                    </div>
-                  );
+
+                return (
+                  <div
+                    key={att.id}
+                    style={{ cursor: 'zoom-in' }} // Меняем курсор
+                    onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                  >
+                    <img
+                      src={thumbUrl}
+                      alt={`Report attachment ${idx}`}
+                      style={{ maxHeight: 100 }}
+                    />
+                  </div>
+                );
               })}
             </div>
           ) : (
             <p>Вложений нет</p>
           )}
+          
+          {/* Статусы проверки */}
           <p>
             <b>Логист:</b> <span style={{ color: statusColors[r.approval_logist] || '#e0e0e0', fontWeight: 'bold' }}>{getReportApprovalDisplayName(r.approval_logist) || "—"}</span>
             {task.requires_tech_supp === true && (
@@ -1641,45 +1663,48 @@ async function handleApproveReport(taskId, reportId) {
               </>
             )}
           </p>
+          
           {/* Комментарий отклонения */}
           {r.review_comment && (
             <p><b>Комментарий отклонения:</b> <span style={{ color: "#F44336" }}>{r.review_comment}</span></p>
           )}
-         <div className="report-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '8px' }}>
-  {r.approval_logist === "waiting" ? (
-    <>
-      <button
-        type="button"
-        onClick={() => handleApproveReport(task.id, r.id)}
-        className="gradient-button"
-        style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        Принять
-      </button>
-      <button
-        type="button"
-        onClick={() => handleRejectReport(task.id, r.id)}
-        className="gradient-button"
-        style={{ 
-          width: 'auto', 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '6px',
-          background: 'linear-gradient(to right, #ef4444, #dc2626)' // Красный градиент
-        }}
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"></line>
-          <line x1="6" y1="6" x2="18" y2="18"></line>
-        </svg>
-        Отклонить
-      </button>
-    </>
-  ) : null}
-</div>
+          
+          {/* Кнопки действий */}
+          <div className="report-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '8px' }}>
+            {r.approval_logist === "waiting" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleApproveReport(task.id, r.id)}
+                  className="gradient-button"
+                  style={{ width: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  Принять
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRejectReport(task.id, r.id)}
+                  className="gradient-button"
+                  style={{ 
+                    width: 'auto', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px',
+                    background: 'linear-gradient(to right, #ef4444, #dc2626)' // Красный градиент
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                  Отклонить
+                </button>
+              </>
+            ) : null}
+          </div>
         </div>
       );
     })
