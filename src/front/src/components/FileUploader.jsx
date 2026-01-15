@@ -41,7 +41,7 @@ async function compressImage(file, maxWidth = 1024, maxHeight = 1024, quality = 
 export default function FileUploader({ onUploaded, onUploading, onUploadError, onRemoved, taskId, reportId = null, maxFiles = 15 }) {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
- 
+  
 
   useEffect(() => {
     // При изменении reportId можно обновить существующие файлы, если нужно
@@ -69,8 +69,8 @@ export default function FileUploader({ onUploaded, onUploading, onUploadError, o
     const newFilesToProcess = [];
 
     for (const f of selectedFiles) {
-        // Проверяем тип файла
-        if (!["image/jpeg", "image/png", "image/webp", "image/jpg"].includes(f.type)) {
+        const supportedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg", "image/tiff", "image/heif", "image/heic"];
+        if (!supportedTypes.includes(f.type)) {
             if (window.Telegram?.WebApp) {
                 window.Telegram.WebApp.showAlert(`❌ Файл ${f.name} неподдерживаемого типа`);
             } else {

@@ -9,6 +9,18 @@ from back.db.models import TaskAttachment
 from back.utils.selectel import get_s3_client
 from datetime import datetime, timezone
 
+
+SUPPORTED_IMAGE_MIME_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/tiff",
+    "image/heif",
+    "image/heic",
+}
+
+
 THUMB_WIDTH = 320
 
 
@@ -36,7 +48,7 @@ async def validate_and_process_attachment(attachment_id: int):
 
             # check content-type
             ctype = meta.get("ContentType") or att.mime_type
-            if ctype not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
+            if ctype not in SUPPORTED_IMAGE_MIME_TYPES:
                 print(f"[DEBUG] Invalid content type: {ctype}") # <--- Добавить
                 att.error_text = f"Invalid content type: {ctype}"
                 att.processed = False # <--- Помечаем как обработанное, но с ошибкой

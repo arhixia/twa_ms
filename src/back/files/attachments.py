@@ -26,6 +26,18 @@ router = APIRouter()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+SUPPORTED_IMAGE_MIME_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/tiff",
+    "image/heif",
+    "image/heic",
+}
+
+
 class InitMultipartIn(BaseModel):
     filename: str
     content_type: str
@@ -78,7 +90,7 @@ async def init_multipart(
     # Размер и mime проверки
     if payload.size is None or payload.size <= 0 or payload.size > 10 * 1024 ** 3:
         raise HTTPException(status_code=400, detail="Invalid size, max 10 GiB")
-    if payload.content_type not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
+    if payload.content_type not in SUPPORTED_IMAGE_MIME_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported content_type")
 
     s3 = get_s3_client()
@@ -216,7 +228,7 @@ async def upload_fallback_report(
             raise HTTPException(status_code=403, detail="Forbidden")
 
         # Проверка mime
-        if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/jpg"):
+        if file.content_type not in SUPPORTED_IMAGE_MIME_TYPES:
             logger.warning(f"[{timestamp}] [UPLOAD_FALLBACK] Unsupported content_type: {file.content_type}")
             raise HTTPException(status_code=400, detail="Unsupported content_type")
 
@@ -503,8 +515,23 @@ async def get_attachment(
 
             # Функция для потоковой передачи данных
             async def iter_content():
-                async for chunk in body_stream:
-                    yield chunk
+                try:
+                    async for chunk in body_stream:
+                        yield chunk
+                except RuntimeError as e:
+                    # Проверяем, связана ли ошибка с закрытием соединения
+                    if "Connection closed." in str(e):
+                        print(f"[DEBUG] Client disconnected during streaming for {full_path}: {e}")
+                        # Просто выходим из генератора, если клиент отключился
+                        return
+                    else:
+                        # Если другая Runtime ошибка, пробрасываем её дальше
+                        raise
+                except Exception as e:
+                    # Логируем любые другие исключения, которые могут возникнуть при чтении из S3
+                    print(f"[ERROR] Error reading from S3 during streaming for {full_path}: {e}")
+                    # Пробрасываем исключение, чтобы FastAPI обработал его должным образом
+                    raise
                     
             return StreamingResponse(
                 iter_content(),
