@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['bridge-governments-compete-sally.trycloudflare.com']
+    allowedHosts: ['generic-strategic-hidden-fragrances.trycloudflare.com']
   },
 })
 

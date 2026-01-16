@@ -353,7 +353,12 @@ export default function TaskDetailPage() {
   const [rejectModal, setRejectModal] = useState({ open: false, taskId: null, reportId: null });
   const [montajniks, setMontajniks] = useState([]); // <--- Список монтажников
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
-  const [openImage, setOpenImage] = useState(null);
+  // const [openImage, setOpenImage] = useState(null);
+  const [imageModalState, setImageModalState] = useState({
+  isOpen: false,
+  currentIndex: 0,
+  attachments: [], 
+});
 
   useEffect(() => {
     loadRefs();
@@ -371,6 +376,9 @@ export default function TaskDetailPage() {
       console.error(`Ошибка загрузки вложений отчёта ${reportId}:`, err);
     }
   };
+
+  
+  
 
 async function handleArchiveTask() {
   if (!task || task.is_draft) {
@@ -553,13 +561,54 @@ const REPORT_APPROVAL_TRANSLATIONS = {
     }
   }
 
-  const handleImageClick = (imageUrl) => {
-    setOpenImage(imageUrl);
-  };
+  const handleImageClick = (clickedImageUrl, reportAttachments) => {
+  const attachments = Array.isArray(reportAttachments) ? reportAttachments : [];
+  const clickedIndex = attachments.findIndex(att => {
+    const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+    return originalUrl === clickedImageUrl;
+  });
 
-  const closeModal = () => {
-    setOpenImage(null);
-  };
+  if (clickedIndex === -1) {
+    console.warn("Clicked image not found in attachments list.");
+    // Возможно, установить первый элемент или игнорировать
+    if (attachments.length > 0) {
+      setImageModalState({
+        isOpen: true,
+        currentIndex: 0,
+        attachments: attachments,
+      });
+    }
+  } else {
+    setImageModalState({
+      isOpen: true,
+      currentIndex: clickedIndex,
+      attachments: attachments,
+    });
+  }
+};
+
+// НОВАЯ функция для закрытия модального окна
+const closeModal = () => {
+  setImageModalState({ isOpen: false, currentIndex: 0, attachments: [] });
+};
+
+// НОВАЯ функция для перехода к следующему изображению
+const goToNextImage = () => {
+  if (imageModalState.attachments.length === 0) return;
+  setImageModalState(prev => {
+    const nextIndex = (prev.currentIndex + 1) % prev.attachments.length; // Зацикливание
+    return { ...prev, currentIndex: nextIndex };
+  });
+};
+
+// НОВАЯ функция для перехода к предыдущему изображению
+const goToPrevImage = () => {
+  if (imageModalState.attachments.length === 0) return;
+  setImageModalState(prev => {
+    const prevIndex = (prev.currentIndex - 1 + prev.attachments.length) % prev.attachments.length; // Зацикливание
+    return { ...prev, currentIndex: prevIndex };
+  });
+};
 
   function setField(k, v) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -1639,7 +1688,7 @@ async function handleApproveReport(taskId, reportId) {
                   <div
                     key={att.id}
                     style={{ cursor: 'zoom-in' }} // Меняем курсор
-                    onClick={() => handleImageClick(originalUrl)} // Обработчик клика
+                    onClick={() => handleImageClick(originalUrl, reportAttachments)}
                   >
                     <img
                       src={thumbUrl}
@@ -1717,11 +1766,13 @@ async function handleApproveReport(taskId, reportId) {
         </div>
       </div>
       <ImageModal
-        isOpen={!!openImage} // Передаём true/false
-        onClose={closeModal}
-        imageUrl={openImage} // Передаём URL изображения
-        altText="Вложение отчёта" // Опционально: текст по умолчанию
-      />
+      isOpen={imageModalState.isOpen}
+      onClose={closeModal}
+      attachments={imageModalState.attachments} // Передаем список
+      currentIndex={imageModalState.currentIndex} // Передаем индекс
+      onPrev={goToPrevImage} // Передаем функцию
+      onNext={goToNextImage} // Передаем функцию
+    />
       {rejectModal.open && (
         <RejectReportModal
           taskId={rejectModal.taskId}

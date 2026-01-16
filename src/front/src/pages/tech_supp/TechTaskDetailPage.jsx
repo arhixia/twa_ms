@@ -58,7 +58,12 @@ export default function TechTaskDetailPage() {
   const [companies, setCompanies] = useState([]);
   const [contactPersons, setContactPersons] = useState([]);
   const [contactPersonPhone, setContactPersonPhone] = useState(null);
-  const [openImage, setOpenImage] = useState(null);
+  //const [openImage, setOpenImage] = useState(null);
+  const [imageModalState, setImageModalState] = useState({
+    isOpen: false,
+    currentIndex: 0,
+    attachments: [], 
+  });
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
 
   useEffect(() => {
@@ -94,12 +99,53 @@ export default function TechTaskDetailPage() {
     }
   };
 
-  const handleImageClick = (imageUrl) => {
-    setOpenImage(imageUrl);
+  const handleImageClick = (clickedImageUrl, reportAttachments) => {
+    const attachments = Array.isArray(reportAttachments) ? reportAttachments : [];
+    const clickedIndex = attachments.findIndex(att => {
+      const originalUrl = att.presigned_url || getAttachmentUrl(att.storage_key);
+      return originalUrl === clickedImageUrl;
+    });
+  
+    if (clickedIndex === -1) {
+      console.warn("Clicked image not found in attachments list.");
+      // Возможно, установить первый элемент или игнорировать
+      if (attachments.length > 0) {
+        setImageModalState({
+          isOpen: true,
+          currentIndex: 0,
+          attachments: attachments,
+        });
+      }
+    } else {
+      setImageModalState({
+        isOpen: true,
+        currentIndex: clickedIndex,
+        attachments: attachments,
+      });
+    }
   };
-
+  
+  // НОВАЯ функция для закрытия модального окна
   const closeModal = () => {
-    setOpenImage(null);
+    setImageModalState({ isOpen: false, currentIndex: 0, attachments: [] });
+  };
+  
+  // НОВАЯ функция для перехода к следующему изображению
+  const goToNextImage = () => {
+    if (imageModalState.attachments.length === 0) return;
+    setImageModalState(prev => {
+      const nextIndex = (prev.currentIndex + 1) % prev.attachments.length; // Зацикливание
+      return { ...prev, currentIndex: nextIndex };
+    });
+  };
+  
+  // НОВАЯ функция для перехода к предыдущему изображению
+  const goToPrevImage = () => {
+    if (imageModalState.attachments.length === 0) return;
+    setImageModalState(prev => {
+      const prevIndex = (prev.currentIndex - 1 + prev.attachments.length) % prev.attachments.length; // Зацикливание
+      return { ...prev, currentIndex: prevIndex };
+    });
   };
 
   const STATUS_TRANSLATIONS = {
@@ -642,7 +688,7 @@ export default function TechTaskDetailPage() {
                   <div
                     key={att.id}
                     style={{ cursor: 'zoom-in' }}
-                    onClick={() => handleImageClick(originalUrl)}
+                    onClick={() => handleImageClick(originalUrl, reportAttachments)}
                   >
                     <img
                       src={thumbUrl}
@@ -694,10 +740,12 @@ export default function TechTaskDetailPage() {
     </div>
           
     <ImageModal
-      isOpen={!!openImage}
+      isOpen={imageModalState.isOpen}
       onClose={closeModal}
-      imageUrl={openImage}
-      altText="Вложение отчёта"
+      attachments={imageModalState.attachments} // Передаем список
+      currentIndex={imageModalState.currentIndex} // Передаем индекс
+      onPrev={goToPrevImage} // Передаем функцию
+      onNext={goToNextImage} // Передаем функцию
     />
   </div>
 );
