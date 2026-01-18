@@ -132,7 +132,7 @@ function AdminTasksPage() {
     { value: "assigned", label: "Назначена" },
     { value: "inspection", label: "На проверке" },
     { value: "returned", label: "На доработке" },
-    { value: "archived", label: "Архив" },
+    {value: "completed", label: "Выполнена" },
   ];
 
   // Преобразование опций для MultiSelectFilter

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['generic-strategic-hidden-fragrances.trycloudflare.com']
+    allowedHosts: ['attribute-acre-spell-schema.trycloudflare.com']
   },
 })
 
