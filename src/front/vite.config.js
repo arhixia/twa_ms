@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['attribute-acre-spell-schema.trycloudflare.com']
+    allowedHosts: ['valley-vip-fresh-renewable.trycloudflare.com']
   },
 })
 
