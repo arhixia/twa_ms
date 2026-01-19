@@ -680,9 +680,6 @@
   padding: 0;
   margin: 0;
   box-sizing: border-box;
-  grid-auto-rows: minmax(200px, auto); /* Минимальная высота строк */
-  align-items: start; /* Выравнивание по верхнему краю */
-  min-height: 300px; 
 }
 
 @media (max-width: 768px) {
