@@ -2979,8 +2979,10 @@ async def logist_archive(
             Task.status == TaskStatus.archived,
             Task.is_draft == False,
             Task.created_by == current_user.id
-        )
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company))
+        ).options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+    )
     )
     res = await db.execute(q)
     tasks = res.scalars().all()
@@ -2994,14 +2996,30 @@ async def logist_archive(
             if company_name and contact_person_name
             else (company_name or contact_person_name or "—")
         )
+
+        equipment = [
+            {
+                "equipment_id": te.equipment_id,
+                "quantity": te.quantity,
+                "serial_number": te.serial_number,
+                "equipment": {
+                    "id": te.equipment.id,
+                    "name": te.equipment.name
+                } if te.equipment else None
+            }
+            for te in (t.equipment_links or [])
+        ] or []
+
         out.append({
             "id": t.id,
             "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
             "client": client_display,
             "status": t.status.value if t.status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
             "client_price": t.client_price,
             "montajnik_reward": t.montajnik_reward,
+            "equipment": equipment,
         })
 
     print("📦 Архивные задачи:", [t.id for t in tasks])  # debug

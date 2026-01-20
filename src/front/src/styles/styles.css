@@ -682,6 +682,16 @@
   box-sizing: border-box;
 }
 
+
+.field-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 8px;
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
   .page-title {
     font-size: 20px;

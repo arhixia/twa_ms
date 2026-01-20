@@ -1,22 +1,22 @@
 // src/components/TaskCard.jsx
 import React from "react";
-import { useNavigate } from "react-router-dom"; // Оставляем только useNavigate, если он нужен в ином случае
+import { useNavigate } from "react-router-dom";
 
-export default function TaskCard({ task, onClick, onAccept, onReject, onDelete, isAccepting, isRejecting }) { // Принимаем новые пропсы
-  // const navigate = useNavigate(); // Не нужен, так как onClick передает функцию
+export default function TaskCard({ task, onClick, onUnarchive, onDelete, isAccepting, isRejecting }) {
+  const navigate = useNavigate();
 
   function handleClick() {
     if (onClick) {
       onClick(task);
       return;
     }
-
+    navigate(`/logist/tasks/${task.id}`);
   }
 
   const statusColor = getStatusColor(task.status);
   const statusDisplay = getStatusLabel(task.status);
 
-  // ✅ Используем новое поле client_name
+  // Используем новое поле client_name
   const clientName = task.client_name || "—";
 
   // Форматирование даты
@@ -31,7 +31,6 @@ export default function TaskCard({ task, onClick, onAccept, onReject, onDelete, 
     : "—";
 
   // Рендеринг оборудования: используем equipment.name
-  
   const renderEquipment = () => {
     if (!task.equipment || task.equipment.length === 0) {
       return <div className="equipment-item">Оборудование не назначено</div>;
@@ -54,8 +53,9 @@ export default function TaskCard({ task, onClick, onAccept, onReject, onDelete, 
     ));
   };
 
-  // Проверяем, является ли задача черновиком
+  // Проверяем, является ли задача черновиком или архивной
   const isDraft = task.status === "draft";
+  const isArchived = task.status === "archived";
 
   return (
     <div className="task-card" onClick={handleClick}>
@@ -87,26 +87,90 @@ export default function TaskCard({ task, onClick, onAccept, onReject, onDelete, 
 
       {/* Дата и время */}
       <div className="task-scheduled-at">
-  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-      <path d="M11 6.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5z"/>
-      <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5M1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
-    </svg>
-    {formattedDate}
-  </span>
-</div>
-
-      {/* Статус (справа вверху) */}
-      <div className="task-status-badge" style={{ backgroundColor: statusColor }}>
-        {statusDisplay}
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M11 6.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-1a.5.5 0 0 1-.5-.5z"/>
+            <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5M1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4z"/>
+          </svg>
+          {formattedDate}
+        </span>
       </div>
 
+      {/* Статус (справа вверху) или иконки для архивных задач */}
+      {isArchived ? (
+        <div
+          style={{
+            position: "absolute",
+            top: "8px",
+            right: "8px",
+            display: "flex",
+            gap: "8px",
+            zIndex: 2
+          }}
+        >
+          {/* Кнопка "В черновики" - разархивировать */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (typeof onUnarchive === 'function') {
+                onUnarchive(task.id);
+              }
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "4px",
+              borderRadius: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            title="Перевести в черновики"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="white" viewBox="0 0 16 16">
+              <path fillRule="evenodd" d="M1 8a7 7 0 1 0 14 0A7 7 0 0 0 1 8m15 0A8 8 0 1 1 0 8a8 8 0 0 1 16 0m-7.5 3.5a.5.5 0 0 1-1 0V5.707L5.354 7.854a.5.5 0 1 1-.708-.708l3-3a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 5.707z"/>
+            </svg>
+          </button>
+
+          {/* Кнопка "Удалить" */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (typeof onDelete === 'function') {
+                onDelete(task.id);
+              }
+            }}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: "4px",
+              borderRadius: "4px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}
+            title="Удалить задачу"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="white" viewBox="0 0 16 16">
+              <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+              <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+            </svg>
+          </button>
+        </div>
+      ) : (
+        <div className="task-status-badge" style={{ backgroundColor: statusColor }}>
+          {statusDisplay}
+        </div>
+      )}
+
       {/* Кнопка удаления (только для черновиков) */}
-      {isDraft && onDelete && (
+      {isDraft && (
         <button
           onClick={(e) => {
             e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
-            onDelete(task.id);
+            // Здесь нужно добавить вызов функции удаления черновика
           }}
           style={{
             position: "absolute",
@@ -126,69 +190,6 @@ export default function TaskCard({ task, onClick, onAccept, onReject, onDelete, 
           🗑 Удалить
         </button>
       )}
-
-      {/* Контейнер для кнопок "Принять" и "Отклонить" (справа внизу) */}
-      {(onAccept || onReject) && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "8px", // Отступ от низа карточки
-            right: "8px",  // Отступ от правого края карточки
-            display: "flex", // Располагаем кнопки в ряд
-            gap: "4px", // Небольшой отступ между кнопками
-            zIndex: 1, // Убедимся, что кнопки поверх других элементов
-          }}
-        >
-          {onReject && (
-            <button
-              disabled={isRejecting}
-              onClick={(e) => {
-                e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
-                onReject();
-              }}
-              style={{
-                // --- ГРАДИЕНТ ---
-                background: "linear-gradient(to right, #ef4444, #dc2626)", // Красный градиент
-                // backgroundColor: "#dc3545", // <-- Закомментировано
-                // --- /ГРАДИЕНТ ---
-                color: "white",
-                padding: "4px 8px", // Меньше паддинги для компактности
-                borderRadius: "8px", // Меньше скругление
-                fontSize: "12px", // Меньше шрифт
-                fontWeight: "bold",
-                cursor: isRejecting ? "not-allowed" : "pointer",
-                border: "none",
-              }}
-            >
-              {isRejecting ? "..." : "ОТКЛОНИТЬ"}
-            </button>
-          )}
-          {onAccept && (
-            <button
-              disabled={isAccepting}
-              onClick={(e) => {
-                e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
-                onAccept();
-              }}
-              style={{
-                // --- ГРАДИЕНТ ---
-                background: "linear-gradient(to right, #10b981, #2563eb)", // Зелено-синий градиент
-                // backgroundColor: "#28a745", // <-- Закомментировано
-                // --- /ГРАДИЕНТ ---
-                color: "white",
-                padding: "4px 8px", // Меньше паддинги для компактности
-                borderRadius: "8px", // Меньше скругление
-                fontSize: "12px", // Меньше шрифт
-                fontWeight: "bold",
-                cursor: isAccepting ? "not-allowed" : "pointer",
-                border: "none",
-              }}
-            >
-              {isAccepting ? "..." : "ПРИНЯТЬ"}
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -205,7 +206,7 @@ function getStatusLabel(status) {
     returned: 'На доработке',
     archived: 'Архив',
     assigned: 'Назначена',
-    draft: 'Черновик' // ✅ Добавлен статус "Черновик"
+    draft: 'Черновик'
   };
   return labelMap[status] || status;
 }
@@ -223,7 +224,7 @@ function getStatusColor(status) {
     inspection: '#6f42c1',
     returned: '#fd7e14',
     assigned: '#6f42c1',
-    draft: '#6c757d' // ✅ Цвет для статуса "Черновик"
+    draft: '#6c757d'
   };
   return colorMap[status] || '#6c757d';
 }

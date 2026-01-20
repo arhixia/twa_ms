@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchLogistArchivedTasks, deleteArchivedTask, unarchiveTask } from "../../api";
+import TaskCard from "../../components/TaskCard";
 import "../../styles/LogistPage.css";
 
 export default function LogistArchivedTasksPage() {
@@ -40,47 +41,55 @@ export default function LogistArchivedTasksPage() {
     }
   }
 
-  async function handleDeleteArchived(taskId) {
-    if (!window.confirm(`Вы уверены, что хотите УДАЛИТЬ задачу #${taskId} из архива? Это действие необратимо.`)) return;
-    try {
-      await deleteArchivedTask(taskId);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("✅ Задача удалена из архива");
-      } else {
-        alert("✅ Задача удалена из архива");
-      }
-      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-    } catch (err) {
-      console.error("Ошибка удаления архивной задачи:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу из архива.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
-    }
-  }
+ function handleDeleteArchived(taskId) {
+  const text = `Вы уверены, что хотите УДАЛИТЬ задачу #${taskId} из архива? Это действие необратимо.`;
 
-  async function handleUnarchive(taskId) {
-    if (!window.confirm(`Вы уверены, что хотите убрать задачу #${taskId} из архива и перевести в черновики?`)) return;
-    try {
-      await unarchiveTask(taskId);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("✅ Задача убрана из архива и переведена в черновики");
-      } else {
-        alert("✅ Задача убрана из архива и переведена в черновики");
+  if (window.Telegram?.WebApp?.showConfirm) {
+    window.Telegram.WebApp.showConfirm(text, async (confirmed) => {
+      if (!confirmed) return;
+
+      try {
+        await deleteArchivedTask(taskId);
+        window.Telegram.WebApp.showAlert("✅ Задача удалена из архива");
+        setTasks(prev => prev.filter(t => t.id !== taskId));
+      } catch (err) {
+        const msg = err.response?.data?.detail || "Не удалось удалить задачу";
+        window.Telegram.WebApp.showAlert(`Ошибка: ${msg}`);
       }
-      setTasks(prevTasks => prevTasks.filter(t => t.id !== taskId));
-    } catch (err) {
-      console.error("Ошибка разархивации задачи:", err);
-      const errorMsg = err.response?.data?.detail || "Не удалось убрать задачу из архива.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
-    }
+    });
+  } else {
+    if (!window.confirm(text)) return;
+    deleteArchivedTask(taskId)
+      .then(() => setTasks(prev => prev.filter(t => t.id !== taskId)))
+      .catch(() => alert("Ошибка удаления"));
   }
+}
+
+
+function handleUnarchive(taskId) {
+  const text = `Убрать задачу #${taskId} из архива и перевести в черновики?`;
+
+  if (window.Telegram?.WebApp?.showConfirm) {
+    window.Telegram.WebApp.showConfirm(text, async (confirmed) => {
+      if (!confirmed) return;
+
+      try {
+        await unarchiveTask(taskId);
+        window.Telegram.WebApp.showAlert("✅ Задача переведена в черновики");
+        setTasks(prev => prev.filter(t => t.id !== taskId));
+      } catch (err) {
+        const msg = err.response?.data?.detail || "Не удалось разархивировать";
+        window.Telegram.WebApp.showAlert(`Ошибка: ${msg}`);
+      }
+    });
+  } else {
+    if (!window.confirm(text)) return;
+    unarchiveTask(taskId)
+      .then(() => setTasks(prev => prev.filter(t => t.id !== taskId)))
+      .catch(() => alert("Ошибка"));
+  }
+}
+
 
   if (loading)
     return (
@@ -96,6 +105,10 @@ export default function LogistArchivedTasksPage() {
       </div>
     );
 
+  const handleTaskClick = (task) => {
+    navigate(`/logist/archived-tasks/${task.id}`);
+  };
+
   return (
     <div className="logist-main">
       <div className="page">
@@ -106,50 +119,13 @@ export default function LogistArchivedTasksPage() {
         <div className="cards">
           {tasks.length ? (
             tasks.map(task => (
-              <div key={task.id} className="task-card">
-                <div className="card-header" style={{ justifyContent: "space-between" }}>
-                  <h3 style={{ margin: 0 }}>Задача #{task.id}</h3>
-                </div>
-
-                <div className="card-body">
-                  <p><b>Клиент:</b> {task.client || "—"}</p>
-                  <p><b>Дата:</b> {task.scheduled_at ? new Date(task.scheduled_at).toLocaleString() : "—"}</p>
-                  <p><b>Цена клиента:</b> {task.client_price || "—"}</p>
-                  <p><b>Награда монтажнику:</b> {task.montajnik_reward || "—"}</p>
-                </div>
-<div className="card-actions" style={{ display: 'flex', gap: '8px', justifyContent: 'flex-start' }}>
-  <button
-    className="gradient-button"
-    onClick={() => navigate(`/logist/archived-tasks/${task.id}`)}
-    style={{ 
-      width: 'auto',
-      background: 'linear-gradient(to right, #2563eb, #10b981)' // Сине-зелёный
-    }}
-  >
-    📋 Подробнее
-  </button>
-  <button
-    className="gradient-button"
-    onClick={() => handleUnarchive(task.id)}
-    style={{ 
-      width: 'auto',
-      background: 'linear-gradient(to right, #10b981, #2563eb)' // Зелёно-синий
-    }}
-  >
-    📄 В черновики
-  </button>
-  <button
-    className="gradient-button"
-    onClick={() => handleDeleteArchived(task.id)}
-    style={{ 
-      width: 'auto',
-      background: 'linear-gradient(to right, #ef4444, #ffffff)' // Красно-белый
-    }}
-  >
-    🗑 Удалить
-  </button>
-</div>
-              </div>
+                <TaskCard 
+                    key={task.id} 
+                    task={task} 
+                    onClick={handleTaskClick}
+                    onUnarchive={handleUnarchive}
+                    onDelete={handleDeleteArchived}
+                  />
             ))
           ) : (
             <div className="empty">Архивных задач нет</div>

@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['valley-vip-fresh-renewable.trycloudflare.com']
+    allowedHosts: ['destination-whether-soft-gtk.trycloudflare.com']
   },
 })
 
