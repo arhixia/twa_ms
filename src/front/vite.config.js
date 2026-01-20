@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['destination-whether-soft-gtk.trycloudflare.com']
+    allowedHosts: ['guam-resolve-gotten-ranges.trycloudflare.com']
   },
 })
 

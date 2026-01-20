@@ -27,81 +27,96 @@ THUMB_WIDTH = 320
 async def validate_and_process_attachment(attachment_id: int):
     async with SessionLocal() as db:
         async with db.begin():
-            att = (await db.execute(
-                select(TaskAttachment).where(TaskAttachment.id == attachment_id)
-            )).scalars().first()
+            att = (
+                await db.execute(
+                    select(TaskAttachment).where(TaskAttachment.id == attachment_id)
+                )
+            ).scalars().first()
+
             if not att:
-                print(f"[DEBUG] validate_and_process_attachment: attachment {attachment_id} not found") # <--- Добавить
+                print(f"[PROCESS] attachment {attachment_id} not found")
                 return
-            print(f"[DEBUG] validate_and_process_attachment: processing {att.storage_key}, current processed={att.processed}") # <--- Добавить
+
+            print(f"[PROCESS] start {att.storage_key}")
             s3 = get_s3_client()
 
-            # head
+            # ---------- 1. HEAD ----------
             try:
                 meta = await s3.head_object(att.storage_key)
             except Exception as e:
-                print(f"[DEBUG] S3 head failed: {e}") # <--- Добавить
-                att.error_text = f"S3 head failed: {e}"
-                att.processed = False # <--- Помечаем как обработанное, но с ошибкой
-                await db.flush()
+                att.error_text = f"head_object failed: {e}"
+                att.processed = False
                 return
 
-            # check content-type
             ctype = meta.get("ContentType") or att.mime_type
             if ctype not in SUPPORTED_IMAGE_MIME_TYPES:
-                print(f"[DEBUG] Invalid content type: {ctype}") # <--- Добавить
-                att.error_text = f"Invalid content type: {ctype}"
-                att.processed = False # <--- Помечаем как обработанное, но с ошибкой
-                await db.flush()
+                att.error_text = f"unsupported content-type: {ctype}"
+                att.processed = False
                 return
 
-            # download object
+            # ---------- 2. DOWNLOAD ----------
             try:
                 async with s3.get_client() as client:
-                    resp = await client.get_object(Bucket=s3.bucket_name, Key=att.storage_key)
-                    body_stream = resp["Body"]
-                    data = await body_stream.read()
+                    resp = await client.get_object(
+                        Bucket=s3.bucket_name,
+                        Key=att.storage_key
+                    )
+                    data = await resp["Body"].read()
             except Exception as e:
-                print(f"[DEBUG] S3 get failed: {e}") # <--- Добавить
-                att.error_text = f"S3 get failed: {e}"
-                att.processed = True 
-                await db.flush()
+                att.error_text = f"download failed: {e}"
+                att.processed = False
                 return
 
-            # compute checksum
-            sha = hashlib.sha256()
-            sha.update(data)
-            att.checksum = sha.hexdigest()
+            # ---------- 3. CHECKSUM ----------
+            att.checksum = hashlib.sha256(data).hexdigest()
             att.size = len(data)
 
-            # generate thumbnail
+            # ---------- 4. THUMB ----------
+            thumb_key = None
             try:
                 im = Image.open(BytesIO(data))
-                # конвертация только если нужно
-                if im.mode in ("RGBA", "LA", "P"):
+
+                if im.mode != "RGB":
                     im = im.convert("RGB")
-                im.thumbnail((320, 320))
+
+                im.thumbnail((THUMB_WIDTH, THUMB_WIDTH))
+
                 buf = BytesIO()
-                im.save(buf, format="WEBP", quality=80)
+                im.save(buf, "WEBP", quality=80)
                 buf.seek(0)
-                thumb_bytes = buf.read()
-                thumb_key = att.storage_key + ".thumb.webp"
+
+                thumb_key = f"{att.storage_key}.thumb.webp"
+
                 await s3.put_object(
                     thumb_key,
-                    thumb_bytes,
+                    buf.read(),
                     content_type="image/webp",
-                    content_disposition="inline"
+                    content_disposition="inline",
                 )
-                att.thumb_key = thumb_key
-                print(f"[DEBUG] Thumbnail generated: {thumb_key}") # <--- Добавить
-            except Exception as e:
-                print(f"[DEBUG] Thumb generation failed: {e}") # <--- Добавить
-                att.error_text = f"Thumb generation failed: {e}"
 
+                # 🔒 гарантия существования
+                await s3.head_object(thumb_key)
+
+                att.thumb_key = thumb_key
+                print(f"[PROCESS] thumb ok {thumb_key}")
+
+            except Exception as e:
+                # ⚠️ ВАЖНО: thumb не удался, но файл валиден
+                att.thumb_key = None
+                att.error_text = f"thumbnail failed: {e}"
+                print(f"[PROCESS] thumb failed: {e}")
+
+            # ---------- 5. FINAL ----------
             att.processed = True
-            att.error_text = att.error_text or None
-            await db.flush()
-            print(f"[DEBUG] Attachment {att.id} marked as processed=True") # <--- Добавить
+            if not att.error_text:
+                att.error_text = None
+
+            print(
+                f"[PROCESS] done id={att.id} "
+                f"processed={att.processed} "
+                f"thumb={'yes' if att.thumb_key else 'no'}"
+            )
+
 
             
 
