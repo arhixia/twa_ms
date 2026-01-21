@@ -1,4 +1,3 @@
-// front/src/pages/admin/AdminContactsPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -11,7 +10,32 @@ import {
 } from "../../api";
 import "../../styles/LogistPage.css";
 
-// Компонент автодополнения для компании (скопирован из LogistContactsPage)
+// SVG Icons
+const CompanyIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-people" viewBox="0 0 16 16">
+  <path d="M15 14s1 0 1-1-1-4-5-4-5 3-5 4 1 1 1 1zm-7.978-1L7 12.996c.001-.264.167-1.03.76-1.72C8.312 10.629 9.282 10 11 10c1.717 0 2.687.63 3.24 1.276.593.69.758 1.457.76 1.72l-.008.002-.014.002zM11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4m3-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0M6.936 9.28a6 6 0 0 0-1.23-.247A7 7 0 0 0 5 9c-4 0-5 3-5 4q0 1 1 1h4.216A2.24 2.24 0 0 1 5 13c0-1.01.377-2.042 1.09-2.904.243-.294.526-.569.846-.816M4.92 10A5.5 5.5 0 0 0 4 13H1c0-.26.164-1.03.76-1.724.545-.636 1.492-1.256 3.16-1.275ZM1.5 5.5a3 3 0 1 1 6 0 3 3 0 0 1-6 0m3-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/>
+</svg>
+);
+
+const PersonIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 12C14.21 12 16 10.21 16 8C16 5.79 14.21 4 12 4C9.79 4 8 5.79 8 8C8 10.21 9.79 12 12 12ZM12 14C9.33 14 4 15.34 4 18V20H20V18C20 15.34 14.67 14 12 14Z" fill="#94a3b8"/>
+  </svg>
+);
+
+const PositionIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C8.13 2 5 5.13 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13 15.87 2 12 2ZM12 11.5C10.62 11.5 9.5 10.38 9.5 9C9.5 7.62 10.62 6.5 12 6.5C13.38 6.5 14.5 7.62 14.5 9C14.5 10.38 13.38 11.5 12 11.5Z" fill="#94a3b8"/>
+  </svg>
+);
+
+const PhoneIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M6.62 10.79C8.06 13.62 10.38 15.94 13.21 17.38L15.41 15.18C15.69 14.9 16.08 14.82 16.43 14.93C17.55 15.3 18.75 15.5 20 15.5C20.55 15.5 21 15.95 21 16.5V20C21 20.55 20.55 21 20 21C10.61 21 3 13.39 3 4C3 3.45 3.45 3 4 3H7.5C8.05 3 8.5 3.45 8.5 4C8.5 5.25 8.7 6.45 9.07 7.57C9.18 7.92 9.1 8.31 8.82 8.59L6.62 10.79Z" fill="#94a3b8"/>
+  </svg>
+);
+
+// Компонент автодополнения для компании
 function CompanyInput({ value, onChange, companies, placeholder }) {
   const [isOpen, setIsOpen] = useState(false);
   const [filteredCompanies, setFilteredCompanies] = useState(companies);
@@ -120,20 +144,28 @@ function EditCompanyModal({ company, onClose, onSave }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Редактировать компанию</h2>
+          <div className="task-section-header">
+            <CompanyIcon />
+            <span>Редактировать компанию</span>
+          </div>
           <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <label className="dark-label">
-            Название
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Введите название"
-              className="dark-select"
-            />
-          </label>
+          <div className="task-field">
+            <div className="task-field-label">
+              <CompanyIcon />
+              Название:
+            </div>
+            <div className="task-field-value">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Введите название"
+                className="dark-select"
+              />
+            </div>
+          </div>
         </div>
         <div className="modal-actions">
           <button 
@@ -206,49 +238,75 @@ function EditContactPersonModal({ contact, onClose, onSave, companies }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Редактировать контактное лицо</h2>
+          <div className="task-section-header">
+            <PersonIcon />
+            <span>Редактировать контактное лицо</span>
+          </div>
           <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <label className="dark-label">
-            ФИО
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Введите ФИО"
-              className="dark-select"
-            />
-          </label>
-          <label className="dark-label">
-            Должность
-            <input
-              type="text"
-              value={position}
-              onChange={(e) => setPosition(e.target.value)}
-              placeholder="Введите должность (необязательно)"
-              className="dark-select"
-            />
-          </label>
-          <label className="dark-label">
-            Телефон
-            <input
-              type="text"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Введите телефон (необязательно)"
-              className="dark-select"
-            />
-          </label>
-          <label className="dark-label">
-            Компания
-            <CompanyInput
-              value={companyName}
-              onChange={handleCompanyChange}
-              companies={companies}
-              placeholder="Выберите или создайте компанию"
-            />
-          </label>
+          <div className="task-field">
+            <div className="task-field-label">
+              <PersonIcon />
+              ФИО:
+            </div>
+            <div className="task-field-value">
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Введите ФИО"
+                className="dark-select"
+              />
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <PositionIcon />
+              Должность:
+            </div>
+            <div className="task-field-value">
+              <input
+                type="text"
+                value={position}
+                onChange={(e) => setPosition(e.target.value)}
+                placeholder="Введите должность (необязательно)"
+                className="dark-select"
+              />
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <PhoneIcon />
+              Телефон:
+            </div>
+            <div className="task-field-value">
+              <input
+                type="text"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="Введите телефон (необязательно)"
+                className="dark-select"
+              />
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <CompanyIcon />
+              Компания:
+            </div>
+            <div className="task-field-value">
+              <CompanyInput
+                value={companyName}
+                onChange={handleCompanyChange}
+                companies={companies}
+                placeholder="Выберите или создайте компанию"
+              />
+            </div>
+          </div>
         </div>
         <div className="modal-actions">
           <button 
@@ -491,7 +549,9 @@ export default function AdminContactsPage() {
         </div>
 
         <div style={{ marginBottom: '16px', maxWidth: '100%' }}>
-          <label className="dark-label">Поиск по компаниям</label>
+          <label className="dark-label" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, sans-serif' }}>
+  Поиск по компаниям
+</label>
           <input
             type="text"
             className="dark-select"
@@ -541,7 +601,9 @@ export default function AdminContactsPage() {
                           }}
                           title="Редактировать"
                         >
-                          ✏️
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+  <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325"/>
+</svg>
                         </button>
                       </p>
                     </div>
@@ -601,20 +663,28 @@ export default function AdminContactsPage() {
           <div className="modal-backdrop" onClick={() => setShowAddCompanyModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Добавить компанию</h2>
+                <div className="task-section-header">
+                  <CompanyIcon />
+                  <span>Добавить компанию</span>
+                </div>
                 <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddCompanyModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <label className="dark-label">
-                  Название
-                  <input
-                    type="text"
-                    value={newCompanyName}
-                    onChange={(e) => setNewCompanyName(e.target.value)}
-                    placeholder="Введите название"
-                    className="dark-select"
-                  />
-                </label>
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <CompanyIcon />
+                    Название:
+                  </div>
+                  <div className="task-field-value">
+                    <input
+                      type="text"
+                      value={newCompanyName}
+                      onChange={(e) => setNewCompanyName(e.target.value)}
+                      placeholder="Введите название"
+                      className="dark-select"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="modal-actions">
                 <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddCompany(); }}>
@@ -629,49 +699,75 @@ export default function AdminContactsPage() {
           <div className="modal-backdrop" onClick={() => setShowAddContactModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Добавить контактное лицо</h2>
+                <div className="task-section-header">
+                  <PersonIcon />
+                  <span>Добавить контактное лицо</span>
+                </div>
                 <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddContactModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <label className="dark-label">
-                  ФИО
-                  <input
-                    type="text"
-                    value={newContactName}
-                    onChange={(e) => setNewContactName(e.target.value)}
-                    placeholder="Введите ФИО"
-                    className="dark-select"
-                  />
-                </label>
-                <label className="dark-label">
-                  Должность
-                  <input
-                    type="text"
-                    value={newContactPosition}
-                    onChange={(e) => setNewContactPosition(e.target.value)}
-                    placeholder="Введите должность (необязательно)"
-                    className="dark-select"
-                  />
-                </label>
-                <label className="dark-label">
-                  Телефон
-                  <input
-                    type="text"
-                    value={newContactPhone}
-                    onChange={(e) => setNewContactPhone(e.target.value)}
-                    placeholder="Введите телефон (необязательно)"
-                    className="dark-select"
-                  />
-                </label>
-                <label className="dark-label">
-                  Компания
-                  <CompanyInput
-                    value={newContactCompanyName}
-                    onChange={setNewContactCompanyName}
-                    companies={companies}
-                    placeholder="Выберите компанию"
-                  />
-                </label>
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <PersonIcon />
+                    ФИО:
+                  </div>
+                  <div className="task-field-value">
+                    <input
+                      type="text"
+                      value={newContactName}
+                      onChange={(e) => setNewContactName(e.target.value)}
+                      placeholder="Введите ФИО"
+                      className="dark-select"
+                    />
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <PositionIcon />
+                    Должность:
+                  </div>
+                  <div className="task-field-value">
+                    <input
+                      type="text"
+                      value={newContactPosition}
+                      onChange={(e) => setNewContactPosition(e.target.value)}
+                      placeholder="Введите должность (необязательно)"
+                      className="dark-select"
+                    />
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <PhoneIcon />
+                    Телефон:
+                  </div>
+                  <div className="task-field-value">
+                    <input
+                      type="text"
+                      value={newContactPhone}
+                      onChange={(e) => setNewContactPhone(e.target.value)}
+                      placeholder="Введите телефон (необязательно)"
+                      className="dark-select"
+                    />
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <CompanyIcon />
+                    Компания:
+                  </div>
+                  <div className="task-field-value">
+                    <CompanyInput
+                      value={newContactCompanyName}
+                      onChange={setNewContactCompanyName}
+                      companies={companies}
+                      placeholder="Выберите компанию"
+                    />
+                  </div>
+                </div>
               </div>
               <div className="modal-actions">
                 <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddContact(); }}>

@@ -1,4 +1,3 @@
-// front/src/pages/admin/AdminWorkPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -7,6 +6,44 @@ import {
   adminUpdateWorkType
 } from "../../api";
 import "../../styles/LogistPage.css";
+
+
+const WorkIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+    <path d="M9.972 2.508a.5.5 0 0 0-.16-.556l-.178-.129a5 5 0 0 0-2.076-.783C6.215.862 4.504 1.229 2.84 3.133H1.786a.5.5 0 0 0-.354.147L.146 4.567a.5.5 0 0 0 0 .706l2.571 2.579a.5.5 0 0 0 .708 0l1.286-1.2a.5.5 0 0 0 .146-.353V5.57l8.387 8.873A.5.5 0 0 0 14 14.5l1.5-1.5a.5.5 0 0 0 .017-.689l-9.129-8.63c.747-.456 1.772-.839 3.112-.839a.5.5 0 0 0 .472-.334"/>
+  </svg>
+);
+
+const CategoryIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-body-text" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M0 .5A.5.5 0 0 1 .5 0h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 0 .5m0 2A.5.5 0 0 1 .5 2h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5m9 0a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m-9 2A.5.5 0 0 1 .5 4h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m5 0a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m7 0a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m-12 2A.5.5 0 0 1 .5 6h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5m8 0a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m-8 2A.5.5 0 0 1 .5 8h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m7 0a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5m-7 2a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
+</svg>
+);
+
+const PriceIcon = () => (
+  <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="8" y1="3" x2="8" y2="21" />
+      <path d="M8 3h6a4 4 0 0 1 0 8H8" />
+      <line x1="6" y1="14" x2="14" y2="14" />
+      <line x1="6" y1="18" x2="14" y2="18" />
+    </svg>
+);
+
+const TechSupportIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z" fill="#94a3b8"/>
+  </svg>
+);
 
 function CategoryInput({ value, onChange, categories, placeholder }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -37,7 +74,7 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
   const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div className="searchable-select-container">
       <input
         type="text"
         value={value}
@@ -45,39 +82,15 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
         onFocus={handleInputFocus}
         onBlur={handleInputBlur}
         placeholder={placeholder}
-        className="dark-select"
+        className="searchable-select-input"
       />
       {isOpen && filteredCategories.length > 0 && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
+        <ul className="searchable-select-dropdown">
           {filteredCategories.map((cat, index) => (
             <li
               key={index}
               onClick={() => handleCategorySelect(cat)}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                color: '#e0e0e0',
-                backgroundColor: '#2a2a2a',
-                borderBottom: '1px solid #3a3a3a',
-              }}
+              className="searchable-select-option"
               onMouseDown={(e) => e.preventDefault()}
             >
               {cat}
@@ -86,26 +99,8 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
         </ul>
       )}
       {isOpen && filteredCategories.length === 0 && value.trim() !== '' && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+        <ul className="searchable-select-dropdown">
+          <li className="searchable-select-no-results">
             Ничего не найдено
           </li>
         </ul>
@@ -166,13 +161,19 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Редактировать вид работ</h2>
+          <div className="task-section-header">
+            <WorkIcon />
+            <span>Редактировать вид работ</span>
+          </div>
           <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <div className="form-grid">
-            <label className="dark-label">
-              Название
+          <div className="task-field">
+            <div className="task-field-label">
+              <WorkIcon />
+              Название:
+            </div>
+            <div className="task-field-value">
               <input
                 type="text"
                 value={name}
@@ -180,18 +181,30 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
                 placeholder="Введите название"
                 className="dark-select"
               />
-            </label>
-            <label className="dark-label">
-              Категория
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <CategoryIcon />
+              Категория:
+            </div>
+            <div className="task-field-value">
               <CategoryInput
                 value={category}
                 onChange={setCategory}
                 categories={workTypeCategories}
                 placeholder="Введите или выберите категорию"
               />
-            </label>
-            <label className="dark-label">
-              Цена клиента
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <PriceIcon />
+              Цена клиента:
+            </div>
+            <div className="task-field-value">
               <input
                 type="number"
                 value={clientPrice}
@@ -199,9 +212,15 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
                 placeholder="Введите цену клиента"
                 className="dark-select"
               />
-            </label>
-            <label className="dark-label">
-              Цена монтажника
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <PriceIcon />
+              Цена монтажника:
+            </div>
+            <div className="task-field-value">
               <input
                 type="number"
                 value={montPrice}
@@ -209,16 +228,25 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
                 placeholder="Введите цену монтажника"
                 className="dark-select"
               />
-            </label>
-            <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input
-                type="checkbox"
-                checked={techSuppRequire}
-                onChange={(e) => setTechSuppRequire(e.target.checked)}
-                style={{ margin: 0 }}
-              />
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <TechSupportIcon />
               Требуется проверка тех.специалиста?
-            </label>
+            </div>
+            <div className="task-field-value">
+              <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={techSuppRequire}
+                  onChange={(e) => setTechSuppRequire(e.target.checked)}
+                  style={{ margin: 0 }}
+                />
+                Да
+              </label>
+            </div>
           </div>
         </div>
         <div className="modal-actions">
@@ -388,21 +416,15 @@ export default function AdminWorkPage() {
         {/* === Виды работ (с категориями) === */}
         <div className="section">
   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+    <label className="dark-label" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, sans-serif' }}>
+  Поиск по видам работ
+</label>
     <input
       type="text"
       value={workTypeSearchTerm}
       onChange={(e) => setWorkTypeSearchTerm(e.target.value)}
       placeholder="🔍 Поиск..."
-      style={{
-        width: '100%',
-        padding: '10px',
-        border: '1px solid #444',
-        borderRadius: '4px',
-        backgroundColor: '#1a1a1a',
-        color: '#e0e0e0',
-        fontSize: '14px',
-        boxSizing: 'border-box'
-      }}
+      className="dark-select"
     />
   </div>
   {workTypesByCategory.length > 0 ? (
@@ -413,18 +435,18 @@ export default function AdminWorkPage() {
         return (
           <React.Fragment key={category}>
             <div
-              className="history-item clickable-history-item"
+              className="profile-card clickable-history-item"
               style={{
-                padding: "10px",
-                borderBottom: "1px solid #30363d",
-                backgroundColor: "#0d1117",
+                padding: "12px",
                 cursor: "pointer",
                 borderRadius: "8px",
                 transition: "background-color 0.2s ease",
+                border: "1px solid rgba(255,255,255,0.08)",
+                backgroundColor: "#1b2c3c",
               }}
               onClick={() => toggleCategory(category)}
             >
-              <p style={{ margin: "0", fontWeight: "bold", fontSize: "1em", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: "0", fontWeight: "bold", fontSize: "0.9em", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{category}</span>
                 <span>{isExpanded ? '▼' : '▶'}</span>
               </p>
@@ -434,7 +456,7 @@ export default function AdminWorkPage() {
                 {workTypesInCat.map(wt => (
                   <div
                     key={wt.id}
-                    className="history-item clickable-history-item"
+                    className="profile-card"
                     style={{
                       padding: "8px",
                       borderBottom: "1px solid #2a2a2a",
@@ -470,13 +492,19 @@ export default function AdminWorkPage() {
           <div className="modal-backdrop" onClick={() => setShowAddWorkTypeModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Добавить вид работ</h2>
+                <div className="task-section-header">
+                  <WorkIcon />
+                  <span>Добавить вид работ</span>
+                </div>
                 <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <div className="form-grid">
-                  <label className="dark-label">
-                    Название
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <WorkIcon />
+                    Название:
+                  </div>
+                  <div className="task-field-value">
                     <input
                       type="text"
                       value={newWorkTypeName}
@@ -484,18 +512,30 @@ export default function AdminWorkPage() {
                       placeholder="Введите название"
                       className="dark-select"
                     />
-                  </label>
-                  <label className="dark-label">
-                    Категория
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <CategoryIcon />
+                    Категория:
+                  </div>
+                  <div className="task-field-value">
                     <CategoryInput
                       value={newWorkTypeCategory}
                       onChange={setNewWorkTypeCategory}
                       categories={workTypeCategories}
                       placeholder="Введите или выберите категорию"
                     />
-                  </label>
-                  <label className="dark-label">
-                    Цена клиента
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <PriceIcon />
+                    Цена клиента:
+                  </div>
+                  <div className="task-field-value">
                     <input
                       type="number"
                       value={newWorkTypeClientPrice}
@@ -503,9 +543,15 @@ export default function AdminWorkPage() {
                       placeholder="Введите цену клиента"
                       className="dark-select"
                     />
-                  </label>
-                  <label className="dark-label">
-                    Цена монтажника
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <PriceIcon />
+                    Цена монтажника:
+                  </div>
+                  <div className="task-field-value">
                     <input
                       type="number"
                       value={newWorkTypeMontPrice}
@@ -513,21 +559,30 @@ export default function AdminWorkPage() {
                       placeholder="Введите цену монтажника"
                       className="dark-select"
                     />
-                  </label>
-                  <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <input
-                      type="checkbox"
-                      checked={newWorkTypeTechSupp}
-                      onChange={(e) => setNewWorkTypeTechSupp(e.target.checked)}
-                      style={{ margin: 0 }}
-                    />
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <TechSupportIcon />
                     Требуется проверка тех.специалиста?
-                  </label>
+                  </div>
+                  <div className="task-field-value">
+                    <label className="dark-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={newWorkTypeTechSupp}
+                        onChange={(e) => setNewWorkTypeTechSupp(e.target.checked)}
+                        style={{ margin: 0 }}
+                      />
+                      Да
+                    </label>
+                  </div>
                 </div>
-                <div className="modal-actions">
-                  <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>Отмена</button>
-                  <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddWorkType(); }}>Сохранить</button>
-                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={(e) => { e.stopPropagation(); setShowAddWorkTypeModal(false); }}>Отмена</button>
+                <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddWorkType(); }}>Сохранить</button>
               </div>
             </div>
           </div>

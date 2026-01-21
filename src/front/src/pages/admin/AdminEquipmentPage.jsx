@@ -1,4 +1,3 @@
-// front/src/pages/admin/AdminEquipmentPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -7,6 +6,38 @@ import {
   adminUpdateEquipment
 } from "../../api";
 import "../../styles/LogistPage.css";
+
+
+const EquipmentIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+    <path d="M9.972 2.508a.5.5 0 0 0-.16-.556l-.178-.129a5 5 0 0 0-2.076-.783C6.215.862 4.504 1.229 2.84 3.133H1.786a.5.5 0 0 0-.354.147L.146 4.567a.5.5 0 0 0 0 .706l2.571 2.579a.5.5 0 0 0 .708 0l1.286-1.2a.5.5 0 0 0 .146-.353V5.57l8.387 8.873A.5.5 0 0 0 14 14.5l1.5-1.5a.5.5 0 0 0 .017-.689l-9.129-8.63c.747-.456 1.772-.839 3.112-.839a.5.5 0 0 0 .472-.334"/>
+  </svg>
+);
+
+const CategoryIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-body-text" viewBox="0 0 16 16">
+  <path fill-rule="evenodd" d="M0 .5A.5.5 0 0 1 .5 0h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 0 .5m0 2A.5.5 0 0 1 .5 2h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5m9 0a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m-9 2A.5.5 0 0 1 .5 4h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m5 0a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m7 0a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m-12 2A.5.5 0 0 1 .5 6h6a.5.5 0 0 1 0 1h-6a.5.5 0 0 1-.5-.5m8 0a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m-8 2A.5.5 0 0 1 .5 8h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5m7 0a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5m-7 2a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5"/>
+</svg>
+);
+
+const PriceIcon = () => (
+  <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="8" y1="3" x2="8" y2="21" />
+      <path d="M8 3h6a4 4 0 0 1 0 8H8" />
+      <line x1="6" y1="14" x2="14" y2="14" />
+      <line x1="6" y1="18" x2="14" y2="18" />
+    </svg>
+);
 
 function CategoryInput({ value, onChange, categories, placeholder }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -37,7 +68,7 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
   const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
   return (
-    <div style={{ position: 'relative', width: '100%' }}>
+    <div className="searchable-select-container">
       <input
         type="text"
         value={value}
@@ -45,39 +76,15 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
         onFocus={handleInputFocus}
         onBlur={handleInputBlur}
         placeholder={placeholder}
-        className="dark-select"
+        className="searchable-select-input"
       />
       {isOpen && filteredCategories.length > 0 && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
+        <ul className="searchable-select-dropdown">
           {filteredCategories.map((cat, index) => (
             <li
               key={index}
               onClick={() => handleCategorySelect(cat)}
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                color: '#e0e0e0',
-                backgroundColor: '#2a2a2a',
-                borderBottom: '1px solid #3a3a3a',
-              }}
+              className="searchable-select-option"
               onMouseDown={(e) => e.preventDefault()}
             >
               {cat}
@@ -86,26 +93,8 @@ function CategoryInput({ value, onChange, categories, placeholder }) {
         </ul>
       )}
       {isOpen && filteredCategories.length === 0 && value.trim() !== '' && (
-        <ul
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            zIndex: 100,
-            maxHeight: '200px',
-            overflowY: 'auto',
-            listStyle: 'none',
-            margin: 0,
-            padding: 0,
-            backgroundColor: '#1a1a1a',
-            border: '1px solid #444',
-            borderTop: 'none',
-            borderRadius: '0 0 4px 4px',
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.5)',
-          }}
-        >
-          <li style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic' }}>
+        <ul className="searchable-select-dropdown">
+          <li className="searchable-select-no-results">
             Ничего не найдено
           </li>
         </ul>
@@ -122,11 +111,19 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
 
   const handleSubmit = async () => {
     if (!name.trim() || !category.trim() || price === null) {
-      alert("Заполните все обязательные поля");
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Заполните все обязательные поля");
+      } else {
+        alert("Заполните все обязательные поля");
+      }
       return;
     }
     if (isNaN(price) || price <= 0) {
-      alert("Цена должна быть положительным числом");
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert("Цена должна быть положительным числом");
+      } else {
+        alert("Цена должна быть положительным числом");
+      }
       return;
     }
 
@@ -140,7 +137,12 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
       onSave(updated);
       onClose();
     } catch (err) {
-      alert(err.response?.data?.detail || "Ошибка обновления оборудования");
+      const errorMsg = err.response?.data?.detail || "Ошибка обновления оборудования";
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
+      } else {
+        alert(`Ошибка: ${errorMsg}`);
+      }
     } finally {
       setSaving(false);
     }
@@ -150,13 +152,19 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Редактировать оборудование</h2>
+          <div className="task-section-header">
+            <EquipmentIcon />
+            <span>Редактировать оборудование</span>
+          </div>
           <button className="close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          <div className="form-grid">
-            <label className="dark-label">
-              Название
+          <div className="task-field">
+            <div className="task-field-label">
+              <EquipmentIcon />
+              Название:
+            </div>
+            <div className="task-field-value">
               <input
                 type="text"
                 value={name}
@@ -164,18 +172,30 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
                 placeholder="Введите название"
                 className="dark-select"
               />
-            </label>
-            <label className="dark-label">
-              Категория
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <CategoryIcon />
+              Категория:
+            </div>
+            <div className="task-field-value">
               <CategoryInput
                 value={category}
                 onChange={setCategory}
                 categories={categories}
                 placeholder="Введите или выберите категорию"
               />
-            </label>
-            <label className="dark-label">
-              Цена
+            </div>
+          </div>
+          
+          <div className="task-field">
+            <div className="task-field-label">
+              <PriceIcon />
+              Цена:
+            </div>
+            <div className="task-field-value">
               <input
                 type="number"
                 value={price}
@@ -183,7 +203,7 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
                 placeholder="Введите цену"
                 className="dark-select"
               />
-            </label>
+            </div>
           </div>
         </div>
         <div className="modal-actions">
@@ -349,21 +369,15 @@ export default function AdminEquipmentPage() {
         {/* === Оборудование === */}
         <div className="section">
   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+    <label className="dark-label" style={{ fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, sans-serif' }}>
+  Поиск по оборудованию
+</label>
     <input
       type="text"
       value={equipmentSearchTerm}
       onChange={(e) => setEquipmentSearchTerm(e.target.value)}
       placeholder="🔍 Поиск..."
-      style={{
-        width: '100%',
-        padding: '10px',
-        border: '1px solid #444',
-        borderRadius: '4px',
-        backgroundColor: '#1a1a1a',
-        color: '#e0e0e0',
-        fontSize: '14px',
-        boxSizing: 'border-box'
-      }}
+      className="dark-select"
     />
   </div>
   {equipmentByCategory.length > 0 ? (
@@ -374,18 +388,18 @@ export default function AdminEquipmentPage() {
         return (
           <React.Fragment key={category}>
             <div
-              className="history-item clickable-history-item"
+              className="profile-card clickable-history-item"
               style={{
-                padding: "10px",
-                borderBottom: "1px solid #30363d",
-                backgroundColor: "#0d1117",
+                padding: "12px",
                 cursor: "pointer",
                 borderRadius: "8px",
                 transition: "background-color 0.2s ease",
+                border: "1px solid rgba(255,255,255,0.08)",
+                backgroundColor: "#1b2c3c",
               }}
               onClick={() => toggleEquipmentCategory(category)}
             >
-              <p style={{ margin: "0", fontWeight: "bold", fontSize: "1em", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: "0", fontWeight: "bold", fontSize: "0.9em", display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{category}</span>
                 <span>{isExpanded ? '▼' : '▶'}</span>
               </p>
@@ -395,7 +409,7 @@ export default function AdminEquipmentPage() {
                 {equipmentInCat.map(eq => (
                   <div
                     key={eq.id}
-                    className="history-item clickable-history-item"
+                    className="profile-card"
                     style={{
                       padding: "8px",
                       borderBottom: "1px solid #2a2a2a",
@@ -431,13 +445,19 @@ export default function AdminEquipmentPage() {
           <div className="modal-backdrop" onClick={() => setShowAddEquipmentModal(false)}>
             <div className="modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2>Добавить оборудование</h2>
+                <div className="task-section-header">
+                  <EquipmentIcon />
+                  <span>Добавить оборудование</span>
+                </div>
                 <button className="close" onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>×</button>
               </div>
               <div className="modal-body">
-                <div className="form-grid">
-                  <label className="dark-label">
-                    Название
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <EquipmentIcon />
+                    Название:
+                  </div>
+                  <div className="task-field-value">
                     <input
                       type="text"
                       value={newEquipmentName}
@@ -445,18 +465,30 @@ export default function AdminEquipmentPage() {
                       placeholder="Введите название"
                       className="dark-select"
                     />
-                  </label>
-                  <label className="dark-label">
-                    Категория
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <CategoryIcon />
+                    Категория:
+                  </div>
+                  <div className="task-field-value">
                     <CategoryInput
                       value={newEquipmentCategory}
                       onChange={setNewEquipmentCategory}
                       categories={categories}
                       placeholder="Введите или выберите категорию"
                     />
-                  </label>
-                  <label className="dark-label">
-                    Цена
+                  </div>
+                </div>
+                
+                <div className="task-field">
+                  <div className="task-field-label">
+                    <PriceIcon />
+                    Цена:
+                  </div>
+                  <div className="task-field-value">
                     <input
                       type="number"
                       value={newEquipmentPrice}
@@ -464,12 +496,12 @@ export default function AdminEquipmentPage() {
                       placeholder="Введите цену"
                       className="dark-select"
                     />
-                  </label>
+                  </div>
                 </div>
-                <div className="modal-actions">
-                  <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>Отмена</button>
-                  <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddEquipment(); }}>Сохранить</button>
-                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={(e) => { e.stopPropagation(); setShowAddEquipmentModal(false); }}>Отмена</button>
+                <button className="gradient-button" onClick={(e) => { e.stopPropagation(); handleAddEquipment(); }}>Сохранить</button>
               </div>
             </div>
           </div>

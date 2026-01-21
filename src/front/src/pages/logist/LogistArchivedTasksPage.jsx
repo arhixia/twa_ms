@@ -113,7 +113,7 @@ function handleUnarchive(taskId) {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1>Архивные задачи</h1>
+            <h1 className="page-title">Архивные заявки</h1>
         </div>
 
         <div className="cards">
