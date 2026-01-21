@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -503,48 +504,77 @@ async def get_attachment(
 
     s3 = get_s3_client()
     try:
-        # Получаем объект из S3 напрямую
+        # Получаем объект из S3 с автоматическим управлением соединением
         async with s3.get_client() as client:
             response = await client.get_object(Bucket=s3.bucket_name, Key=full_path)
             body_stream = response["Body"]
 
             # Получаем метаданные
             content_type = response.get("ContentType", "application/octet-stream")
-            # content_length = int(response.get("ContentLength", 0)) # Не используем вручную
+            content_length = response.get("ContentLength", 0)
             last_modified = response.get("LastModified")
 
-            # Функция для потоковой передачи данных
+            # Функция для потоковой передачи данных с обработкой отключения клиента
             async def iter_content():
                 try:
-                    async for chunk in body_stream:
-                        yield chunk
-                except RuntimeError as e:
-                    # Проверяем, связана ли ошибка с закрытием соединения
-                    if "Connection closed." in str(e):
-                        print(f"[DEBUG] Client disconnected during streaming for {full_path}: {e}")
-                        # Просто выходим из генератора, если клиент отключился
-                        return
-                    else:
-                        # Если другая Runtime ошибка, пробрасываем её дальше
-                        raise
-                except Exception as e:
-                    # Логируем любые другие исключения, которые могут возникнуть при чтении из S3
-                    print(f"[ERROR] Error reading from S3 during streaming for {full_path}: {e}")
-                    # Пробрасываем исключение, чтобы FastAPI обработал его должным образом
-                    raise
+                    buffer = b""
+                    buffer_size = 64 * 1024  # 64KB буфер
                     
+                    async for chunk in body_stream:
+                        buffer += chunk
+                        
+                        # Отправляем данные порциями
+                        if len(buffer) >= buffer_size:
+                            try:
+                                yield buffer
+                                buffer = b""
+                            except asyncio.CancelledError:
+                                print(f"[DEBUG] Request cancelled during streaming for {full_path}")
+                                break
+                            except ConnectionResetError:
+                                print(f"[DEBUG] Client connection reset during streaming for {full_path}")
+                                break
+                            except Exception as e:
+                                if "Connection closed" in str(e) or "Broken pipe" in str(e):
+                                    print(f"[DEBUG] Client disconnected during streaming for {full_path}: {e}")
+                                    break
+                                else:
+                                    raise
+                    
+                    # Отправляем оставшиеся данные
+                    if buffer:
+                        try:
+                            yield buffer
+                        except asyncio.CancelledError:
+                            print(f"[DEBUG] Request cancelled during final streaming for {full_path}")
+                        except ConnectionResetError:
+                            print(f"[DEBUG] Client connection reset during final streaming for {full_path}")
+                        except Exception as e:
+                            if "Connection closed" in str(e) or "Broken pipe" in str(e):
+                                print(f"[DEBUG] Client disconnected during final streaming for {full_path}: {e}")
+                
+                except Exception as e:
+                    print(f"[ERROR] Error reading from S3 during streaming for {full_path}: {e}")
+                    raise
+
+            headers = {}
+            if content_length:
+                headers["Content-Length"] = str(content_length)
+            if last_modified:
+                headers["Last-Modified"] = last_modified.isoformat()
+            
+            # Устанавливаем таймауты для более стабильной передачи
+            headers.update({
+                "Cache-Control": "public, max-age=3600",  # Кэширование на 1 час
+                "Connection": "keep-alive"
+            })
+
             return StreamingResponse(
                 iter_content(),
                 media_type=content_type,
-                headers={
-                    # "Content-Length": str(content_length), # Убираем это
-                    "Last-Modified": last_modified.isoformat() if last_modified else "" if last_modified else ""
-                    # Добавьте другие заголовки, если нужно, но не Content-Length
-                }
+                headers=headers
             )
-    except client.exceptions.NoSuchKey:
-        print(f"[DEBUG] Object {full_path} not found in S3")
-        raise HTTPException(status_code=404, detail="Файл не найден в S3")
+            
     except Exception as e:
         print(f"[DEBUG] get_attachment: S3 get failed for {full_path}: {e}")
         raise HTTPException(status_code=500, detail="Ошибка получения файла из S3")

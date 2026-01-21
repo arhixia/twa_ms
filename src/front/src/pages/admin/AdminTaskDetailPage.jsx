@@ -15,6 +15,8 @@ import {
 } from '../../api'; // Убедитесь, что путь к API корректен
 import "../../styles/LogistPage.css"; // Используем общие стили
 import ImageModal from '../../components/ImageModal.jsx';
+import LazyImage from "../../components/LazyImage";
+
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -1627,14 +1629,15 @@ export default function AdminTaskDetailPage() {
                   ? getAttachmentUrl(att.thumb_key)
                   : originalUrl;
 
-                return (
+                 return (
                   <div
                     key={att.id}
-                    style={{ cursor: 'zoom-in' }} // Меняем курсор
-                     onClick={() => handleImageClick(originalUrl, reportAttachments)}
+                    style={{ cursor: 'zoom-in' }}
+                    onClick={() => handleImageClick(originalUrl, reportAttachments)}
                   >
-                    <img
-                      src={thumbUrl}
+                    <LazyImage
+                      src={originalUrl} 
+                      thumbSrc={thumbUrl} 
                       alt={`Report attachment ${idx}`}
                       style={{ maxHeight: 100 }}
                     />

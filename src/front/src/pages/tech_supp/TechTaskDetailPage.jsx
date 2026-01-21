@@ -14,6 +14,8 @@ import {
 } from "../../api";
 import "../../styles/LogistPage.css";
 import ImageModal from "../../components/ImageModal";
+import LazyImage from "../../components/LazyImage";
+
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -718,14 +720,15 @@ export default function TechTaskDetailPage() {
                   ? getAttachmentUrl(att.thumb_key)
                   : originalUrl;
 
-                return (
+                 return (
                   <div
                     key={att.id}
                     style={{ cursor: 'zoom-in' }}
                     onClick={() => handleImageClick(originalUrl, reportAttachments)}
                   >
-                    <img
-                      src={thumbUrl}
+                    <LazyImage
+                      src={originalUrl} 
+                      thumbSrc={thumbUrl} 
                       alt={`Report attachment ${idx}`}
                       style={{ maxHeight: 100 }}
                     />

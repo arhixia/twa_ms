@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['guam-resolve-gotten-ranges.trycloudflare.com']
+    allowedHosts: ['call-pen-inns-off.trycloudflare.com']
   },
 })
 

@@ -19,7 +19,7 @@ import {
 import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
 import ImageModal from "../../components/ImageModal";
-
+import LazyImage from "../../components/LazyImage";
 // --- Новый компонент: Модальное окно изменения статуса ---
 function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, taskWorkTypeIds, allWorkTypes }) {
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -1183,14 +1183,15 @@ export default function MontajnikTaskDetailPage() {
                   ? getAttachmentUrl(att.thumb_key)
                   : originalUrl;
 
-                return (
+                 return (
                   <div
                     key={att.id}
                     style={{ cursor: 'zoom-in' }}
                     onClick={() => handleImageClick(originalUrl, reportAttachments)}
                   >
-                    <img
-                      src={thumbUrl}
+                    <LazyImage
+                      src={originalUrl} 
+                      thumbSrc={thumbUrl} 
                       alt={`Report attachment ${idx}`}
                       style={{ maxHeight: 100 }}
                     />

@@ -11,6 +11,8 @@ import {
 } from "../../api"; // Добавляем импорты справочников
 import "../../styles/LogistPage.css";
 import ImageModal from "../../components/ImageModal"; // <--- Импортируем компонент
+import LazyImage from "../../components/LazyImage"; // Импортируем LazyImage
+
 
 // --- НОВОЕ: Хук для загрузки вложений отчёта ---
 function useReportAttachments(reportId) {
@@ -665,14 +667,15 @@ const REPORT_APPROVAL_TRANSLATIONS = {
                   ? getAttachmentUrl(att.thumb_key)
                   : originalUrl;
                 
-                return (
+                 return (
                   <div
                     key={att.id}
                     style={{ cursor: 'zoom-in' }}
                     onClick={() => handleImageClick(originalUrl, reportAttachments)}
                   >
-                    <img
-                      src={thumbUrl}
+                    <LazyImage
+                      src={originalUrl} 
+                      thumbSrc={thumbUrl} 
                       alt={`Report attachment ${idx}`}
                       style={{ maxHeight: 100 }}
                     />

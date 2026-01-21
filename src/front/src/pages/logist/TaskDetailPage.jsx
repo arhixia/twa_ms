@@ -18,6 +18,7 @@ import {
 import "../../styles/LogistPage.css";
 import useAuthStore from "@/store/useAuthStore";
 import ImageModal from "../../components/ImageModal";
+import LazyImage from "../../components/LazyImage";
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -1793,7 +1794,7 @@ async function handleApproveReport(taskId, reportId) {
           <p><b>Комментарий монтажника:</b> {displayComment}</p>
           
           {/* Вложения */}
-          {reportAttachmentsLoading ? (
+                    {reportAttachmentsLoading ? (
             <p>Загрузка вложений...</p>
           ) : reportAttachments.length > 0 ? (
             <div className="attached-list">
@@ -1806,11 +1807,12 @@ async function handleApproveReport(taskId, reportId) {
                 return (
                   <div
                     key={att.id}
-                    style={{ cursor: 'zoom-in' }} // Меняем курсор
+                    style={{ cursor: 'zoom-in' }}
                     onClick={() => handleImageClick(originalUrl, reportAttachments)}
                   >
-                    <img
-                      src={thumbUrl}
+                    <LazyImage
+                      src={originalUrl} 
+                      thumbSrc={thumbUrl} 
                       alt={`Report attachment ${idx}`}
                       style={{ maxHeight: 100 }}
                     />
