@@ -391,33 +391,6 @@ async def list_report_attachments(
     if not report:
         raise HTTPException(status_code=404, detail="Отчёт не найден")
 
-    task = report.task
-
-    # Проверить права доступа: автор отчёта, создатель задачи (логист), исполнитель (монтажник), админ
-    allowed = False
-    if report.author_id == getattr(current_user, "id", None):
-        allowed = True
-    elif task.created_by == getattr(current_user, "id", None): # логист
-        allowed = True
-    elif task.assigned_user_id == getattr(current_user, "id", None): # монтажник
-        allowed = True
-    elif getattr(current_user, "role", None) == Role.admin:
-        allowed = True
-    elif getattr(current_user, "role", None) == Role.tech_supp: # тех.спец может смотреть, если его просят
-        # Проверим, требуется ли тех.проверка для задачи
-        # Загрузим работы задачи
-        task_works_res = await db.execute(
-            select(TaskWork).where(TaskWork.task_id == task.id).options(selectinload(TaskWork.work_type))
-        )
-        task_works = task_works_res.scalars().all()
-        requires_tech_review = any(tw.work_type and tw.work_type.tech_supp_require for tw in task_works)
-        if requires_tech_review:
-            allowed = True
-
-    if not allowed:
-        raise HTTPException(status_code=403, detail="Forbidden")
-
-    # Загрузить вложения отчёта
     res = await db.execute(
         select(TaskAttachment)
         .where(TaskAttachment.report_id == report_id, TaskAttachment.deleted_at.is_(None), TaskAttachment.processed == True)
