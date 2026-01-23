@@ -2128,14 +2128,14 @@ async def logist_filter_tasks(
         query = query.where(combined_search_condition)
 
     status_order = case(
-        (Task.status == TaskStatus.new, 1),
-        (Task.status == TaskStatus.assigned, 2),
-        (Task.status == TaskStatus.accepted, 3),
-        (Task.status == TaskStatus.on_the_road, 4),
-        (Task.status == TaskStatus.on_site, 5),
-        (Task.status == TaskStatus.started, 6),
-        (Task.status == TaskStatus.inspection, 7),
-        (Task.status == TaskStatus.returned, 8),
+        (Task.status == TaskStatus.inspection, 1),
+        (Task.status == TaskStatus.returned, 2),
+        (Task.status == TaskStatus.new, 3),
+        (Task.status == TaskStatus.assigned, 4),
+        (Task.status == TaskStatus.accepted, 5),
+        (Task.status == TaskStatus.on_the_road, 6),
+        (Task.status == TaskStatus.on_site, 7),
+        (Task.status == TaskStatus.started, 8),
         else_=99
     )
     query = query.order_by(status_order)
