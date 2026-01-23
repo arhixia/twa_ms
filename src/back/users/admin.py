@@ -3,7 +3,7 @@ from decimal import Decimal
 import enum
 import json
 from fastapi import APIRouter, Body,Depends,HTTPException, Query,status
-from sqlalchemy import and_, desc, func, or_, select, update, delete
+from sqlalchemy import and_, case, desc, func, or_, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
@@ -258,7 +258,7 @@ async def admin_update_task(
         .options(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company) # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company) #   Загружаем контактное лицо и компанию
         )
     )
     task = result.scalars().first()
@@ -786,7 +786,7 @@ async def admin_list_tasks(
             Task.is_draft != True,
             Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
             )
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем контактное лицо и компанию
+        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) #   Загружаем контактное лицо и компанию
     )
     tasks = q.scalars().all()
     
@@ -919,6 +919,22 @@ async def admin_filter_tasks(
         combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
+    # Сортировка по приоритету статуса
+    status_order = case(
+        (Task.status == TaskStatus.new, 1),
+        (Task.status == TaskStatus.assigned, 2),
+        (Task.status == TaskStatus.accepted, 3),
+        (Task.status == TaskStatus.on_the_road, 4),
+        (Task.status == TaskStatus.on_site, 5),
+        (Task.status == TaskStatus.started, 6),
+        (Task.status == TaskStatus.inspection, 7),
+        (Task.status == TaskStatus.returned, 8),
+        (Task.status == TaskStatus.completed, 9),
+        
+        else_=99
+    )
+    query = query.order_by(status_order)
+
     query = query.options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
@@ -985,7 +1001,7 @@ async def admin_get_task_by_id(
             selectinload(Task.history),
             selectinload(Task.reports),
             selectinload(Task.assigned_user),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company)  #   Загружаем контактное лицо и компанию
         )
         .where(Task.id == task_id, Task.is_draft != True)
     )
@@ -1050,8 +1066,8 @@ async def admin_get_task_by_id(
         "id": task.id,
         "company_id" : company_id,
         "contact_person_id": contact_person_id,
-        "company_name": company_name,  # ✅ Новое
-        "contact_person_name": contact_person_name,  # ✅ Новое
+        "company_name": company_name,  #   Новое
+        "contact_person_name": contact_person_name,  #   Новое
         "contact_person_phone": task.contact_person_phone,
         "vehicle_info": task.vehicle_info or None,
         "gos_number": task.gos_number or None,
@@ -1446,7 +1462,7 @@ async def admin_list_completed_tasks(
     q = await db.execute(
         select(Task)
         .where(Task.status == TaskStatus.completed)
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) # ✅ Загружаем контактное лицо и компанию
+        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) #   Загружаем контактное лицо и компанию
     )
     tasks = q.scalars().all()
     
@@ -1647,12 +1663,12 @@ async def admin_completed_task_detail(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history),
             selectinload(Task.reports),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), #   Загружаем контактное лицо и компанию
             selectinload(Task.assigned_user)
         )
         .where(
             Task.id == task_id,
-            Task.status == TaskStatus.completed      # ✅ И что она завершена
+            Task.status == TaskStatus.completed      #   И что она завершена
         )
     )
     task = res.scalars().first()

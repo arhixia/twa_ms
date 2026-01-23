@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['call-pen-inns-off.trycloudflare.com']
+    allowedHosts: ['asthma-score-monitors-harbour.trycloudflare.com']
   },
 })
 

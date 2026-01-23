@@ -27,7 +27,7 @@ from back.db.models import (
 from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg, UpdateCompanyRequest, UpdateContactPersonRequest,require_roles
 from back.utils.notify import notify_broadcast_task, notify_task_assignment, notify_user
 from datetime import datetime, timezone
-from sqlalchemy import and_, delete, desc, func, or_, select
+from sqlalchemy import and_, case, delete, desc, func, or_, select
 from sqlalchemy.orm import selectinload
 import json
 import logging
@@ -340,7 +340,7 @@ async def create_draft(
         assigned_user_id=data.get("assigned_user_id"),
         logist_contact_id=getattr(current_user, "telegram_id", None),
 
-        # ✅ Устанавливаем рассчитанные цены по НОВОЙ логике
+        
         client_price=final_client_price,
         montajnik_reward=final_montajnik_reward,
 
@@ -383,7 +383,7 @@ async def create_draft(
         db.add(TaskWork(
             task_id=task.id,
             work_type_id=wt_id,
-            quantity=count # ✅ Учитываем количество
+            quantity=count 
         ))
 
     await db.commit()
@@ -422,19 +422,19 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
             "id": te.id, # ID записи TaskEquipment
             "equipment_id": te.equipment_id,
             "equipment_name": te.equipment.name, # Для удобства отображения
-            "serial_number": te.serial_number, # ✅ Новое поле
-            "quantity": te.quantity, # ✅ Новое поле
+            "serial_number": te.serial_number, 
+            "quantity": te.quantity, 
         }
         for te in task.equipment_links
     ]
 
-    # ✅ Формируем список work_types как TaskWorkItem
+    #   Формируем список work_types как TaskWorkItem
     work_type_items = [
         {
             "id": tw.id, # ID записи TaskWork
             "work_type_id": tw.work_type_id,
             "work_type_name": tw.work_type.name, # Для удобства отображения
-            "quantity": tw.quantity, # ✅ Новое поле
+            "quantity": tw.quantity, #   Новое поле
         }
         for tw in task.works
     ]
@@ -490,7 +490,7 @@ async def patch_draft(
         # Загружаем связи для получения старых значений (для расчёта цен и сравнения)
         .options(selectinload(Task.works).selectinload(TaskWork.work_type))
         .options(selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment))
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company))  # ✅ Загружаем компанию
+        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company))  #   Загружаем компанию
     )
     task = result.scalars().first()
     if not task:
@@ -506,7 +506,7 @@ async def patch_draft(
     old_contact_person_phone = task.contact_person.phone if task.contact_person else None
     old_assigned_user_id = task.assigned_user_id # <--- Добавлено
     old_assignment_type = task.assignment_type # <--- Добавлено
-    # ✅ Сохраняем старые цены для проверки изменений
+    #   Сохраняем старые цены для проверки изменений
     old_client_price = task.client_price
     old_montajnik_reward = task.montajnik_reward
    
@@ -559,7 +559,7 @@ async def patch_draft(
     # --- Обновление основных полей задачи (кроме связей) ---
     changed = []
     for key, value in data.items():
-        # ✅ Пропускаем equipment, work_types, contact_person_id, gos_number - они обрабатываются отдельно
+        #   Пропускаем equipment, work_types, contact_person_id, gos_number - они обрабатываются отдельно
         if key in {"equipment", "work_types", "contact_person_id","assigned_user_id", "gos_number"}:
             continue
         if value is not None:
@@ -572,7 +572,7 @@ async def patch_draft(
                 changed.append((key, old, value))
                 logger.info(f"Поле '{key}' помечено как изменённое: {old_cmp} -> {new_cmp}")
 
-    # ✅ Устанавливаем gos_number, если пришло
+    #   Устанавливаем gos_number, если пришло
     if gos_number is not None: # Позволяем установить null
         setattr(task, "gos_number", gos_number)
 
@@ -656,7 +656,7 @@ async def patch_draft(
             wt = res.scalars().first()
             if not wt:
                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            # ✅ Создаем TaskWork с quantity=count
+            #   Создаем TaskWork с quantity=count
             db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
         
         changed.append(("work_types", "old_work_set", work_types_data))
@@ -1002,7 +1002,7 @@ async def publish_task(
             assigned_user_id=_normalize_assigned_user_id(data.get("assigned_user_id")),
             logist_contact_id=getattr(current_user, "telegram_id", None),
 
-            # ✅ Устанавливаем рассчитанные цены по НОВОЙ логике
+            #   Устанавливаем рассчитанные цены по НОВОЙ логике
             client_price=final_client_price,
             montajnik_reward=final_montajnik_reward,
 
@@ -1664,9 +1664,9 @@ async def review_report(
         select(Task)
         .where(Task.id == task_id)
         .options(
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
-            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
-            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), #   Загружаем компанию
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), #   Загружаем оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type) #   Загружаем виды работ
         )
     )
     task = t_res.scalars().first()
@@ -1834,7 +1834,7 @@ async def review_report(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
                 action=action, # action - текущий статус задачи
-                event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
+                event_type=TaskHistoryEventType.report_status_changed, #   Новый тип
                 comment=hist_comment,
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,
@@ -1952,7 +1952,7 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
 
         out.append({
             "id": t.id,
-            "client_name": client_name,  # ✅ Только название компании или ИП
+            "client_name": client_name,  #   Только название компании или ИП
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "location": t.location,
@@ -2003,12 +2003,12 @@ async def get_all_dafts(db: AsyncSession = Depends(get_db), current_user=Depends
 
         out.append({
             "id": t.id,
-            "client_name": client_name,  # ✅ Используем client_name
+            "client_name": client_name,  #   Используем client_name
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "status": t.status.value if t.status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
-            "equipment": equipment,  # ✅ Добавляем оборудование
+            "equipment": equipment,  #   Добавляем оборудование
         })
     
     return out
@@ -2120,14 +2120,26 @@ async def logist_filter_tasks(
             assigned_user_exists,
             creator_exists
         ]
-        
+
         if search.isdigit():
             conditions.append(Task.id == int(search))
-        
+
         combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
-    # Добавляем загрузку оборудования и связанных сущностей
+    status_order = case(
+        (Task.status == TaskStatus.new, 1),
+        (Task.status == TaskStatus.assigned, 2),
+        (Task.status == TaskStatus.accepted, 3),
+        (Task.status == TaskStatus.on_the_road, 4),
+        (Task.status == TaskStatus.on_site, 5),
+        (Task.status == TaskStatus.started, 6),
+        (Task.status == TaskStatus.inspection, 7),
+        (Task.status == TaskStatus.returned, 8),
+        else_=99
+    )
+    query = query.order_by(status_order)
+
     query = query.options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
@@ -2142,7 +2154,6 @@ async def logist_filter_tasks(
         contact_person_name = t.contact_person.name if t.contact_person else None
         client_name = company_name or contact_person_name or "—"
 
-        # Формируем список оборудования
         equipment = [
             {
                 "equipment_id": te.equipment_id,
@@ -2171,7 +2182,7 @@ async def logist_filter_tasks(
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward else None,
             "is_draft": t.is_draft,
             "photo_required": t.photo_required,
-            "equipment": equipment,  # ✅ Добавляем оборудование
+            "equipment": equipment,
         })
 
     return out
@@ -2396,7 +2407,7 @@ async def task_detail(
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history).selectinload(TaskHistory.user), # Загрузим и пользователя истории, если нужно
-            selectinload(Task.reports), # ✅ УБРАНО .selectinload(TaskReport.user)
+            selectinload(Task.reports), #   УБРАНО .selectinload(TaskReport.user)
             # Загружаем контактное лицо и компанию для получения company_id и contact_person_id
             selectinload(Task.contact_person).selectinload(ContactPerson.company),
             selectinload(Task.assigned_user)
@@ -2464,8 +2475,8 @@ async def task_detail(
     # Формируем ответ, включая company_id и contact_person_id
     return {
         "id": task.id,
-        "company_id": company_id,  # ✅ Добавлено
-        "contact_person_id": contact_person_id,  # ✅ Добавлено
+        "company_id": company_id,  #   Добавлено
+        "contact_person_id": contact_person_id,  #   Добавлено
         "company_name": company_name,
         "contact_person_name": contact_person_name,
         "contact_person_phone": task.contact_person_phone,
@@ -2648,8 +2659,8 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
 
     # Загружаем задачи и *предварительно* загружаем связанные объекты company и contact_person
     q = select(Task).options(
-        selectinload(Task.company), # ✅ Загружаем компанию
-        selectinload(Task.contact_person) # ✅ Загружаем контактное лицо
+        selectinload(Task.company), #   Загружаем компанию
+        selectinload(Task.contact_person) #   Загружаем контактное лицо
     ).where(
         Task.created_by == current_user.id,
         Task.status == TaskStatus.completed
@@ -2716,13 +2727,13 @@ async def logist_completed_task_detail(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history),
             selectinload(Task.reports),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), #   Загружаем контактное лицо и компанию
             selectinload(Task.assigned_user)
         )
         .where(
             Task.id == task_id,
-            Task.created_by == current_user.id, # ✅ Убедимся, что задача создана текущим логистом
-            Task.status == TaskStatus.completed      # ✅ И что она завершена
+            Task.created_by == current_user.id, #   Убедимся, что задача создана текущим логистом
+            Task.status == TaskStatus.completed      #   И что она завершена
         )
     )
     task = res.scalars().first()
@@ -2860,7 +2871,7 @@ async def archive_task(
             task_id=task.id,
             user_id=getattr(current_user, "id", None),
             action=TaskStatus.archived, # action - новый статус
-            event_type=TaskHistoryEventType.status_changed, # ✅ Новый тип
+            event_type=TaskHistoryEventType.status_changed, #   Новый тип
             comment=f"Задача перенесена в архив",
             field_name="status", # Поле, которое изменилось
             old_value=old_status.value if old_status else None, # Старое значение статуса
@@ -3042,7 +3053,7 @@ async def logist_archive_task_detail(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history),
             selectinload(Task.reports),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), #   Загружаем контактное лицо и компанию
             selectinload(Task.assigned_user)
         )
         .where(

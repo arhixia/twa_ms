@@ -221,7 +221,7 @@ function getStatusColor(status) {
     started: '#17a2b8',
     on_site: '#17a2b8',
     completed: '#20c997',
-    inspection: '#6f42c1',
+    inspection: '#882486',
     returned: '#fd7e14',
     assigned: '#6f42c1',
     draft: '#6c757d'

@@ -1,7 +1,7 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -126,7 +126,7 @@ async def tech_history(db: AsyncSession = Depends(get_db), current_user: User = 
     _ensure_tech_or_403(current_user)
     # Загружаем задачи с контактным лицом и компанией
     q = select(Task).where(Task.status == TaskStatus.completed, Task.is_draft == False).options(
-        selectinload(Task.contact_person).selectinload(ContactPerson.company)  # ✅ Загружаем контактное лицо и компанию
+        selectinload(Task.contact_person).selectinload(ContactPerson.company)  #   Загружаем контактное лицо и компанию
     )
     res = await db.execute(q)
     tasks = res.scalars().all()
@@ -141,7 +141,7 @@ async def tech_history(db: AsyncSession = Depends(get_db), current_user: User = 
 
         out.append({
             "id": t.id,
-            "client": client_display,  # ✅ Используем составное имя
+            "client": client_display,  #   Используем составное имя
             "vehicle_info": t.vehicle_info,
             "completed_at": t.completed_at.isoformat() if t.completed_at else None,
             "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
@@ -171,7 +171,7 @@ async def tech_review_report(
 
     approval = payload.get("approval")
 
-    # ✅ УБИРАЕМ "rejected" из допустимых значений
+    #   УБИРАЕМ "rejected" из допустимых значений
     if approval != "approved": # <--- Позволяем только "approved"
         raise HTTPException(status_code=400, detail="Тех.спец может только принять отчёт. approval must be 'approved'")
 
@@ -186,9 +186,9 @@ async def tech_review_report(
         select(Task)
         .where(Task.id == task_id)
         .options(
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), # ✅ Загружаем компанию
-            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), # ✅ Загружаем оборудование
-            selectinload(Task.works).selectinload(TaskWork.work_type) # ✅ Загружаем виды работ
+            selectinload(Task.contact_person).selectinload(ContactPerson.company), #   Загружаем компанию
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), #   Загружаем оборудование
+            selectinload(Task.works).selectinload(TaskWork.work_type) #   Загружаем виды работ
         )
     )
     task = t_res.scalars().first()
@@ -197,7 +197,7 @@ async def tech_review_report(
 
 
     old_approval = report.approval_tech
-    # ✅ УБИРАЕМ возможность установить rejected
+    #   УБИРАЕМ возможность установить rejected
     report.approval_tech = ReportApproval.approved # <--- Всегда approved, если пришло "approved"
     report.reviewed_at_tech_supp = datetime.now(timezone.utc)
 
@@ -224,8 +224,8 @@ async def tech_review_report(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
                 action=TaskStatus.completed, # action - новый статус
-                event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
-                # ✅ Комментарий для истории, когда оба одобрены
+                event_type=TaskHistoryEventType.report_status_changed, #   Новый тип
+                #   Комментарий для истории, когда оба одобрены
                 comment=f"Задача проверена тех.специалистом.",
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,
@@ -256,7 +256,7 @@ async def tech_review_report(
         else:
             # if tech approved, but logist hasn't reviewed yet -> keep task in inspection state; add history entry for tech approval
             action = TaskStatus.inspection # Статус задачи не изменился, но отчёт проверялся
-            # ✅ Комментарий для истории, когда только тех.спец одобрил
+            #   Комментарий для истории, когда только тех.спец одобрил
             hist_comment = f"Задача проверена тех.специалистом"
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта тех.специалистом) ---
@@ -276,7 +276,7 @@ async def tech_review_report(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
                 action=action, # action - текущий статус задачи
-                event_type=TaskHistoryEventType.report_status_changed, # ✅ Новый тип
+                event_type=TaskHistoryEventType.report_status_changed, #   Новый тип
                 comment=hist_comment,
                 # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,
@@ -349,7 +349,7 @@ async def tech_task_detail(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history),
             selectinload(Task.reports),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),  #   Загружаем контактное лицо и компанию
             selectinload(Task.assigned_user)
         )
         .where(Task.id == task_id)
@@ -411,8 +411,8 @@ async def tech_task_detail(
 
     return {
         "id": task.id,
-        "company_name": company_name,  # ✅ Новое
-        "contact_person_name": contact_person_name,  # ✅ Новое
+        "company_name": company_name,  #   Новое
+        "contact_person_name": contact_person_name,  #   Новое
         "contact_person_phone": task.contact_person_phone,
         "gos_number" : task.gos_number,
         "vehicle_info": task.vehicle_info or None,
@@ -679,6 +679,20 @@ async def tech_supp_filter_tasks(
         combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
+    # Сортировка по приоритету статуса
+    status_order = case(
+        (Task.status == TaskStatus.new, 1),
+        (Task.status == TaskStatus.assigned, 2),
+        (Task.status == TaskStatus.accepted, 3),
+        (Task.status == TaskStatus.on_the_road, 4),
+        (Task.status == TaskStatus.on_site, 5),
+        (Task.status == TaskStatus.started, 6),
+        (Task.status == TaskStatus.inspection, 7),
+        (Task.status == TaskStatus.returned, 8),
+        else_=99
+    )
+    query = query.order_by(status_order)
+
     query = query.options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
@@ -919,12 +933,12 @@ async def tech_supp_completed_task_detail(
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.history),
             selectinload(Task.reports), # Загружаем отчёты
-            selectinload(Task.contact_person).selectinload(ContactPerson.company),  # ✅ Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),  #   Загружаем контактное лицо и компанию
             selectinload(Task.assigned_user)
         )
         .where(
             Task.id == task_id,
-            Task.status == TaskStatus.completed      # ✅ И что она завершена
+            Task.status == TaskStatus.completed      #   И что она завершена
         )
     )
     task = res.scalars().first()
