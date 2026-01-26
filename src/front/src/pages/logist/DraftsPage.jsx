@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAllDrafts, deleteDraft } from "../../api";
-import TaskCard from "../../components/TaskCard"; // Импортируем TaskCard
+import TaskCard from "../../components/TaskCard";
 import AddTaskModal from "./_AddTaskModal";
 import "../../styles/LogistPage.css";
 
@@ -42,22 +42,20 @@ export default function DraftsPage() {
     navigate(`/logist/drafts/${task.id}`);
   };
 
-  // Функция для преобразования данных черновика в формат, подходящий для TaskCard
   const transformDraftToTaskFormat = (draft) => {
-    // Используем client_name как в других компонентах, если в данных есть client
     const clientName = draft.client_name || draft.client || "—";
     
     return {
       ...draft,
-      status: "draft", // Добавляем статус для отображения в TaskCard
-      client_name: clientName, // Убедимся, что используем правильное поле
+      status: "draft",
+      client_name: clientName,
     };
   };
 
   return (
     <div className="logist-main">
       <div className="page">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <h1 className="page-title">Черновики</h1>
           <button 
             onClick={() => setOpen(true)}
@@ -68,15 +66,17 @@ export default function DraftsPage() {
               borderRadius: '6px',
               border: 'none',
               cursor: 'pointer',
-              background: 'linear-gradient(135deg, #10b981, #2563eb)', // зелёно-синий градиент
+              background: 'linear-gradient(135deg, #10b981, #2563eb)',
               color: 'white',
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              marginTop: '10px'
+              gap: '6px'
             }}
           >
-            ➕ Новый черновик
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus" viewBox="0 0 16 16">
+  <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4" stroke="currentColor" strokeWidth="2" fill="none"/>
+</svg>
+            Новый черновик
           </button>
         </div>
 
@@ -87,7 +87,6 @@ export default function DraftsPage() {
         ) : (
           <div className="cards">
             {drafts.map((d) => {
-              // Преобразуем черновик в формат задачи
               const taskFormat = transformDraftToTaskFormat(d);
               
               return (

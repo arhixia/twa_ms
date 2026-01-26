@@ -563,9 +563,13 @@ export default function AssignedTaskDetailPage() {
           </div>
           <div className="modal-body">
             <div className="section">
-              <label className="dark-label">
-                Причина отклонения (необязательно):
-              </label>
+              <label className="dark-label" style={{
+  fontSize: '16px',
+  fontWeight: '600',
+  color: 'white'
+}}>
+  Причина отклонения:
+</label>
               <textarea
                 value={rejectComment}
                 onChange={(e) => setRejectComment(e.target.value)}

@@ -1015,23 +1015,41 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       </div>
 
       <div className="modal-actions">
-        <button
-          onClick={() => saveDraft(false)}
-          disabled={saving}
-          className="gradient-button"
-        >
-          {saving ? 'Сохранение...' : '💾 Сохранить как черновик'}
-        </button>
-        {!allowSaveOnlyDraft && (
-          <button
-            onClick={() => saveDraft(true)}
-            disabled={saving}
-            className="gradient-button"
-          >
-            {saving ? 'Публикация...' : '📤 Опубликовать'}
-          </button>
-        )}
-      </div>
+  <button
+    onClick={() => saveDraft(false)}
+    disabled={saving}
+    className="gradient-button"
+  >
+    {saving ? 'Сохранение...' : (
+      <>
+        <svg className="button-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 2H14V14H4V2Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M14 4L6 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6 8H10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M6 11H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        Сохранить как черновик
+      </>
+    )}
+  </button>
+  {!allowSaveOnlyDraft && (
+    <button
+      onClick={() => saveDraft(true)}
+      disabled={saving}
+      className="gradient-button"
+    >
+      {saving ? 'Публикация...' : (
+        <>
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload" viewBox="0 0 16 16">
+  <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+  <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
+</svg>
+          Опубликовать
+        </>
+      )}
+    </button>
+  )}
+</div>
     </div>
   </div>
 );

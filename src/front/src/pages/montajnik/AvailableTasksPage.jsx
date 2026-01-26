@@ -95,30 +95,13 @@ export default function AvailableTasksPage() {
             <p>Нет доступных задач.</p>
           ) : (
             tasks.map(task => (
-              <div
+              <TaskCard
                 key={task.id}
-                className="task-card-wrapper"
-                style={{
-                  position: "relative",
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-                }}
-              >
-                {/* Отображение mont_reward */}
-                {task.montajnik_reward && (
-                  <div className="task-mont-reward">
-                    {task.montajnik_reward}
-                  </div>
-                )}
-                
-                <TaskCard
-                  task={task}
-                  onClick={handleTaskCardClick}
-                  onAccept={() => handleAcceptTask(task.id)}
-                  isAccepting={actionLoading === task.id}
-                />
-              </div>
+                task={task}
+                onClick={handleTaskCardClick}
+                onAccept={() => handleAcceptTask(task.id)}
+                isAccepting={actionLoading === task.id}
+              />
             ))
           )}
         </div>

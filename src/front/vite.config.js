@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['asthma-score-monitors-harbour.trycloudflare.com']
+    allowedHosts: ['lift-fall-why-variable.trycloudflare.com']
   },
 })
 

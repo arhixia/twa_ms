@@ -2,7 +2,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function TaskCard({ task, onClick, onUnarchive, onDelete, isAccepting, isRejecting }) {
+export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccept, onReject, isAccepting, isRejecting }) {
   const navigate = useNavigate();
 
   function handleClick() {
@@ -56,6 +56,12 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, isAccep
   // Проверяем, является ли задача черновиком или архивной
   const isDraft = task.status === "draft";
   const isArchived = task.status === "archived";
+  
+  // Проверяем, может ли монтажник принимать/отклонять задачу
+  // Для новых задач (new) - только кнопка принять
+  const canAcceptNew = task.status === 'new' && onAccept && !onReject;
+  // Для назначенных задач (assigned) - кнопки принять/отклонить
+  const canAcceptRejectAssigned = task.status === 'assigned' && onAccept && onReject;
 
   return (
     <div className="task-card" onClick={handleClick}>
@@ -162,6 +168,92 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, isAccep
       ) : (
         <div className="task-status-badge" style={{ backgroundColor: statusColor }}>
           {statusDisplay}
+        </div>
+      )}
+
+      {/* Кнопка принятия для новых задач (справа внизу) */}
+      {canAcceptNew && (
+        <button
+          disabled={isAccepting}
+          onClick={(e) => {
+            e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
+            onAccept();
+          }}
+          style={{
+            position: "absolute",
+            bottom: "8px", // Отступ от низа карточки
+            right: "8px",  // Отступ от правого края карточки
+            background: "linear-gradient(to right, #10b981, #2563eb)", // Зелено-синий градиент
+            color: "white",
+            padding: "4px 8px", // Меньше паддинги для компактности
+            borderRadius: "8px", // Меньше скругление
+            fontSize: "12px", // Меньше шрифт
+            fontWeight: "bold",
+            cursor: isAccepting ? "not-allowed" : "pointer",
+            border: "none",
+            zIndex: 1, // Убедимся, что кнопка поверх других элементов
+          }}
+        >
+          {isAccepting ? "..." : "ПРИНЯТЬ"}
+        </button>
+      )}
+
+      {/* Кнопки принятия/отклонения для назначенных задач (справа внизу) */}
+      {canAcceptRejectAssigned && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "8px", // Отступ от низа карточки
+            right: "8px",  // Отступ от правого края карточки
+            display: "flex", // Располагаем кнопки в ряд
+            gap: "4px", // Небольшой отступ между кнопками
+            zIndex: 1, // Убедимся, что кнопки поверх других элементов
+          }}
+        >
+          {onReject && (
+            <button
+              disabled={isRejecting}
+              onClick={(e) => {
+                e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
+                onReject();
+              }}
+              style={{
+                // --- ГРАДИЕНТ ---
+                background: "linear-gradient(to right, #ef4444, #dc2626)", // Красный градиент
+                color: "white",
+                padding: "4px 8px", // Меньше паддинги для компактности
+                borderRadius: "8px", // Меньше скругление
+                fontSize: "12px", // Меньше шрифт
+                fontWeight: "bold",
+                cursor: isRejecting ? "not-allowed" : "pointer",
+                border: "none",
+              }}
+            >
+              {isRejecting ? "..." : "ОТКЛОНИТЬ"}
+            </button>
+          )}
+          {onAccept && (
+            <button
+              disabled={isAccepting}
+              onClick={(e) => {
+                e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
+                onAccept();
+              }}
+              style={{
+                // --- ГРАДИЕНТ ---
+                background: "linear-gradient(to right, #10b981, #2563eb)", // Зелено-синий градиент
+                color: "white",
+                padding: "4px 8px", // Меньше паддинги для компактности
+                borderRadius: "8px", // Меньше скругление
+                fontSize: "12px", // Меньше шрифт
+                fontWeight: "bold",
+                cursor: isAccepting ? "not-allowed" : "pointer",
+                border: "none",
+              }}
+            >
+              {isAccepting ? "..." : "ПРИНЯТЬ"}
+            </button>
+          )}
         </div>
       )}
 

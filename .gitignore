@@ -3,6 +3,8 @@ __pycache__/
 venv/
 tests/
 .env
+.env.local
+vite.config.js
 
 
 
