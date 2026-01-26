@@ -61,7 +61,7 @@ async def require_admin(current_user:User=Depends(get_current_user)) -> User:
 async def admin_list_users(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
     q = await db.execute(
         select(User)
-        .order_by(User.is_active.desc(), User.id) 
+        .order_by(User.is_active.desc(), User.role, User.id) 
     )
     users = q.scalars().all()
     return [UserResponse.model_validate(u) for u in users]
