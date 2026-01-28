@@ -63,19 +63,19 @@ async def _add_history(db: AsyncSession, task: Task, user: User, action: TaskSta
 
 
 @router.get("/tasks/active", dependencies=[Depends(require_roles(Role.tech_supp))])
-async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    """
-    Список активных задач для тех.специалиста.
-    Возвращаются задачи, которые не в состоянии completed или archived, не являются черновиками,
-    и имеют *назначенные* виды работ, требующие проверки тех.специалистом.
-    """
+async def tech_active_tasks(
+    db: AsyncSession = Depends(get_db), 
+    current_user=Depends(get_current_user)
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
     _ensure_tech_or_403(current_user)
 
-    # Сначала получаем количество задач
     count_query = select(func.count(Task.id)).where(
         Task.is_draft == False,
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
-        # Фильтр: задача должна быть связана с TaskWork, у которого work_type.tech_supp_required = True
+        Task.user_company_id == current_user.company_id,  # Фильтрация по компании
         Task.id.in_(
             select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
         )
@@ -86,7 +86,7 @@ async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user=Dep
     q = select(Task).where(
         Task.is_draft == False,
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
-        # Фильтр: задача должна быть связана с TaskWork, у которого work_type.tech_supp_required = True
+        Task.user_company_id == current_user.company_id,  # Фильтрация по компании
         Task.id.in_(
             select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
         )
@@ -116,6 +116,7 @@ async def tech_active_tasks(db: AsyncSession = Depends(get_db), current_user=Dep
         "tasks": out,
         "total_count": total_count
     }
+
 
 
 @router.get("/tasks/history", dependencies=[Depends(require_roles(Role.tech_supp))])
@@ -474,8 +475,17 @@ async def get_tech_task_full_history(
 
 
 @router.get("/companies", dependencies=[Depends(require_roles(Role.tech_supp))])
-async def tech_get_companies(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(ClientCompany))
+async def tech_get_companies(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)  
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    res = await db.execute(
+        select(ClientCompany)
+        .where(ClientCompany.user_company_id == current_user.company_id)
+    )
     companies = res.scalars().all()
     return [{"id": c.id, "name": c.name} for c in companies]
 
@@ -506,17 +516,26 @@ async def tech_get_contact_person_phone(
 
 
 @router.get("/me")
-async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def tech_supp_profile(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     """
     Личный кабинет тех.спеца:
     - имя, фамилия, роль
     - история задач, где тех.спец участвовал (например, проверял отчёты)
     """
+    # Проверяем, что у пользователя есть компания
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
     _ensure_tech_supp_or_403(current_user)
 
     # Считаем количество задач, которые тех.спец сейчас проверяет (в статусе inspection)
     active_checking_query = select(func.count(Task.id)).where(
+        Task.is_draft == False,
         Task.status.not_in([TaskStatus.completed,TaskStatus.archived]),
+        Task.user_company_id == current_user.company_id,  # Фильтрация по компании
         Task.id.in_(
             select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
         )
@@ -541,7 +560,8 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
             ).where
             (
                 Task.id.in_(checked_task_ids),
-                Task.status == TaskStatus.completed # Только завершённые
+                Task.status == TaskStatus.completed, # Только завершённые
+                Task.user_company_id == current_user.company_id  # Фильтрация по компании
             ).order_by(desc(Task.id)) 
         )
         completed = task_res.scalars().all()
@@ -573,6 +593,7 @@ async def tech_supp_profile(db: AsyncSession = Depends(get_db), current_user: Us
     }
 
 
+
 @router.get("/tasks_tech_supp/filter", summary="Фильтрация задач (только тех.специалист)")
 async def tech_supp_filter_tasks(
     status: Optional[str] = Query(None, description="Статусы через запятую"),
@@ -582,14 +603,15 @@ async def tech_supp_filter_tasks(
     task_id: Optional[int] = Query(None, description="ID задачи"),
     equipment_id: Optional[str] = Query(None, description="ID оборудования через запятую"),
     search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
 ):
     query = select(Task).where(
         Task.is_draft != True,
-        # Добавляем условие: задача должна содержать виды работ, требующие проверки тех.специалистом
         Task.id.in_(
-            select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True)
-        )
+            select(TaskWork.task_id).join(WorkType).where(WorkType.tech_supp_require == True),
+        ),
+        Task.user_company_id == current_user.company_id 
     )
 
     if status:
@@ -752,7 +774,6 @@ async def tech_supp_filter_completed_tasks(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    # Сначала находим ID задач, где тех.спец проверял отчёты
     report_res = await db.execute(
         select(TaskReport.task_id).where(TaskReport.approval_tech != ReportApproval.waiting)
     )
@@ -761,7 +782,8 @@ async def tech_supp_filter_completed_tasks(
     query = select(Task).where(
         Task.is_draft != True,
         Task.status == TaskStatus.completed,
-        Task.id.in_(checked_task_ids)
+        Task.id.in_(checked_task_ids),
+        Task.user_company_id == current_user.company_id  
     )
 
     if company_id:

@@ -691,3 +691,26 @@ export async function redirectToCall(phone) {
   const encoded = encodeURIComponent(phone);
   return `${API_BASE_URL}/montajnik/call?phone=${encoded}`;
 }
+
+
+// ---------- SUPER ADMIN ----------
+
+export async function superAdminListAllUsers() {
+  return (await api.get("/super_admin/users")).data;
+}
+
+export async function superAdminCreateUser(payload) {
+  return (await api.post("/super_admin/users", payload)).data;
+}
+
+export async function superAdminUpdateUser(userId, payload) {
+  return (await api.patch(`/super_admin/users/${userId}`, payload)).data;
+}
+
+export async function superAdminCreateCompany(payload) {
+  return (await api.post("/super_admin/companies", payload)).data;
+}
+
+export async function superAdminListAllCompanies() {
+  return (await api.get("/super_admin/companies")).data;
+}

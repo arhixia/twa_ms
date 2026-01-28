@@ -82,7 +82,8 @@ async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
         lastname=user_in.lastname,
         role=Role(user_in.role) if isinstance(user_in.role, str) else user_in.role,
         is_active=user_in.is_active,
-        hashed_password=hashed_password
+        hashed_password=hashed_password,
+        company_id=getattr(user_in, 'company_id', None)  
     )
     db.add(db_user)
     await db.commit()

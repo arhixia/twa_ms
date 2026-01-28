@@ -57,34 +57,44 @@ async def require_admin(current_user:User=Depends(get_current_user)) -> User:
 
 
 
-@router.get("/users", response_model=List[UserResponse], summary="Список всех пользователей (только админ)")
-async def admin_list_users(db: AsyncSession = Depends(get_db), _: User = Depends(require_admin)):
+@router.get("/users", response_model=List[UserResponse], summary="Список всех пользователей (только админ, только своей компании)")
+async def admin_list_users(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(require_admin)
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Admin must belong to a company")
+    
     q = await db.execute(
         select(User)
+        .where(User.company_id == current_user.company_id)  # Фильтруем по компании администратора
         .order_by(User.is_active.desc(), User.role, User.id) 
     )
     users = q.scalars().all()
     return [UserResponse.model_validate(u) for u in users]
 
 
-@router.post("/users",response_model=UserResponse,status_code=status.HTTP_201_CREATED,summary="Создать пользователя (только админ)")
+@router.post("/users",response_model=UserResponse,status_code=status.HTTP_201_CREATED,summary="Создать пользователя (только админ, в своей компании)")
 async def admin_create_user(
     user_in: UserCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin)
+    current_user: User = Depends(require_admin)
 ):
-    # Проверка уникальности login
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Admin must belong to a company")
+    
     q = await db.execute(select(User).where(User.login == user_in.login))
     if q.scalars().first():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Login уже занят")
     
-    # Проверка уникальности telegram_id, если он указан
     if user_in.telegram_id is not None:
         q = await db.execute(select(User).where(User.telegram_id == user_in.telegram_id))
         if q.scalars().first():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Telegram ID уже используется")
     
-    new_user = await auth_create_user(db=db,user_in=user_in)
+    user_in_with_company = user_in.model_copy(update={"company_id": current_user.company_id})
+    
+    new_user = await auth_create_user(db=db, user_in=user_in_with_company)
 
     await db.refresh(new_user)
     return UserResponse.model_validate(new_user)
@@ -771,10 +781,13 @@ async def admin_list_tasks(
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin),
 ):
-    # Сначала получаем количество задач
+    if not admin_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
     count_query = select(func.count(Task.id)).where(
         Task.is_draft != True,
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
+        Task.user_company_id == admin_user.company_id  # Фильтрация по компании
     )
     count_res = await db.execute(count_query)
     total_count = count_res.scalar() or 0
@@ -785,7 +798,8 @@ async def admin_list_tasks(
         .where(
             Task.is_draft != True,
             Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
-            )
+            Task.user_company_id == admin_user.company_id  # Фильтрация по компании
+        )
         .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) #   Загружаем контактное лицо и компанию
     )
     tasks = q.scalars().all()
@@ -832,7 +846,13 @@ async def admin_filter_tasks(
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin)
 ):
-    query = select(Task).where(Task.is_draft != True)
+    if not admin_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    query = select(Task).where(
+        Task.is_draft != True,
+        Task.user_company_id == admin_user.company_id  
+    )
 
     if status:
         status_list = [TaskStatus(s) for s in status.split(",") if s]
@@ -1153,8 +1173,17 @@ async def admin_get_task_full_history(
 
 
 @router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
-async def admin_get_companies(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(ClientCompany))
+async def admin_get_companies(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    res = await db.execute(
+        select(ClientCompany)
+        .where(ClientCompany.user_company_id == current_user.company_id)  
+    )
     companies = res.scalars().all()
     return [{"id": c.id, "name": c.name} for c in companies]
 
@@ -1186,11 +1215,22 @@ async def admin_get_contact_person_phone(
 
 
 @router.post("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
-async def admin_add_company(payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
+async def admin_add_company(
+    payload: dict = Body(...), 
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user) 
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
     name = payload.get("name")
     if not name:
         raise HTTPException(status_code=400, detail="Название компании обязательно")
-    company = ClientCompany(name=name)
+    
+    company = ClientCompany(
+        name=name,
+        user_company_id=current_user.company_id  # Устанавливаем компанию текущего пользователя
+    )
     db.add(company)
     await db.commit()
     await db.refresh(company)
@@ -1218,19 +1258,40 @@ async def admin_add_contact_person(company_id: int, payload: dict = Body(...), d
 
 
 @router.get("/equipment", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
-async def admin_get_equipment_list(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(Equipment).order_by(Equipment.name)) 
+async def admin_get_equipment_list(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)  
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    res = await db.execute(
+        select(Equipment)
+        .where(Equipment.user_company_id == current_user.company_id)
+        .order_by(Equipment.name)
+    ) 
     equipment_list = res.scalars().all()
     return [{"id": e.id, "name": e.name, "category": e.category, "price": str(e.price)} for e in equipment_list]
 
 
 @router.get("/work-types", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
-async def admin_get_work_types_list(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(WorkType).where(WorkType.is_active == True).order_by(WorkType.name))
+async def admin_get_work_types_list(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)  
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    res = await db.execute(
+        select(WorkType)
+        .where(
+            WorkType.is_active == True,
+            WorkType.user_company_id == current_user.company_id  
+        )
+        .order_by(WorkType.name)
+    )
     work_types_list = res.scalars().all()
-    # Возвращаем старый формат, но добавляем category
     return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price), "mont_price": str(wt.mont_price),"tech_supp_require": wt.tech_supp_require, "category": wt.category} for wt in work_types_list]
-
 
 @router.post("/work-types", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
 async def admin_add_work_type_no_schema(
@@ -1242,17 +1303,18 @@ async def admin_add_work_type_no_schema(
     if current_user.role not in [Role.admin, Role.logist]:
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+
     name = payload.get("name")
-    # Получаем новые цены
     client_price = payload.get("client_price")
     mont_price = payload.get("mont_price")
-    tech_supp_require = payload.get("tech_supp_require", False) # По умолчанию False
-    category = payload.get("category", None) # <--- НОВОЕ: Получаем категорию
+    tech_supp_require = payload.get("tech_supp_require", False) 
+    category = payload.get("category", None) 
 
     if not name or client_price is None or mont_price is None:
         raise HTTPException(status_code=400, detail="Не все поля переданы (name, client_price, mont_price обязательны)")
 
-    # Преобразуем tech_supp_require в boolean
     if not isinstance(tech_supp_require, bool):
         if isinstance(tech_supp_require, str):
             tech_supp_require = tech_supp_require.lower() in ('true', '1', 'yes', 'on')
@@ -1270,33 +1332,36 @@ async def admin_add_work_type_no_schema(
         client_price=client_price_decimal,
         mont_price=mont_price_decimal,
         tech_supp_require=tech_supp_require,
-        category=category # <--- НОВОЕ: Устанавливаем категорию
+        category=category, 
+        user_company_id=current_user.company_id  
     )
     db.add(work_type)
     await db.flush()
     await db.commit()
     await db.refresh(work_type)
 
-    # Возвращаем ответ с новыми полями, включая category
+
     return {
         "id": work_type.id,
         "name": work_type.name,
         "client_price": str(work_type.client_price),
         "mont_price": str(work_type.mont_price),
         "tech_supp_require": work_type.tech_supp_require,
-        "category": work_type.category # <--- НОВОЕ: Возвращаем категорию
+        "category": work_type.category 
     }
 
 
 @router.post("/equipment", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
 async def admin_add_equipment_no_schema(
-    payload: dict = Body(...),  # вместо схемы
+    payload: dict = Body(...),  
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # проверка роли
-    if current_user.role != Role.admin:
+    if current_user.role not in [Role.admin, Role.logist]: 
         raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
 
     name = payload.get("name")
     category = payload.get("category")
@@ -1308,14 +1373,16 @@ async def admin_add_equipment_no_schema(
     equipment = Equipment(
         name=name,
         category=category,
-        price=price
+        price=price,
+        user_company_id=current_user.company_id  
     )
     db.add(equipment)
-    await db.flush()  # чтобы получить id
+    await db.flush() 
     await db.commit()
     await db.refresh(equipment)
 
     return {"id": equipment.id, "name": equipment.name, "category": equipment.category, "price": str(equipment.price)}
+
 
 @router.patch("/work-types/{work_type_id}", dependencies=[Depends(require_roles(Role.admin))])
 async def admin_update_work_type(

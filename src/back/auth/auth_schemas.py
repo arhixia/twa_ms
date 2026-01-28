@@ -10,6 +10,7 @@ class Role(str, Enum):
     logist = "logist"
     montajnik = "montajnik"
     tech_supp = "tech_supp"
+    super_admin = "super_admin"
 
 
 
@@ -40,6 +41,7 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: int
     login: str
+    company_id: Optional[int] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,3 +87,35 @@ class VerifyWebAppResponse(BaseModel):
 class LinkTelegramRequest(BaseModel):
     init_data: str
 
+class UpdateUserRequest(BaseModel):
+    name: Optional[str] = None
+    lastname: Optional[str] = None
+    login: Optional[str] = None
+    password: Optional[str] = None  
+    role: Optional[str] = None      
+    company_id: Optional[int] = None 
+    is_active: Optional[bool] = None 
+
+
+class SuperAdminUserCreate(BaseModel):
+    telegram_id: Optional[int] = Field(None, description="Telegram user ID")
+    name: str = Field(..., description="Имя пользователя")
+    lastname: str = Field(..., description="Фамилия пользователя")
+    role: str = Field(..., description="Роль пользователя")
+    is_active: bool = Field(True, description="Активность пользователя")
+    login: str = Field(..., min_length=3, max_length=30)
+    password: str = Field(..., min_length=6)
+    company_id: int = Field(..., description="ID компании")
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class SuperAdminUpdateUserRequest(BaseModel):
+    name: Optional[str] = None
+    lastname: Optional[str] = None
+    login: Optional[str] = None
+    password: Optional[str] = None  
+    role: Optional[str] = None      
+    company_id: Optional[int] = None 
+    is_active: Optional[bool] = None
+    
+    model_config = ConfigDict(extra='forbid')

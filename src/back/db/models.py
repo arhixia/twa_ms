@@ -32,6 +32,7 @@ class Role(enum.Enum):
     logist = "logist"
     montajnik = "montajnik"
     tech_supp = "tech_supp"
+    super_admin = "super_admin"
 
 
 class TaskStatus(enum.Enum):
@@ -64,7 +65,9 @@ class User(AsyncAttrs, Base):
     is_active = Column(Boolean, default=True) #можно отключить юзера -> не приходит рассылка 
     login = Column(String(30),unique=True,index = True,nullable=False) 
     hashed_password = Column(String, nullable=False)
+    company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="SET NULL"), index=True, nullable=True)  
 
+    company = relationship("UserCompany", back_populates="users")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="assigned_user", foreign_keys="[Task.assigned_user_id]")
     reports = relationship("TaskReport", back_populates="author", cascade="all, delete-orphan")
@@ -92,6 +95,7 @@ class Task(AsyncAttrs, Base):
     logist_contact_id = Column(BigInteger, nullable=True)
     client_price = Column(Numeric(10,2), nullable=True)
     montajnik_reward = Column(Numeric(10,2), nullable=True)
+    user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="SET NULL"), index=True, nullable=True)
     
 
     # owner of draft / creator of the task
@@ -108,6 +112,7 @@ class Task(AsyncAttrs, Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
+    user_company = relationship("UserCompany", back_populates="tasks")
     assigned_user = relationship("User", back_populates="tasks", foreign_keys=[assigned_user_id])
     creator = relationship("User", foreign_keys=[created_by])
     contact_person = relationship("ContactPerson", back_populates="tasks")
@@ -132,7 +137,9 @@ class WorkType(AsyncAttrs, Base):
     mont_price = Column(Numeric(10,2),nullable=False)
     is_active = Column(Boolean, default=True)                  # Активен ли тип работы
     tech_supp_require = Column(Boolean,default=False)
+    user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="CASCADE"), index=True, nullable=True) 
 
+    user_company = relationship("UserCompany", back_populates="work_types")
     task_works = relationship("TaskWork", back_populates="work_type", cascade="all, delete-orphan")
 
 
@@ -185,7 +192,9 @@ class ClientCompany(AsyncAttrs, Base):
 
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False) 
+    user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="CASCADE"), index=True, nullable=True)
 
+    user_company = relationship("UserCompany", back_populates="client_companies")
     contact_persons = relationship("ContactPerson", back_populates="company", cascade="all, delete-orphan")
 
 
@@ -317,7 +326,9 @@ class Equipment(AsyncAttrs,Base):
     name = Column(String,nullable=False) #Название оборудования
     category = Column(String,nullable=False)
     price = Column(Numeric(10,2),nullable=False) #Цена за единицу
+    user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="CASCADE"), index=True, nullable=True)
 
+    user_company = relationship("UserCompany", back_populates="equipment")
     tasks = relationship("TaskEquipment", back_populates="equipment", cascade="all, delete-orphan")
 
 class TaskEquipment(AsyncAttrs,Base):
@@ -349,7 +360,18 @@ class Notification(AsyncAttrs,Base):
     
 
 
-    
+class UserCompany(AsyncAttrs, Base):
+    __tablename__ = "user_companies"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)  
+    is_active = Column(Boolean, default=True)
+
+    users = relationship("User", back_populates="company")
+    tasks = relationship("Task", back_populates="user_company")
+    work_types = relationship("WorkType", back_populates="user_company") 
+    equipment = relationship("Equipment", back_populates="user_company")
+    client_companies = relationship("ClientCompany", back_populates="user_company")
 
 
 

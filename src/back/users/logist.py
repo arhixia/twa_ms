@@ -258,16 +258,27 @@ async def create_draft(
 ):
     data = payload.model_dump()
 
+    # Проверяем, что у пользователя есть компания
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+
     contact_person_id = data.get("contact_person_id")
     gos_number = data.get("gos_number")
 
     company_id = None
     contact_person_phone = None
     if contact_person_id:
-        cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
+        cp_res = await db.execute(
+            select(ContactPerson)
+            .join(ClientCompany)  
+            .where(
+                ContactPerson.id == contact_person_id, 
+                ClientCompany.user_company_id == current_user.company_id  
+            )
+        )
         contact_person = cp_res.scalars().first()
         if not contact_person:
-            raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
+            raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено или не принадлежит вашей компании")
         company_id = contact_person.company_id
         contact_person_phone = contact_person.phone
 
@@ -288,7 +299,7 @@ async def create_draft(
     calculated_works_cost_for_mont = Decimal('0')
     if work_types_ids_unique:
         wt_res = await db.execute(
-            select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
+            select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True, WorkType.user_company_id == current_user.company_id)
         )
         work_types_from_db = wt_res.scalars().all()
         if len(work_types_from_db) != len(work_types_ids_unique):
@@ -311,7 +322,7 @@ async def create_draft(
     calculated_equipment_cost = Decimal('0')
     if equipment_quantities:
         eq_res = await db.execute(
-            select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
+            select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())), Equipment.user_company_id == current_user.company_id)
         )
         equipment_from_db = eq_res.scalars().all()
         if len(equipment_from_db) != len(equipment_quantities):
@@ -348,6 +359,7 @@ async def create_draft(
         photo_required=data.get("photo_required", False),
         created_by=int(current_user.id),
         gos_number=gos_number,
+        user_company_id=current_user.company_id
     )
 
     db.add(task)
@@ -359,31 +371,30 @@ async def create_draft(
         serial_number = eq_item.get("serial_number")
         quantity = eq_item.get("quantity", 1)
 
-        # Проверяем, существует ли оборудование
-        eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+        eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id, Equipment.user_company_id == current_user.company_id))
         equipment_obj = eq_res.scalars().first()
         if not equipment_obj:
-            raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+            raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено или не принадлежит вашей компании")
 
         db.add(TaskEquipment(
             task_id=task.id,
             equipment_id=equipment_id,
             serial_number=serial_number,
-            quantity=quantity
+            quantity=quantity,
         ))
 
     # --- SAVE WORK TYPES ---
     for wt_id, count in work_type_counts.items():
         # Проверяем, существует ли тип работы (уже делали выше, но на всякий случай)
-        wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+        wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id, WorkType.user_company_id == current_user.company_id))
         wt = wt_res.scalars().first()
         if not wt:
-            raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+            raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден или не принадлежит вашей компании")
 
         db.add(TaskWork(
             task_id=task.id,
             work_type_id=wt_id,
-            quantity=count 
+            quantity=count,
         ))
 
     await db.commit()
@@ -767,12 +778,16 @@ async def publish_task(
         "work_types": "Виды работ",
     }
 
+    # Проверяем, что у пользователя есть компания
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+
     # Для проверки используем актуальные данные - из черновика или из payload
     if draft_id:
-        res = await db.execute(select(Task).where(Task.id == draft_id, Task.is_draft == True))
+        res = await db.execute(select(Task).where(Task.id == draft_id, Task.is_draft == True, Task.user_company_id == current_user.company_id))
         existing_task = res.scalars().first()
         if not existing_task:
-            raise HTTPException(status_code=404, detail="Черновик не найден")
+            raise HTTPException(status_code=404, detail="Черновик не найден или не принадлежит вашей компании")
         
         current_data = {
             "contact_person_id": existing_task.contact_person_id,
@@ -813,10 +828,10 @@ async def publish_task(
         raise HTTPException(status_code=400, detail=f"Заполните все поля!")
 
     if draft_id:
-        res = await db.execute(select(Task).where(Task.id == draft_id, Task.is_draft == True))
+        res = await db.execute(select(Task).where(Task.id == draft_id, Task.is_draft == True, Task.user_company_id == current_user.company_id))
         task = res.scalars().first()
         if not task:
-            raise HTTPException(status_code=404, detail="Черновик не найден")
+            raise HTTPException(status_code=404, detail="Черновик не найден или не принадлежит вашей компании")
 
         # Обновляем поля, кроме связей и рассчитанных цен (цены пересчитаем ниже)
         for key, value in data.items():
@@ -851,7 +866,7 @@ async def publish_task(
         calculated_works_cost_for_mont = Decimal('0')
         if work_types_ids_unique:
             wt_res = await db.execute(
-                select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
+                select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True, WorkType.user_company_id == current_user.company_id)
             )
             work_types_from_db = wt_res.scalars().all()
             if len(work_types_from_db) != len(work_types_ids_unique):
@@ -873,7 +888,7 @@ async def publish_task(
         calculated_equipment_cost = Decimal('0')
         if equipment_quantities:
             eq_res = await db.execute(
-                select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
+                select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())), Equipment.user_company_id == current_user.company_id)
             )
             equipment_from_db = eq_res.scalars().all()
             if len(equipment_from_db) != len(equipment_quantities):
@@ -906,7 +921,7 @@ async def publish_task(
             user_id=current_user.id,
             action=task.status,
             event_type=TaskHistoryEventType.published,
-            comment="Задача #{task.id} опубликована",
+            comment=f"Задача #{task.id} опубликована",
             company_id=task.company_id,
             contact_person_id=task.contact_person_id,
             contact_person_phone=task.contact_person_phone,
@@ -934,10 +949,17 @@ async def publish_task(
         company_id = None
         contact_person_phone = None
         if contact_person_id:
-            cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
+            cp_res = await db.execute(
+                select(ContactPerson)
+                .join(ClientCompany)  
+                .where(
+                    ContactPerson.id == contact_person_id, 
+                    ClientCompany.user_company_id == current_user.company_id  # Проверяем через ClientCompany
+                )
+)
             contact_person = cp_res.scalars().first()
             if not contact_person:
-                raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
+                raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено или не принадлежит вашей компании")
             company_id = contact_person.company_id
             contact_person_phone = contact_person.phone
 
@@ -952,7 +974,7 @@ async def publish_task(
         calculated_works_cost_for_mont = Decimal('0')
         if work_types_ids_unique:
             wt_res = await db.execute(
-                select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True)
+                select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True, WorkType.user_company_id == current_user.company_id)
             )
             work_types_from_db = wt_res.scalars().all()
             if len(work_types_from_db) != len(work_types_ids_unique):
@@ -974,7 +996,7 @@ async def publish_task(
         
         if equipment_quantities:
             eq_res = await db.execute(
-                select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())))
+                select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())), Equipment.user_company_id == current_user.company_id)
             )
             equipment_from_db = eq_res.scalars().all()
             if len(equipment_from_db) != len(equipment_quantities):
@@ -1010,6 +1032,7 @@ async def publish_task(
             photo_required=data.get("photo_required", False),
             created_by=int(current_user.id),
             gos_number=gos_number,
+            user_company_id=current_user.company_id
         )
 
         db.add(task)
@@ -1022,10 +1045,10 @@ async def publish_task(
             serial_number = eq_item.get("serial_number")
             quantity = eq_item.get("quantity", 1)
 
-            eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
+            eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id, Equipment.user_company_id == current_user.company_id))
             equipment_obj = eq_res.scalars().first()
             if not equipment_obj:
-                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
+                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено или не принадлежит вашей компании")
 
             # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
             equipment_snapshot_for_history.append({
@@ -1038,16 +1061,16 @@ async def publish_task(
                 task_id=task.id,
                 equipment_id=equipment_id,
                 serial_number=serial_number,
-                quantity=quantity
+                quantity=quantity,
             ))
 
         # --- SAVE WORK TYPES для новой задачи ---
         work_types_snapshot_for_history = [] # <--- Собираем снимок
         for wt_id, count in work_type_counts.items():
-            wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
+            wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id, WorkType.user_company_id == current_user.company_id))
             wt = wt_res.scalars().first()
             if not wt:
-                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
+                raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден или не принадлежит вашей компании")
 
             # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
             work_types_snapshot_for_history.append({
@@ -1058,7 +1081,7 @@ async def publish_task(
             db.add(TaskWork(
                 task_id=task.id,
                 work_type_id=wt_id,
-                quantity=count
+                quantity=count,
             ))
 
         # Добавляем запись в историю для новой задачи
@@ -1090,7 +1113,7 @@ async def publish_task(
     await db.refresh(task)
 
     montajniks_res = await db.execute(
-        select(User.id).where(User.role == 'montajnik', User.is_active == True)
+        select(User.id).where(User.role == 'montajnik', User.is_active == True, User.company_id == current_user.company_id)
     )
     montajnik_ids = [row[0] for row in montajniks_res.fetchall()]
     
@@ -1102,8 +1125,6 @@ async def publish_task(
         )
 
     return {"id": task.id}
-
-
 
 
 @router.patch("/tasks/{task_id}", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
@@ -1901,7 +1922,7 @@ async def review_report(
         and report.approval_tech == ReportApproval.waiting
         and requires_tech_review
     ):
-        tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True))
+        tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True,User.company_id == current_user.company_id))
         techs = tech_q.scalars().all()
         for tuser in techs:
             background_tasks.add_task(
@@ -1918,20 +1939,22 @@ async def review_report(
 
 @router.get("/tasks/active")
 async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    # Сначала получаем количество активных задач
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
     count_query = select(func.count(Task.id)).where(
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
         Task.is_draft == False,
-        Task.created_by == current_user.id
+        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id  
     )
     count_res = await db.execute(count_query)
     total_count = count_res.scalar() or 0
 
-    # Затем получаем сами задачи с загрузкой связанных объектов
     tasks_query = select(Task).where(
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
         Task.is_draft == False,
-        Task.created_by == current_user.id
+        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id  
     ).options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
@@ -1952,7 +1975,7 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
 
         out.append({
             "id": t.id,
-            "client_name": client_name,  #   Только название компании или ИП
+            "client_name": client_name,  
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "location": t.location,
@@ -1970,10 +1993,14 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
 
 @router.get("/drafts")
 async def get_all_dafts(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
     q = select(Task).where(
         Task.is_draft == True,
         Task.status != TaskStatus.completed,
-        Task.created_by == getattr(current_user, "id", None)
+        Task.created_by == getattr(current_user, "id", None),
+        Task.user_company_id == current_user.company_id  
     ).options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
@@ -2014,6 +2041,7 @@ async def get_all_dafts(db: AsyncSession = Depends(get_db), current_user=Depends
     return out
 
 
+
 @router.get("/tasks/history")
 async def logist_history(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     q = select(Task).where(Task.status == TaskStatus.completed, Task.is_draft == False)
@@ -2039,9 +2067,16 @@ async def logist_filter_tasks(
     task_id: Optional[int] = Query(None, description="ID задачи"),
     equipment_id: Optional[str] = Query(None, description="ID оборудования через запятую"),
     search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)  
 ):
-    query = select(Task).where(Task.is_draft != True)
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    query = select(Task).where(
+        Task.is_draft != True,
+        Task.user_company_id == current_user.company_id  
+    )
 
     if status:
         status_list = [TaskStatus(s) for s in status.split(",") if s]
@@ -2352,7 +2387,7 @@ async def logist_filter_completed_tasks(
 async def get_task_full_history(
     task_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_current_user) # Для проверки существования задачи и прав (упрощенно)
+    current_user=Depends(get_current_user) 
 ):
     """
     Получить полную историю изменений задачи.
@@ -2504,22 +2539,40 @@ async def task_detail(
 
 @router.get("/equipment")
 async def get_equipment(db:AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    result = await db.execute(select(Equipment))
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    result = await db.execute(
+        select(Equipment)
+        .where(Equipment.user_company_id == current_user.company_id)  
+    )
     equipment_list = result.scalars().all()
     return [{"id": eq.id, "name": eq.name} for eq in equipment_list]    
 
 
 @router.get("/work-types")
 async def get_work_types(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
-    result = await db.execute(select(WorkType))
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    result = await db.execute(
+        select(WorkType)
+        .where(WorkType.user_company_id == current_user.company_id)  
+    )
     work_types = result.scalars().all()
     return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price) , "mont_price": str(wt.mont_price)} for wt in work_types]
     
 
 
 @router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin,Role.tech_supp,Role.montajnik))])
-async def get_companies(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(ClientCompany))
+async def get_companies(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    res = await db.execute(
+        select(ClientCompany)
+        .where(ClientCompany.user_company_id == current_user.company_id)  
+    )
     companies = res.scalars().all()
     return [{"id": c.id, "name": c.name} for c in companies]
 
@@ -2532,11 +2585,22 @@ async def get_contact_persons(company_id: int, db: AsyncSession = Depends(get_db
 
 
 @router.post("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin))])
-async def add_company(payload: dict = Body(...), db: AsyncSession = Depends(get_db)):
+async def add_company(
+    payload: dict = Body(...), 
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
     name = payload.get("name")
     if not name:
         raise HTTPException(status_code=400, detail="Название компании обязательно")
-    company = ClientCompany(name=name)
+    
+    company = ClientCompany(
+        name=name,
+        user_company_id=current_user.company_id  
+    )
     db.add(company)
     await db.commit()
     await db.refresh(company)
@@ -2581,6 +2645,7 @@ async def get_contact_person_phone(
         raise HTTPException(status_code=404, detail="Контактное лицо не найдено")
 
     return {"phone": phone_number}
+
 
 @router.patch("/companies/{company_id}", dependencies=[Depends(require_roles(Role.logist))])
 async def admin_update_company(
@@ -2718,7 +2783,7 @@ async def logist_completed_task_detail(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    _ensure_logist_or_403(current_user) # Проверяем, что пользователь - логист
+    _ensure_logist_or_403(current_user) 
 
     res = await db.execute(
         select(Task)
@@ -2815,14 +2880,21 @@ async def logist_completed_task_detail(
 
 
 @router.get("/montajniks", dependencies=[Depends(require_roles(Role.logist, Role.admin,Role.montajnik,Role.tech_supp))])
-async def get_active_montajniks(db: AsyncSession = Depends(get_db)):
-    """
-    Получить список активных монтажников.
-    """
+async def get_active_montajniks(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)  
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
     res = await db.execute(
         select(User)
-        .where(User.role == Role.montajnik, User.is_active == True) # Фильтруем по роли и статусу
-        .order_by(User.name, User.lastname) # Сортируем для удобства
+        .where(
+            User.role == Role.montajnik, 
+            User.is_active == True,
+            User.company_id == current_user.company_id  
+        ) 
+        .order_by(User.name, User.lastname) 
     )
     montajniks = res.scalars().all()
     return [{"id": m.id, "name": m.name, "lastname": m.lastname} for m in montajniks]
@@ -2989,7 +3061,7 @@ async def logist_archive(
         .where(
             Task.status == TaskStatus.archived,
             Task.is_draft == False,
-            Task.created_by == current_user.id
+            Task.user_company_id == current_user.company_id
         ).options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),

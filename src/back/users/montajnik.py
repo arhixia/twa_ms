@@ -124,28 +124,34 @@ async def my_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depe
 
 
 @router.get("/tasks/available", dependencies=[Depends(require_roles(Role.montajnik, Role.logist, Role.tech_supp, Role.admin))])
-async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def available_tasks(
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
     """
     Общие (broadcast) задачи, доступные всем активным монтажникам.
     Возвращает список рассылок (tasks with assignment_type == broadcast и is_draft == False).
     """
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
 
     # Сначала получаем количество задач
     count_query = select(func.count(Task.id)).where(
         Task.assignment_type == AssignmentType.broadcast,
         Task.is_draft == False,
         Task.status == TaskStatus.new,
+        Task.user_company_id == current_user.company_id  
     )
     count_res = await db.execute(count_query)
     total_count = count_res.scalar() or 0
 
-    # Загружаем задачи с контактным лицом и компанией
     res = await db.execute(
         select(Task)
         .where(
             Task.assignment_type == AssignmentType.broadcast, # Используем Enum напрямую
             Task.is_draft == False,
-            Task.status == TaskStatus.new, 
+            Task.status == TaskStatus.new,
+            Task.user_company_id == current_user.company_id  # Фильтрация по компании
         )
         .options(
             selectinload(Task.contact_person).selectinload(ContactPerson.company),
@@ -167,7 +173,7 @@ async def available_tasks(db: AsyncSession = Depends(get_db), current_user: User
 
         out.append({
             "id": t.id,
-            "client_name": client_name,  #   Только название компании или ИП
+            "client_name": client_name,  
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "mont_reward": t.montajnik_reward,
@@ -803,7 +809,7 @@ async def reject_task(
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Ошибка при отклонении задачи: {e}")
 
-    # уведомляем логиста/создателя, если есть
+    
     if task.created_by:
         background_tasks.add_task(
             notify_user,
@@ -1184,7 +1190,7 @@ async def submit_report_for_review(
         background_tasks.add_task(notify_user, task.created_by, f"По задаче #{task.id} отправлен отчёт на проверку", task.id)
 
     if notify_tech:
-        tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True))
+        tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True,User.company_id == current_user.company_id))
         techs = tech_q.scalars().all()
         for tuser in techs:
             background_tasks.add_task(notify_user, tuser.id, f"По задаче #{task.id} отправлен отчёт на проверку (требуется тех.проверка)", task.id)
@@ -1644,8 +1650,17 @@ async def get_my_reports_reviews(
 
 
 @router.get("/companies", dependencies=[Depends(require_roles(Role.montajnik))])
-async def mont_get_companies(db: AsyncSession = Depends(get_db)):
-    res = await db.execute(select(ClientCompany))
+async def mont_get_companies(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    res = await db.execute(
+        select(ClientCompany)
+        .where(ClientCompany.user_company_id == current_user.company_id)  
+    )
     companies = res.scalars().all()
     return [{"id": c.id, "name": c.name} for c in companies]
 

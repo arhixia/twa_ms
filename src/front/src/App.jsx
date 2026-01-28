@@ -25,6 +25,10 @@ import TechTaskHistoryPage from "./pages/tech_supp/TechTaskHistoryPage"; // <- �
 import TechSuppCompletedTaskDetailPage from "./pages/tech_supp/TechSuppCompletedTaskDetailPage";
 import TechSuppProfilePage from "./pages/tech_supp/TechSuppProfilePage";
 
+import SuperAdminPage from "./pages/super_admin/SuperAdminPage";
+import SuperAdminUsersPage from "./pages/super_admin/SuperAdminUsersPage";
+import SuperAdminCompaniesPage from "./pages/super_admin/SuperAdminCompaniesPage";
+
 import AdminPage from "./pages/admin/AdminPage";
 import UsersPage from "./pages/admin/UsersPage";
 import AdminTasksPage from "./pages/admin/TaskPage";
@@ -92,6 +96,14 @@ export default function App() {
           <Route path="contacts" element={<AdminContactsPage />} />
           <Route path="me" element={<AdminProfilePage />} /> {/* Новый маршрут */}
           <Route path="equipment" element={<AdminEquipmentPage />} />
+        </Route>
+      )}
+
+      {role === "super_admin" && (
+        <Route path="/super_admin" element={<SuperAdminPage />}>
+          <Route index element={<Navigate to="users" />} />
+          <Route path="users" element={<SuperAdminUsersPage />} />
+          <Route path="companies" element={<SuperAdminCompaniesPage />} />
         </Route>
       )}
 

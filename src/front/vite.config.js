@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['lift-fall-why-variable.trycloudflare.com']
+    allowedHosts: ['languages-sunglasses-allocated-coordinates.trycloudflare.com']
   },
 })
 

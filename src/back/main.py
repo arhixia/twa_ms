@@ -13,6 +13,7 @@ from back.users.logist import router as logist_router
 from back.users.montajnik import router as montajnik_router
 from back.users.tech_supp import router as tech_supp_router
 from back.files.attachments import router as attachments_router
+from back.users.super_admin import router as super_admin_router
 from back.db.config import TOKEN as BOT_TOKEN,WEB_APP_URL
 from back.db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,7 +120,7 @@ app.include_router(logist_router,prefix="/api/v1/logist",tags=["Logist"])
 app.include_router(montajnik_router,prefix="/api/v1/montajnik",tags=["Montajnik"])
 app.include_router(tech_supp_router,prefix="/api/v1/tech_supp",tags=["Tech Support"])
 app.include_router(attachments_router,prefix="/api/v1/attachments",tags=["Attachments"])
-
+app.include_router(super_admin_router,prefix="/api/v1/super_admin",tags=["Super Admin"])
 
 
 

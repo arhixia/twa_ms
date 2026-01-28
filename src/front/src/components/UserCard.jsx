@@ -9,7 +9,7 @@ const truncateName = (str) => {
   return str;
 };
 
-function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate, onEditUser }) {
+function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate, onEditUser, showCompany = false, companies = [] }) {
   // Цвета ролей в соответствии с дизайном
   const roleColors = {
     admin: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)',
@@ -41,6 +41,11 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
   const displayName = truncateName(fullName);
 
   const roleBg = roleColors[user.role] || 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #bae6fd 100%)';
+
+  // Найти название компании
+  const companyName = showCompany && user.company_id 
+    ? (companies.find(c => c.id === user.company_id)?.name || `Компания ID: ${user.company_id}`)
+    : null;
 
   return (
     <div
@@ -133,6 +138,18 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
         >
           <strong>Telegram ID:</strong> {user.telegram_id || '—'}
         </p>
+        {/* Показываем компанию только если разрешено */}
+        {showCompany && companyName && (
+          <p
+            style={{
+              margin: '4px 0',
+              color: '#c9d1d9',
+              fontSize: '0.9em'
+            }}
+          >
+            <strong>Компания:</strong> {companyName}
+          </p>
+        )}
       </div>
 
       <div
