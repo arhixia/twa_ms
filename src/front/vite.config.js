@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['languages-sunglasses-allocated-coordinates.trycloudflare.com']
+    allowedHosts: ['operating-detection-remain-minds.trycloudflare.com']
   },
 })
 

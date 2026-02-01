@@ -103,7 +103,7 @@ async def verify_token(token: str) -> int:
         # если Redis недоступен — пропускаем
         if await redis_client.sismember("token_blacklist", token):
             logger.info(f"Token {token} is blacklisted")
-            raise HTTPException(status_code=403, detail="Токен отозван")
+            raise HTTPException(status_code=401, detail="Токен отозван")  
     except Exception as e:
         logger.warning(f"Redis недоступен, пропускаем blacklist check: {e}")
 
@@ -111,11 +111,11 @@ async def verify_token(token: str) -> int:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(status_code=403, detail="Не удалось извлечь ID из токена")
+            raise HTTPException(status_code=401, detail="Не удалось извлечь ID из токена")
         return int(user_id)
     except JWTError as e:
         logger.warning(f"JWT decode error: {e}")
-        raise HTTPException(status_code=403, detail="Неверный токен или истек срок действия")
+        raise HTTPException(status_code=401, detail="Неверный токен или истек срок действия, перезайдите в аккаунт")  
 
 
 
@@ -131,9 +131,9 @@ async def get_current_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        raise HTTPException(status_code=401, detail="Пользователь не найден")
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Аккаунт пользователя деактивирован")
+        raise HTTPException(status_code=401, detail="Аккаунт пользователя деактивирован")
     return user
 
 
