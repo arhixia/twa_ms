@@ -586,13 +586,17 @@ const REPORT_APPROVAL_TRANSLATIONS = {
           formWorkTypesIds.push(item.work_type_id);
         }
       });
+
+      const initialAssignmentType = (data.assignment_type === "individual" && !data.assigned_user_id) ? "broadcast" : data.assignment_type;
+      const hasAssignedUser = !!data.assigned_user_id;
+
       const initialForm = {
         ...t,
         equipment: formEquipment,
         work_types_ids: formWorkTypesIds,
         contact_person_phone: t.contact_person_phone || null,
-        assignment_type: t.assignment_type,
-        assigned_user_id: t.assigned_user_id || null,
+        assigned_user_id: hasAssignedUser ? data.assigned_user_id : null,
+        assignment_type: hasAssignedUser ? "individual" : "broadcast",
         photo_required: true,
       };
       setForm(initialForm);

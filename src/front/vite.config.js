@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['operating-detection-remain-minds.trycloudflare.com']
+    allowedHosts: ['times-levitra-attach-billing.trycloudflare.com']
   },
 })
 

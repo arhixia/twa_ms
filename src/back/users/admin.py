@@ -400,8 +400,8 @@ async def admin_update_task(
                 setattr(task, "assignment_type", AssignmentType.broadcast)
                 assignment_type_changed = True
 
-            # статус assigned → new
-            if task.status == TaskStatus.assigned:
+            
+            if task.status != TaskStatus.new:
                 task.status = TaskStatus.new
 
             if old_val is not None:
@@ -412,25 +412,25 @@ async def admin_update_task(
 
             logger.info("assigned_user_id сброшен → статус возвращен в new")
 
-        else:
+        else: 
             old_val = task.assigned_user_id
             old_assignment_type_val = task.assignment_type
             setattr(task, "assigned_user_id", new_assigned_user_id)
             setattr(task, "assignment_type", AssignmentType.individual)
             assignment_type_changed = True
-
-            # статус new → assigned
+            user_id_was_replaced = (old_val is not None and old_val != new_assigned_user_id)
+            
             if task.status == TaskStatus.new:
                 task.status = TaskStatus.assigned
-
+            elif user_id_was_replaced:
+                if task.status in [TaskStatus.accepted, TaskStatus.on_the_road, TaskStatus.started, TaskStatus.on_site]:
+                    task.status = TaskStatus.assigned
             if old_val != new_assigned_user_id:
                 changed.append(("assigned_user_id", old_val, new_assigned_user_id))
                 assigned_user_id_changed = True
             if old_assignment_type_val != AssignmentType.individual:
                 changed.append(("assignment_type", old_assignment_type_val, AssignmentType.individual))
                 assignment_type_changed = True
-
-            logger.info("Назначен монтажник → статус переведен в assigned")
 
     incoming_with_nulls.pop("assigned_user_id", None)
 
