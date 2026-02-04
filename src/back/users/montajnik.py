@@ -138,9 +138,10 @@ async def available_tasks(
     # Сначала получаем количество задач
     count_query = select(func.count(Task.id)).where(
         Task.assignment_type == AssignmentType.broadcast,
+        Task.district_id == current_user.district_id,
         Task.is_draft == False,
         Task.status == TaskStatus.new,
-        Task.user_company_id == current_user.company_id  
+        Task.user_company_id == current_user.company_id,
     )
     count_res = await db.execute(count_query)
     total_count = count_res.scalar() or 0
@@ -149,6 +150,7 @@ async def available_tasks(
         select(Task)
         .where(
             Task.assignment_type == AssignmentType.broadcast, # Используем Enum напрямую
+            Task.district_id == current_user.district_id,
             Task.is_draft == False,
             Task.status == TaskStatus.new,
             Task.user_company_id == current_user.company_id  # Фильтрация по компании

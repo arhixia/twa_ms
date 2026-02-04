@@ -84,6 +84,7 @@ class DraftIn(BaseModel):
     photo_required: Optional[bool] = False
     gos_number: Optional[str] = None
     equipment: Optional[List[TaskEquipmentItem]] = None
+    district_id: Optional[int] = None
 
     @field_validator("*", mode="before")
     @classmethod
@@ -117,6 +118,7 @@ class PublishIn(BaseModel):
     equipment: Optional[List[TaskEquipmentItem]] = None
     work_types: List[int] = Field(default_factory=list)
     photo_required: Optional[bool] = False
+    district_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -136,6 +138,7 @@ class TaskPatch(BaseModel):
     assigned_user_id: Optional[int] = None
     equipment: Optional[List[TaskEquipmentItem]] = None
     work_types: Optional[List[int]] = None 
+    district_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -233,7 +236,8 @@ class UpdateUserRequest(BaseModel):
     lastname: Optional[str] = None
     login: Optional[str] = None
     password: Optional[str] = None  
-    role: Optional[str] = None      
+    role: Optional[str] = None     
+    district_id: Optional[int] = None 
 
 
 class SuperAdminUserCreate(BaseModel):
@@ -258,3 +262,9 @@ class SuperAdminUpdateUserRequest(BaseModel):
     is_active: Optional[bool] = None
     
     model_config = ConfigDict(extra='forbid')
+
+
+class SimpleDistrictResponse(BaseModel):
+    id: int
+    name: str
+   

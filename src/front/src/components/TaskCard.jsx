@@ -288,7 +288,7 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccep
 
 function getStatusLabel(status) {
   const labelMap = {
-    new: 'Создана',
+    new: 'В эфире',
     accepted: 'Принята',
     on_the_road: 'Выехал',
     started: 'Выполняется',

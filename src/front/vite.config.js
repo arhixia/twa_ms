@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['times-levitra-attach-billing.trycloudflare.com']
+    allowedHosts: ['hon-casino-postcards-das.trycloudflare.com']
   },
 })
 

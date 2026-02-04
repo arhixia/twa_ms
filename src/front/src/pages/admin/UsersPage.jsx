@@ -1,6 +1,6 @@
-// UsersPage.jsx
+// front/src/pages/admin/UsersPage.jsx
 import React, { useState, useEffect } from 'react';
-import { adminListUsers, adminCreateUser, adminChangeUserRole, adminDeactivateUser, adminActivateUser, adminUpdateUser } from '../../api';
+import { adminListUsers, adminCreateUser, adminChangeUserRole, adminDeactivateUser, adminActivateUser, adminUpdateUser, adminGetAllDistricts } from '../../api';
 import UserCard from '../../components/UserCard';
 
 // Иконки
@@ -37,11 +37,87 @@ const RoleIcon = () => (
 </svg>
 );
 
-const TelegramIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-    <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.287 5.906c-.778.324-2.334.994-4.666 2.01-.378.15-.577.298-.595.442-.03.243.275.339.69.47l.175.055c.408.133.958.285 1.24.182.26-.1.703-.365 1.02-.668.25-.25.43-.44.54-.55.23-.23.35-.4.35-.55 0-.15-.12-.3-.35-.55-.23-.25-.5-.45-.8-.6-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3-.9-.45-.3-.15-.6-.3......"/>
-  </svg>
+const DistrictIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-buildings" viewBox="0 0 16 16">
+  <path d="M14.763.075A.5.5 0 0 1 15 .5v15a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5V14h-1v1.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V10a.5.5 0 0 1 .342-.474L6 7.64V4.5a.5.5 0 0 1 .276-.447l8-4a.5.5 0 0 1 .487.022M6 8.694 1 10.36V15h5zM7 15h2v-1.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 .5.5V15h2V1.309l-7 3.5z"/>
+  <path d="M2 11h1v1H2zm2 0h1v1H4zm-2 2h1v1H2zm2 0h1v1H4zm4-4h1v1H8zm2 0h1v1h-1zm-2 2h1v1H8zm2 0h1v1h-1zm2-2h1v1h-1zm0 2h1v1h-1zM8 7h1v1H8zm2 0h1v1h-1zm2 0h1v1h-1zM8 5h1v1H8zm2 0h1v1h-1zm2 0h1v1h-1zm0-2h1v1h-1z"/>
+</svg>
 );
+
+
+
+// Компонент автодополнения для района
+function DistrictInput({ value, onChange, districts, placeholder }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [filteredDistricts, setFilteredDistricts] = useState(districts);
+  const [inputValue, setInputValue] = useState(value);
+
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (!inputValue.trim()) {
+      setFilteredDistricts(districts);
+    } else {
+      const termLower = inputValue.toLowerCase();
+      setFilteredDistricts(
+        districts.filter(district => district.name.toLowerCase().includes(termLower))
+      );
+    }
+  }, [inputValue, districts]);
+
+  const handleInputChange = (e) => {
+    const newValue = e.target.value;
+    setInputValue(newValue);
+    onChange(newValue);
+    setIsOpen(true);
+  };
+
+  const handleDistrictSelect = (district) => {
+    setInputValue(district.name);
+    onChange(district.id);
+    setIsOpen(false);
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div className="searchable-select-container">
+      <input
+        type="text"
+        value={inputValue}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder={placeholder}
+        className="searchable-select-input"
+      />
+      {isOpen && filteredDistricts.length > 0 && (
+        <ul className="searchable-select-dropdown">
+          {filteredDistricts.map((district) => (
+            <li
+              key={district.id}
+              onClick={() => handleDistrictSelect(district)}
+              className="searchable-select-option"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {district.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredDistricts.length === 0 && inputValue.trim() !== '' && (
+        <ul className="searchable-select-dropdown">
+          <li className="searchable-select-no-results">
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
+    </div>
+  );
+}
 
 // Компонент модального окна добавления
 function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
@@ -52,11 +128,45 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
     lastname: '',
     role: 'montajnik',
     telegram_id: '',
+    district_id: null,
   });
+  const [districts, setDistricts] = useState([]);
+  const [loadingDistricts, setLoadingDistricts] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (isOpen && formData.role === 'montajnik') {
+      loadDistricts();
+    }
+  }, [isOpen, formData.role]);
+
+  async function loadDistricts() {
+    setLoadingDistricts(true);
+    try {
+      const data = await adminGetAllDistricts();
+      setDistricts(data || []);
+    } catch (err) {
+      console.error("Ошибка загрузки регионов:", err);
+    } finally {
+      setLoadingDistricts(false);
+    }
+  }
+
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'role') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+        district_id: value === 'montajnik' ? prev.district_id : null
+      }));
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
+  };
+
+  const handleDistrictChange = (districtId) => {
+    setFormData({ ...formData, district_id: districtId });
   };
 
   const handleSubmit = async (e) => {
@@ -74,9 +184,18 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
     try {
       const payload = { ...formData };
       if (payload.telegram_id === '') delete payload.telegram_id;
+      if (payload.role !== 'montajnik') delete payload.district_id;
       const newUser = await adminCreateUser(payload);
       onCreate(newUser); // Вызываем onCreate, который обновит список
-      setFormData({ login: '', password: '', name: '', lastname: '', role: 'montajnik', telegram_id: '' });
+      setFormData({ 
+        login: '', 
+        password: '', 
+        name: '', 
+        lastname: '', 
+        role: 'montajnik', 
+        telegram_id: '',
+        district_id: null
+      });
       onClose();
       // Показываем алерт
       if (window.Telegram?.WebApp) {
@@ -198,6 +317,28 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
             </div>
           </div>
           
+          {formData.role === 'montajnik' && (
+            <div className="task-field">
+              <div className="task-field-label">
+                <DistrictIcon />
+                Регион:
+              </div>
+              <div className="task-field-value">
+                {loadingDistricts ? (
+                  <div className="empty">Загрузка...</div>
+                ) : districts.length > 0 ? (
+                  <DistrictInput
+                    value={districts.find(d => d.id === formData.district_id)?.name || ""}
+                    onChange={handleDistrictChange}
+                    districts={districts}
+                    placeholder="Выберите регион"
+                  />
+                ) : (
+                  <div className="empty">Нет доступных регионов</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <div className="modal-actions">
           <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={onClose}>Отмена</button>
@@ -218,11 +359,45 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
     login: user.login,
     password: '', // Поле для нового пароля
     role: user.role,
+    district_id: user.district_id || null,
   });
+  const [districts, setDistricts] = useState([]);
+  const [loadingDistricts, setLoadingDistricts] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (user.role === 'montajnik') {
+      loadDistricts();
+    }
+  }, [user.role]);
+
+  async function loadDistricts() {
+    setLoadingDistricts(true);
+    try {
+      const data = await adminGetAllDistricts();
+      setDistricts(data || []);
+    } catch (err) {
+      console.error("Ошибка загрузки районов:", err);
+    } finally {
+      setLoadingDistricts(false);
+    }
+  }
+
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'role') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+        district_id: value === 'montajnik' ? prev.district_id : null
+      }));
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
+  };
+
+  const handleDistrictChange = (districtId) => {
+    setFormData({ ...formData, district_id: districtId });
   };
 
   const handleSubmit = async (e) => {
@@ -243,6 +418,7 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
       if (!payload.password) {
         delete payload.password; // Не отправляем пустой пароль
       }
+      if (payload.role !== 'montajnik') delete payload.district_id;
       const updatedUser = await adminUpdateUser(user.id, payload);
       onSave(updatedUser); // Вызываем onSave, который обновит список
       onClose();
@@ -363,6 +539,29 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
               </select>
             </div>
           </div>
+          
+          {formData.role === 'montajnik' && (
+            <div className="task-field">
+              <div className="task-field-label">
+                <DistrictIcon />
+                Регион:
+              </div>
+              <div className="task-field-value">
+                {loadingDistricts ? (
+                  <div className="empty">Загрузка...</div>
+                ) : districts.length > 0 ? (
+                  <DistrictInput
+                    value={districts.find(d => d.id === formData.district_id)?.name || ""}
+                    onChange={handleDistrictChange}
+                    districts={districts}
+                    placeholder="Выберите регион"
+                  />
+                ) : (
+                  <div className="empty">Нет доступных регионов</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <div className="modal-actions">
           <button className="gradient-button" style={{ background: 'linear-gradient(to right, #6c757d, #495057)' }} onClick={onClose}>Отмена</button>

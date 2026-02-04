@@ -12,6 +12,7 @@ import {
   getContactPersonPhone,
   getActiveMontajniks,
   publishTask,
+  getSimpleDistricts
 } from "../../api";
 import "../../styles/LogistPage.css";
 import useAuthStore from "@/store/useAuthStore";
@@ -30,6 +31,7 @@ export default function DraftDetailPage() {
   const [loadingRefs, setLoadingRefs] = useState(false);
   const [loadingPhone, setLoadingPhone] = useState(false);
   const [montajniks, setMontajniks] = useState([]);
+  const [districts, setDistricts] = useState([]);
 
   useEffect(() => {
     loadRefs();
@@ -49,6 +51,14 @@ export default function DraftDetailPage() {
       setWorkTypes(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
       setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
       setMontajniks(montRes.status === 'fulfilled' ? montRes.value || [] : []);
+      try {
+    const distData = await getSimpleDistricts();
+    setDistricts(distData || []);
+  } catch (err) {
+    console.error("Ошибка загрузки районов:", err);
+    setDistricts([]);
+  }
+
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     } finally {
@@ -104,6 +114,7 @@ export default function DraftDetailPage() {
         assignment_type: processedDraftForView.assignment_type,
         assigned_user_id: processedDraftForView.assigned_user_id || null,
         photo_required: true,
+         district_id: d.district_id || null,
       };
 
       setForm(initialForm);
@@ -195,6 +206,7 @@ export default function DraftDetailPage() {
         gos_number: form.gos_number || null,
         contact_person_phone: undefined,
         assigned_user_name: undefined,
+        district_id: form.district_id,
       };
       await patchDraft(id, payload);
       if (window.Telegram?.WebApp) {
@@ -218,7 +230,7 @@ export default function DraftDetailPage() {
   async function handlePublish() {
     if (!window.confirm("Опубликовать черновик?")) return;
     try {
-      await publishTask({ draft_id: draft.id });
+      await publishTask({ draft_id: draft.id ,district_id: form.district_id});
       if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.showAlert("✅ Опубликовано");
       } else {
@@ -257,6 +269,88 @@ export default function DraftDetailPage() {
       }
     }
   }
+
+
+  function SearchableDistrictSelect({ availableDistricts, onSelect, selectedDistrictId }) {
+    const [searchTerm, setSearchTerm] = useState("");
+    const [filteredDistricts, setFilteredDistricts] = useState(availableDistricts);
+    const [isOpen, setIsOpen] = useState(false);
+  
+  
+    useEffect(() => {
+    if (selectedDistrictId && availableDistricts.length > 0) {
+      const district = availableDistricts.find(d => d.id === selectedDistrictId);
+      if (district) {
+        setSearchTerm(district.name);
+      } else {
+        setSearchTerm("");
+      }
+    } else {
+      setSearchTerm("");
+    }
+  }, [selectedDistrictId, availableDistricts.length]); 
+  
+    useEffect(() => {
+      if (!searchTerm.trim()) {
+        setFilteredDistricts(availableDistricts);
+      } else {
+        const termLower = searchTerm.toLowerCase();
+        setFilteredDistricts(
+          availableDistricts.filter(d => d.name.toLowerCase().includes(termLower))
+        );
+      }
+    }, [searchTerm, availableDistricts]);
+  
+    const handleInputChange = (e) => {
+      setSearchTerm(e.target.value);
+      setIsOpen(true);
+    };
+  
+    const handleItemClick = (district) => {
+      onSelect(district.id);
+      setSearchTerm(district.name);
+      setIsOpen(false);
+    };
+  
+    const handleInputFocus = () => setIsOpen(true);
+    const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+  
+    return (
+      <div className="searchable-select-container">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          placeholder="🔍 Поиск региона..."
+          className="searchable-select-input"
+        />
+        {isOpen && filteredDistricts.length > 0 && (
+          <ul className="searchable-select-dropdown">
+            {filteredDistricts.map((d) => (
+              <li
+                key={d.id}
+                onClick={() => handleItemClick(d)}
+                className="searchable-select-option"
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                {d.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {isOpen && filteredDistricts.length === 0 && searchTerm.trim() !== '' && (
+          <ul className="searchable-select-dropdown">
+            <li className="searchable-select-no-results">
+              Ничего не найдено
+            </li>
+          </ul>
+        )}
+      </div>
+    );
+  }
+  
 
   // --- КОМПОНЕНТ: Умный поиск для оборудования ---
   function SearchableEquipmentSelect({ availableEquipment, onSelect, selectedItems }) {
@@ -945,25 +1039,40 @@ export default function DraftDetailPage() {
       />
       
       <label className="dark-label">
-        Тип назначения
-        <select
-          value={form.assignment_type || ""}
-          onChange={(e) => {
-            const newType = e.target.value;
-            setField("assignment_type", newType);
-            if (newType === "broadcast") {
-                setField("assigned_user_id", null);
-            }
-          }}
-          className="dark-select"
-        >
-          {assignmentTypeOptions.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.display}
-            </option>
-          ))}
-        </select>
-      </label>
+  Тип назначения
+  <select
+    value={form.assignment_type || ""}
+    onChange={(e) => {
+      const newType = e.target.value;
+      setField("assignment_type", newType);
+      if (newType === "broadcast") {
+        setField("assigned_user_id", null);
+      } else if (newType === "individual") {
+        setField("assigned_user_id", null);
+        setField("district_id", null); 
+      }
+    }}
+    className="dark-select"
+  >
+    {assignmentTypeOptions.map(option => (
+      <option key={option.value} value={option.value}>
+        {option.display}
+      </option>
+    ))}
+  </select>
+</label>
+
+{form.assignment_type === "broadcast" && districts.length > 0 && (
+  <label className="dark-label">
+    Регион
+    <SearchableDistrictSelect
+      availableDistricts={districts}
+      onSelect={(districtId) => setField("district_id", districtId)}
+      selectedDistrictId={form.district_id}
+    />
+  </label>
+)}
+
       
       {form.assignment_type === "individual" && (
         <div>

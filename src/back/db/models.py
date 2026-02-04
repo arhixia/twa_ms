@@ -66,12 +66,13 @@ class User(AsyncAttrs, Base):
     login = Column(String(30),unique=True,index = True,nullable=False) 
     hashed_password = Column(String, nullable=False)
     company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="SET NULL"), index=True, nullable=True)  
+    district_id = Column(Integer, ForeignKey("districts.id", ondelete="SET NULL"), index=True, nullable=True)
 
     company = relationship("UserCompany", back_populates="users")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     tasks = relationship("Task", back_populates="assigned_user", foreign_keys="[Task.assigned_user_id]")
     reports = relationship("TaskReport", back_populates="author", cascade="all, delete-orphan")
-    
+    district = relationship("District", back_populates="users")
 
 # TASKS
 
@@ -96,6 +97,7 @@ class Task(AsyncAttrs, Base):
     client_price = Column(Numeric(10,2), nullable=True)
     montajnik_reward = Column(Numeric(10,2), nullable=True)
     user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="SET NULL"), index=True, nullable=True)
+    district_id = Column(Integer, ForeignKey("districts.id", ondelete="SET NULL"), index=True, nullable=True)
     
 
     # owner of draft / creator of the task
@@ -112,6 +114,7 @@ class Task(AsyncAttrs, Base):
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
+    district = relationship("District", back_populates="tasks")
     user_company = relationship("UserCompany", back_populates="tasks")
     assigned_user = relationship("User", back_populates="tasks", foreign_keys=[assigned_user_id])
     creator = relationship("User", foreign_keys=[created_by])
@@ -372,6 +375,18 @@ class UserCompany(AsyncAttrs, Base):
     work_types = relationship("WorkType", back_populates="user_company") 
     equipment = relationship("Equipment", back_populates="user_company")
     client_companies = relationship("ClientCompany", back_populates="user_company")
+    districts = relationship("District", back_populates="user_company")
 
 
+
+class District(AsyncAttrs, Base):
+    __tablename__ = "districts"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)  
+    user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="CASCADE"), index=True, nullable=True)
+
+    user_company = relationship("UserCompany", back_populates="districts")
+    users = relationship("User", back_populates="district")
+    tasks = relationship("Task", back_populates="district")
 

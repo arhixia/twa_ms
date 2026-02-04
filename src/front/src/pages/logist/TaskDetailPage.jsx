@@ -14,6 +14,7 @@ import {
   archiveTask,
   listReportAttachments,
   getAttachmentUrl,
+  getSimpleDistricts,
 } from "../../api";
 import "../../styles/LogistPage.css";
 import useAuthStore from "@/store/useAuthStore";
@@ -112,6 +113,86 @@ return (
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SearchableDistrictSelect({ availableDistricts, onSelect, selectedDistrictId }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filteredDistricts, setFilteredDistricts] = useState(availableDistricts);
+  const [isOpen, setIsOpen] = useState(false);
+
+
+  useEffect(() => {
+  if (selectedDistrictId && availableDistricts.length > 0) {
+    const district = availableDistricts.find(d => d.id === selectedDistrictId);
+    if (district) {
+      setSearchTerm(district.name);
+    } else {
+      setSearchTerm("");
+    }
+  } else {
+    setSearchTerm("");
+  }
+}, [selectedDistrictId, availableDistricts.length]); 
+
+  useEffect(() => {
+    if (!searchTerm.trim()) {
+      setFilteredDistricts(availableDistricts);
+    } else {
+      const termLower = searchTerm.toLowerCase();
+      setFilteredDistricts(
+        availableDistricts.filter(d => d.name.toLowerCase().includes(termLower))
+      );
+    }
+  }, [searchTerm, availableDistricts]);
+
+  const handleInputChange = (e) => {
+    setSearchTerm(e.target.value);
+    setIsOpen(true);
+  };
+
+  const handleItemClick = (district) => {
+    onSelect(district.id);
+    setSearchTerm(district.name);
+    setIsOpen(false);
+  };
+
+  const handleInputFocus = () => setIsOpen(true);
+  const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
+
+  return (
+    <div className="searchable-select-container">
+      <input
+        type="text"
+        value={searchTerm}
+        onChange={handleInputChange}
+        onFocus={handleInputFocus}
+        onBlur={handleInputBlur}
+        placeholder="🔍 Поиск региона..."
+        className="searchable-select-input"
+      />
+      {isOpen && filteredDistricts.length > 0 && (
+        <ul className="searchable-select-dropdown">
+          {filteredDistricts.map((d) => (
+            <li
+              key={d.id}
+              onClick={() => handleItemClick(d)}
+              className="searchable-select-option"
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {d.name}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isOpen && filteredDistricts.length === 0 && searchTerm.trim() !== '' && (
+        <ul className="searchable-select-dropdown">
+          <li className="searchable-select-no-results">
+            Ничего не найдено
+          </li>
+        </ul>
+      )}
     </div>
   );
 }
@@ -439,6 +520,7 @@ export default function TaskDetailPage() {
   const [rejectModal, setRejectModal] = useState({ open: false, taskId: null, reportId: null });
   const [montajniks, setMontajniks] = useState([]); // <--- Список монтажников
   const [reportAttachmentsMap, setReportAttachmentsMap] = useState({});
+  const [districts, setDistricts] = useState([]);
   // const [openImage, setOpenImage] = useState(null);
   const [imageModalState, setImageModalState] = useState({
   isOpen: false,
@@ -547,6 +629,14 @@ const REPORT_APPROVAL_TRANSLATIONS = {
       setWorkTypesList(wtRes.status === 'fulfilled' ? wtRes.value || [] : []);
       setCompanies(compRes.status === 'fulfilled' ? compRes.value || [] : []);
       setMontajniks(montRes.status === 'fulfilled' ? montRes.value || [] : []);
+      try {
+  const distData = await getSimpleDistricts();
+  setDistricts(distData || []);
+} catch (err) {
+  console.error("Ошибка загрузки регионов:", err);
+  setDistricts([]);
+}
+      
     } catch (e) {
       console.error("Ошибка загрузки справочников", e);
     }
@@ -598,6 +688,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
         assigned_user_id: hasAssignedUser ? data.assigned_user_id : null,
         assignment_type: hasAssignedUser ? "individual" : "broadcast",
         photo_required: true,
+        district_id: t.district_id || null,
       };
       setForm(initialForm);
       // --- ЗАГРУЗКА ТЕЛЕФОНА КОНТАКТНОГО ЛИЦА ДЛЯ РЕЖИМА ПРОСМОТРА ---
@@ -873,6 +964,25 @@ const goToPrevImage = () => {
   }
 
 async function saveEdit() {
+  if (form.assignment_type === "broadcast") {
+  if (!form.district_id) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Для задачи 'В эфир' обязательно укажите регион");
+    } else {
+      alert("Для задачи 'В эфир' обязательно укажите регион");
+    }
+    return;
+  }
+} else if (form.assignment_type === "individual") {
+  if (!form.assigned_user_id) {
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.showAlert("Необходимо назначить монтажника");
+    } else {
+      alert("Необходимо назначить монтажника");
+    }
+    return;
+  }
+}
   try {
     const payload = {
       ...form,
@@ -883,6 +993,7 @@ async function saveEdit() {
       gos_number: form.gos_number || null,
       contact_person_phone: undefined, 
       assigned_user_name: undefined,
+      district_id: form.district_id,
     };
     await editTask(id, payload);
     if (window.Telegram?.WebApp) {
@@ -1353,7 +1464,11 @@ async function handleApproveReport(taskId, reportId) {
                     const newType = e.target.value;
                     setField("assignment_type", newType);
                     if (newType === "broadcast") {
-                        setField("assigned_user_id", null);
+                      setField("assigned_user_id", null);
+                      // district_id остаётся — ок
+                    } else if (newType === "individual") {
+                      setField("assigned_user_id", null); 
+                      setField("district_id", null); 
                     }
                   }}
                   className="dark-select"
@@ -1365,8 +1480,18 @@ async function handleApproveReport(taskId, reportId) {
                   ))}
                 </select>
               </label>
-              {/* ===== НАЗНАЧИТЬ МОНТАЖНИКА (новая логика, условный рендер) ===== */}
-              {/* ✅ Поле "Назначить монтажника" отображается только если тип "assigned" */}
+
+              {/* ===== РАЙОН (только для broadcast) ===== */}
+{form.assignment_type === "broadcast" && districts.length > 0 && (
+  <label className="dark-label">
+    Регион
+    <SearchableDistrictSelect
+      availableDistricts={districts}
+      onSelect={(districtId) => setField("district_id", districtId)}
+      selectedDistrictId={form.district_id}
+    />
+  </label>
+)}
               {form.assignment_type === "individual" && (
                 <div>
                   <label className="dark-label">

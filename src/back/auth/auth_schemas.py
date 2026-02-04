@@ -27,8 +27,9 @@ class UserBase(BaseModel):
     telegram_id: Optional[int] = Field(None, description="Telegram user ID")
     name:       str = Field(..., description="Имя пользователя")
     lastname:   str = Field(..., description="Фамилия пользователя")
-    role:       Role = Field(..., description="Роль пользователя")
+    role:       Role = Field(..., description="Роль пользователя")  
     is_active:  bool = Field(True, description="Активность пользователя")
+    district_id: Optional[int] = Field(None, description="ID района (для монтажников)")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,6 +37,8 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     login: str = Field(..., min_length=3, max_length=30)
     password: str = Field(..., min_length=6)
+
+    
 
 
 class UserResponse(UserBase):

@@ -8,6 +8,7 @@ from back.db.models import (
     AssignmentType,
     ClientCompany,
     ContactPerson,
+    District,
     Equipment,
     FileType,
     ReportApproval,
@@ -24,7 +25,7 @@ from back.db.models import (
     TaskReport,
     WorkType,
 )
-from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg, UpdateCompanyRequest, UpdateContactPersonRequest,require_roles
+from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, SimpleDistrictResponse, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg, UpdateCompanyRequest, UpdateContactPersonRequest,require_roles
 from back.utils.notify import notify_broadcast_task, notify_task_assignment, notify_user
 from datetime import datetime, timezone
 from sqlalchemy import and_, case, delete, desc, func, or_, select
@@ -258,22 +259,20 @@ async def create_draft(
 ):
     data = payload.model_dump()
 
-    # Проверяем, что у пользователя есть компания
     if not current_user.company_id:
         raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
 
+    # === Обработка contact_person ===
     contact_person_id = data.get("contact_person_id")
-    gos_number = data.get("gos_number")
-
     company_id = None
     contact_person_phone = None
     if contact_person_id:
         cp_res = await db.execute(
             select(ContactPerson)
-            .join(ClientCompany)  
+            .join(ClientCompany)
             .where(
-                ContactPerson.id == contact_person_id, 
-                ClientCompany.user_company_id == current_user.company_id  
+                ContactPerson.id == contact_person_id,
+                ClientCompany.user_company_id == current_user.company_id
             )
         )
         contact_person = cp_res.scalars().first()
@@ -282,16 +281,27 @@ async def create_draft(
         company_id = contact_person.company_id
         contact_person_phone = contact_person.phone
 
+    
+    district_id = data.get("district_id")
+    if district_id is not None:
+        district_check = await db.execute(
+            select(District).where(
+                District.id == district_id,
+                District.user_company_id == current_user.company_id
+            )
+        )
+        if not district_check.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+
+
     scheduled_at = _parse_datetime(data.get("scheduled_at")) if data.get("scheduled_at") else None
     assignment_type = _parse_assignment_type(data.get("assignment_type")) if data.get("assignment_type") else None
 
     data["assigned_user_id"] = _normalize_assigned_user_id(data.get("assigned_user_id"))
 
-    # === НОВАЯ РАСЧЁТНАЯ ЛОГИКА ЦЕН ===
     work_types_ids_raw = data.get("work_types", [])
     equipment_data_raw = data.get("equipment", [])
 
-    # --- Рассчёт по Work Types ---
     work_type_counts = Counter(work_types_ids_raw)
     work_types_ids_unique = list(work_type_counts.keys())
 
@@ -299,7 +309,11 @@ async def create_draft(
     calculated_works_cost_for_mont = Decimal('0')
     if work_types_ids_unique:
         wt_res = await db.execute(
-            select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True, WorkType.user_company_id == current_user.company_id)
+            select(WorkType).where(
+                WorkType.id.in_(work_types_ids_unique),
+                WorkType.is_active == True,
+                WorkType.user_company_id == current_user.company_id
+            )
         )
         work_types_from_db = wt_res.scalars().all()
         if len(work_types_from_db) != len(work_types_ids_unique):
@@ -311,18 +325,19 @@ async def create_draft(
             calculated_works_cost_for_client += (wt.client_price or Decimal('0')) * count
             calculated_works_cost_for_mont += (wt.mont_price or Decimal('0')) * count
 
-    # --- Рассчёт по Equipment ---
     equipment_quantities = {}
     for eq_item in equipment_data_raw:
-        # eq_item - это словарь { "equipment_id": ..., "serial_number": "...", "quantity": ... }
         eq_id = eq_item.get("equipment_id")
-        qty = eq_item.get("quantity", 1) # Дефолтное значение 1
+        qty = eq_item.get("quantity", 1)
         equipment_quantities[eq_id] = equipment_quantities.get(eq_id, 0) + qty
 
     calculated_equipment_cost = Decimal('0')
     if equipment_quantities:
         eq_res = await db.execute(
-            select(Equipment).where(Equipment.id.in_(list(equipment_quantities.keys())), Equipment.user_company_id == current_user.company_id)
+            select(Equipment).where(
+                Equipment.id.in_(list(equipment_quantities.keys())),
+                Equipment.user_company_id == current_user.company_id
+            )
         )
         equipment_from_db = eq_res.scalars().all()
         if len(equipment_from_db) != len(equipment_quantities):
@@ -331,13 +346,12 @@ async def create_draft(
 
         for eq in equipment_from_db:
             qty = equipment_quantities[eq.id]
-            calculated_equipment_cost += (eq.price or Decimal('0')) * qty # Цена за единицу * количество
+            calculated_equipment_cost += (eq.price or Decimal('0')) * qty
 
-    # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
     final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
     final_montajnik_reward = calculated_works_cost_for_mont
 
-
+   
     task = Task(
         contact_person_id=contact_person_id,
         company_id=company_id,
@@ -350,28 +364,29 @@ async def create_draft(
         assignment_type=assignment_type,
         assigned_user_id=data.get("assigned_user_id"),
         logist_contact_id=getattr(current_user, "telegram_id", None),
-
-        
         client_price=final_client_price,
         montajnik_reward=final_montajnik_reward,
-
         is_draft=True,
         photo_required=data.get("photo_required", False),
         created_by=int(current_user.id),
-        gos_number=gos_number,
-        user_company_id=current_user.company_id
+        gos_number=data.get("gos_number"),
+        user_company_id=current_user.company_id,
+        district_id=district_id,  
     )
 
     db.add(task)
-    await db.flush() # flush, чтобы получить task.id
+    await db.flush()
 
-    # --- SAVE EQUIPMENT ---
+
     for eq_item in equipment_data_raw:
         equipment_id = eq_item.get("equipment_id")
         serial_number = eq_item.get("serial_number")
         quantity = eq_item.get("quantity", 1)
 
-        eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id, Equipment.user_company_id == current_user.company_id))
+        eq_res = await db.execute(select(Equipment).where(
+            Equipment.id == equipment_id,
+            Equipment.user_company_id == current_user.company_id
+        ))
         equipment_obj = eq_res.scalars().first()
         if not equipment_obj:
             raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено или не принадлежит вашей компании")
@@ -383,10 +398,12 @@ async def create_draft(
             quantity=quantity,
         ))
 
-    # --- SAVE WORK TYPES ---
+    # === Сохранение видов работ ===
     for wt_id, count in work_type_counts.items():
-        # Проверяем, существует ли тип работы (уже делали выше, но на всякий случай)
-        wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id, WorkType.user_company_id == current_user.company_id))
+        wt_res = await db.execute(select(WorkType).where(
+            WorkType.id == wt_id,
+            WorkType.user_company_id == current_user.company_id
+        ))
         wt = wt_res.scalars().first()
         if not wt:
             raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден или не принадлежит вашей компании")
@@ -413,7 +430,8 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
             selectinload(Task.works).selectinload(TaskWork.work_type),
             selectinload(Task.contact_person).selectinload(ContactPerson.company),
-            selectinload(Task.assigned_user)
+            selectinload(Task.assigned_user),
+            selectinload(Task.district),
         )
         .where(
             Task.id == draft_id,
@@ -453,7 +471,8 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
     assigned_user_name = task.assigned_user.name if task.assigned_user else None
     assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
     assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
-
+    district_id = task.district.id if task.district else None
+    district_name = task.district.name if task.district else None
 
 
     payload = {
@@ -475,6 +494,8 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
         "gos_number": task.gos_number, 
         "equipment": equipment_items, 
         "work_types": work_type_items, 
+        "district_id": district_id,      
+        "district_name": district_name,
     }
 
     return {"draft_id": int(task.id), "saved_at": task.created_at, "data": payload}
@@ -491,247 +512,157 @@ async def patch_draft(
 ):
     logger.info(f"patch_draft вызван для черновика ID: {draft_id}")
 
-    # --- Проверки роли и существования черновика ---
     _ensure_logist_or_403(current_user)
 
-    # Загружаем черновик и *старые* связи (опционально, для сравнения)
+    # Загружаем черновик
     result = await db.execute(
         select(Task)
-        .where(Task.id == draft_id, Task.is_draft == True)
-        # Загружаем связи для получения старых значений (для расчёта цен и сравнения)
-        .options(selectinload(Task.works).selectinload(TaskWork.work_type))
-        .options(selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment))
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company))  #   Загружаем компанию
+        .where(Task.id == draft_id, Task.is_draft == True, Task.user_company_id == current_user.company_id)
+        .options(
+            selectinload(Task.works).selectinload(TaskWork.work_type),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.district),  
+        )
     )
     task = result.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Черновик не найден")
 
-    
-    old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
-    old_equipment_with_sn_qty = [
-        (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
-    ]
-    old_contact_person_name = task.contact_person.name if task.contact_person else None
-    old_company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
-    old_contact_person_phone = task.contact_person.phone if task.contact_person else None
-    old_assigned_user_id = task.assigned_user_id # <--- Добавлено
-    old_assignment_type = task.assignment_type # <--- Добавлено
-    #   Сохраняем старые цены для проверки изменений
-    old_client_price = task.client_price
-    old_montajnik_reward = task.montajnik_reward
-   
     data = payload.model_dump()
-  
 
-    contact_person_id = data.get("contact_person_id")
-    assigned_user_id = data.get("assigned_user_id")
-    gos_number = data.get("gos_number")
+    # --- СБРОС district_id ПРИ СМЕНЕ НА individual ---
+    if "assignment_type" in data:
+        new_assignment_type = data["assignment_type"]
+        if new_assignment_type == AssignmentType.individual and task.district_id is not None:
+            old_district_id = task.district_id
+            task.district_id = None
+            logger.info(f"Сброшен district_id из-за смены типа на 'individual' (старое значение: {old_district_id})")
 
-    # --- Обновление contact_person_id, company_id, contact_person_phone ---
-    if contact_person_id is not None:
+    # --- ОБРАБОТКА district_id ---
+    if "district_id" in data:
+        district_id = data["district_id"]
+        if district_id is not None:
+            # Проверяем, что район принадлежит компании пользователя
+            district_check = await db.execute(
+                select(District).where(
+                    District.id == district_id,
+                    District.user_company_id == current_user.company_id
+                )
+            )
+            if not district_check.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+        task.district_id = district_id
+
+    # --- ОБНОВЛЕНИЕ assigned_user_id и assignment_type ---
+    if "assigned_user_id" in data:
+        new_assigned_user_id = data["assigned_user_id"]
+        if new_assigned_user_id is None:
+            task.assigned_user_id = None
+            if task.assignment_type != AssignmentType.broadcast:
+                task.assignment_type = AssignmentType.broadcast
+        else:
+            task.assigned_user_id = new_assigned_user_id
+            task.assignment_type = AssignmentType.individual
+
+    # --- ОБНОВЛЕНИЕ КОНТАКТНОГО ЛИЦА ---
+    if "contact_person_id" in data:
+        contact_person_id = data["contact_person_id"]
         if contact_person_id:
             cp_res = await db.execute(select(ContactPerson).where(ContactPerson.id == contact_person_id))
             contact_person = cp_res.scalars().first()
             if not contact_person:
                 raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено")
-            old_cp_id = task.contact_person_id
-            old_co_id = task.company_id
-            old_cp_phone = task.contact_person_phone
-            setattr(task, "contact_person_id", contact_person_id)
-            setattr(task, "company_id", contact_person.company_id)
-            setattr(task, "contact_person_phone", contact_person.phone)
-            logger.info(f"Поле 'contact_person_id' и 'company_id' помечены как изменённые: {old_cp_id}->{contact_person_id}, {old_co_id}->{contact_person.company_id},{old_cp_phone}->{contact_person.phone}")
+            task.contact_person_id = contact_person_id
+            task.company_id = contact_person.company_id
+            task.contact_person_phone = contact_person.phone
         else:
-            old_cp_id = task.contact_person_id
-            old_co_id = task.company_id
-            old_cp_phone = task.contact_person_phone
-            setattr(task, "contact_person_id", None)
-            setattr(task, "company_id", None)
-            setattr(task, "contact_person_phone", None)
-            logger.info(f"Поле 'contact_person_id' и 'company_id' сброшены: {old_cp_id}->{None}, {old_co_id}->{None},{old_cp_phone}->{None}")
+            task.contact_person_id = None
+            task.company_id = None
+            task.contact_person_phone = None
 
-    if "assigned_user_id" in data:  # Проверяем, пришло ли поле вообще
-        new_assigned_user_id = data["assigned_user_id"]
-        old_assigned_user_id = task.assigned_user_id
-        old_assignment_type = task.assignment_type
-
-        if new_assigned_user_id is None:
-            setattr(task, "assigned_user_id", None)
-        # Если был индивидуальный монтажник, переключаем на broadcast
-            if task.assignment_type == AssignmentType.individual:
-                task.assignment_type = AssignmentType.broadcast
-                logger.info(f"assigned_user_id сброшен ({old_assigned_user_id} -> None), "
-                            f"assignment_type изменён {old_assignment_type} -> {task.assignment_type}")
-        else:
-            setattr(task, "assigned_user_id", new_assigned_user_id)
-            logger.info(f"assigned_user_id изменён {old_assigned_user_id} -> {new_assigned_user_id}")
-
-    # --- Обновление основных полей задачи (кроме связей) ---
-    changed = []
+    # --- ОБНОВЛЕНИЕ ОСТАЛЬНЫХ ПОЛЕЙ ---
     for key, value in data.items():
-        #   Пропускаем equipment, work_types, contact_person_id, gos_number - они обрабатываются отдельно
-        if key in {"equipment", "work_types", "contact_person_id","assigned_user_id", "gos_number"}:
+        if key in {
+            "equipment", "work_types", "contact_person_id",
+            "assigned_user_id", "district_id", "assignment_type"
+        }:
             continue
-        if value is not None:
-            old = getattr(task, key)
-            old_cmp = old.value if hasattr(old, "value") else old
-            new_cmp = value.value if hasattr(value, "value") else value
-            logger.debug(f"Сравнение поля '{key}': DB={old_cmp}, Payload={new_cmp}")
-            if str(old_cmp) != str(new_cmp):
-                setattr(task, key, value)
-                changed.append((key, old, value))
-                logger.info(f"Поле '{key}' помечено как изменённое: {old_cmp} -> {new_cmp}")
+        if hasattr(task, key):
+            setattr(task, key, value)
 
-    #   Устанавливаем gos_number, если пришло
-    if gos_number is not None: # Позволяем установить null
-        setattr(task, "gos_number", gos_number)
-
-    equipment_data = data.get("equipment", None) # Проверяем, передано ли оборудование
-    if equipment_data is not None: # Если передано оборудование
-        # 1. Получаем существующие записи TaskEquipment для этой задачи
-        existing_te_res = await db.execute(
-            select(TaskEquipment).where(TaskEquipment.task_id == task.id)
-        )
-        existing_te_list = existing_te_res.scalars().all()
-        existing_te_map = {te.id: te for te in existing_te_list} # Map для быстрого поиска
-
-        incoming_te_ids = set() # Будем собирать ID пришедших записей для сравнения
-
-        # 2. Обрабатываем каждый пришедший элемент
-        for item_data_dict in equipment_data:
-            # Pydantic автоматически преобразует dict в TaskEquipmentItem
-            item_data: TaskEquipmentItem = item_data_dict if isinstance(item_data_dict, TaskEquipmentItem) else TaskEquipmentItem(**item_data_dict)
-            
-            item_id = item_data.id
-            equipment_id = item_data.equipment_id
-            serial_number = item_data.serial_number
-            quantity = item_data.quantity
-
-            # Проверяем, существует ли оборудование
-            eq_res = await db.execute(select(Equipment).where(Equipment.id == equipment_id))
-            equipment_obj = eq_res.scalars().first()
-            if not equipment_obj:
-                raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено")
-
-            if item_id:
-                # 2a. Обновление существующей записи
-                if item_id in existing_te_map:
-                    te_record = existing_te_map[item_id]
-                    # Проверка, что запись принадлежит этой задаче
-                    if te_record.task_id != task.id:
-                        raise HTTPException(status_code=400, detail=f"Запись оборудования id={item_id} не принадлежит задаче {task.id}")
-                    
-                    te_record.equipment_id = equipment_id
-                    te_record.serial_number = serial_number
-                    te_record.quantity = quantity
-                    # db.add(te_record) # Не обязательно, если объект уже отслеживается
-                    incoming_te_ids.add(item_id)
-                    logger.info(f"Обновлена запись TaskEquipment id={item_id}")
-                else:
-                    raise HTTPException(status_code=400, detail=f"Запись TaskEquipment id={item_id} не найдена для задачи {task.id}")
-            else:
-                # 2b. Создание новой записи
-                new_te = TaskEquipment(
-                    task_id=task.id,
-                    equipment_id=equipment_id,
-                    serial_number=serial_number,
-                    quantity=quantity
+    # --- ОБНОВЛЕНИЕ EQUIPMENT ---
+    if "equipment" in data:
+        # Удаляем старые
+        await db.execute(delete(TaskEquipment).where(TaskEquipment.task_id == task.id))
+        # Добавляем новые
+        for item in data["equipment"]:
+            eq_id = item.get("equipment_id")
+            # Валидация оборудования
+            eq_res = await db.execute(
+                select(Equipment).where(
+                    Equipment.id == eq_id,
+                    Equipment.user_company_id == current_user.company_id
                 )
-                db.add(new_te)
-                await db.flush() # Нужно для получения new_te.id
-                incoming_te_ids.add(new_te.id) # Добавляем ID новой записи
-                logger.info(f"Создана новая запись TaskEquipment id={new_te.id}")
+            )
+            if not eq_res.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail=f"Оборудование id={eq_id} не найдено")
+            db.add(TaskEquipment(
+                task_id=task.id,
+                equipment_id=eq_id,
+                serial_number=item.get("serial_number"),
+                quantity=item.get("quantity", 1),
+            ))
 
-        # 3. Удаление записей, которых нет во входящих данных
-        ids_to_delete = set(existing_te_map.keys()) - incoming_te_ids
-        if ids_to_delete:
-            delete_stmt = delete(TaskEquipment).where(TaskEquipment.id.in_(ids_to_delete))
-            await db.execute(delete_stmt)
-            logger.info(f"Удалены записи TaskEquipment ids={ids_to_delete}")
-
-        changed.append(("equipment", "old_equipment_set", equipment_data))
-        logger.info("Оборудование помечено как изменённое")
-
-
-    work_types_data = data.get("work_types", None) # Проверяем, переданы ли work_types
-    if work_types_data is not None: # Если переданы work_types
-        # 1. Удаляем все старые записи TaskWork
+    # --- ОБНОВЛЕНИЕ WORK TYPES ---
+    if "work_types" in data:
         await db.execute(delete(TaskWork).where(TaskWork.task_id == task.id))
-        
-        # 2. Создаем новые записи с учетом количества
-        from collections import Counter
-        work_type_counts = Counter(work_types_data) # Подсчитываем количество для каждого ID
+        work_type_counts = Counter(data["work_types"])
         for wt_id, count in work_type_counts.items():
-            res = await db.execute(select(WorkType).where(WorkType.id == wt_id))
-            wt = res.scalars().first()
-            if not wt:
+            wt_res = await db.execute(
+                select(WorkType).where(
+                    WorkType.id == wt_id,
+                    WorkType.user_company_id == current_user.company_id
+                )
+            )
+            if not wt_res.scalar_one_or_none():
                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден")
-            #   Создаем TaskWork с quantity=count
             db.add(TaskWork(task_id=task.id, work_type_id=wt_id, quantity=count))
-        
-        changed.append(("work_types", "old_work_set", work_types_data))
-        logger.info("Типы работ помечены как изменённые")
 
-
-    # --- НОВАЯ ЛОГИКА РАСЧЁТА ЦЕН ---
+    # --- ПЕРЕСЧЁТ ЦЕН ---
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
 
-    # 1. Рассчитываем стоимость оборудования (для клиента и монтажника)
-    equipment_res = await db.execute(
+    # Equipment
+    eq_res = await db.execute(
         select(TaskEquipment)
-        .options(selectinload(TaskEquipment.equipment)) # Загрузим оборудование для получения цены
+        .options(selectinload(TaskEquipment.equipment))
         .where(TaskEquipment.task_id == task.id)
     )
-    task_equipment_list = equipment_res.scalars().all()
-    for te in task_equipment_list:
-        equipment_unit_price = te.equipment.price or Decimal('0') 
-        calculated_client_price += equipment_unit_price * te.quantity 
+    for te in eq_res.scalars():
+        calculated_client_price += (te.equipment.price or Decimal('0')) * te.quantity
 
-    # 2. Рассчитываем стоимость работ (только для клиента)
-    work_res = await db.execute(
+    # Work types
+    wt_res = await db.execute(
         select(TaskWork)
-        .options(selectinload(TaskWork.work_type)) # Загрузим тип работы для получения цены
+        .options(selectinload(TaskWork.work_type))
         .where(TaskWork.task_id == task.id)
     )
-    task_work_list = work_res.scalars().all()
-    for tw in task_work_list:
-        work_client_unit_price = tw.work_type.client_price or Decimal('0') 
-        work_mont_unit_price = tw.work_type.mont_price or Decimal('0') 
-        calculated_client_price += work_client_unit_price * tw.quantity
-        calculated_montajnik_reward += work_mont_unit_price * tw.quantity
+    for tw in wt_res.scalars():
+        calculated_client_price += (tw.work_type.client_price or Decimal('0')) * tw.quantity
+        calculated_montajnik_reward += (tw.work_type.mont_price or Decimal('0')) * tw.quantity
 
-
-    # 3. Устанавливаем рассчитанные цены в объект задачи
     task.client_price = calculated_client_price
     task.montajnik_reward = calculated_montajnik_reward
-    logger.info(f"Рассчитанные цены: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
-
-    # --- Проверка изменений ---
-    logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
-    has_changes = bool(changed)
-    prices_changed = (task.client_price != old_client_price) or (task.montajnik_reward != old_montajnik_reward)
-    logger.info(f"'has_changes' рассчитано как: {has_changes}, 'prices_changed' как: {prices_changed}")
-
-    if not has_changes and not prices_changed:
-        logger.info("Нет изменений (включая цены) для сохранения, возвращаем 'Без изменений'")
-        return {"detail": "Без изменений"}
-    else:
-        logger.info("Обнаружены изменения (или изменились цены), продолжаем выполнение")
 
     try:
-        await db.commit() # теперь коммитим все изменения
-        logger.info("Транзакция успешно зафиксирована")
+        await db.commit()
+        logger.info("Черновик успешно обновлён")
+        return {"detail": "Updated"}
     except Exception as e:
-        logger.exception("Failed to update draft: %s", e) # Убедитесь, что logger импортирован
-        try:
-            await db.rollback()
-        except Exception:
-            logger.exception("rollback failed")
-        raise HTTPException(status_code=500, detail="Failed to update draft")
-
-    return {"detail": "Updated"}
+        logger.exception("Ошибка при обновлении черновика")
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="Не удалось обновить черновик")
 
 
 
@@ -823,6 +754,14 @@ async def publish_task(
         else:
             if value is None:
                 missing_fields.append(field_label)
+    
+    assignment_type = data.get("assignment_type") or (getattr(task, "assignment_type", None) if draft_id else None)
+    if assignment_type == AssignmentType.broadcast:
+        district_id = data.get("district_id")
+        if draft_id and district_id is None:
+            district_id = getattr(task, "district_id", None)
+        if district_id is None:
+            missing_fields.append("Регион")
 
     if missing_fields:
         raise HTTPException(status_code=400, detail=f"Заполните все поля!")
@@ -839,6 +778,24 @@ async def publish_task(
                 continue # Пропускаем специальные поля
             if value is not None:
                 setattr(task, key, value)
+
+        if "district_id" not in data:
+            data["district_id"] = task.district_id
+
+        # Обработка поля district_id
+        if "district_id" in data:
+            district_id = data["district_id"]
+            if district_id is not None:
+                # Проверяем, что район принадлежит компании пользователя
+                district_check = await db.execute(
+                    select(District).where(
+                        District.id == district_id,
+                        District.user_company_id == current_user.company_id
+                    )
+                )
+                if not district_check.scalar_one_or_none():
+                    raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+            task.district_id = district_id
 
         current_wt_res = await db.execute(
             select(TaskWork)
@@ -945,6 +902,7 @@ async def publish_task(
         # --- Прямая публикация (без черновика) ---
         contact_person_id = data.get("contact_person_id")
         gos_number = data.get("gos_number")
+        district_id = data.get("district_id")  # Получаем district_id из payload
 
         company_id = None
         contact_person_phone = None
@@ -1011,6 +969,17 @@ async def publish_task(
         final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
         final_montajnik_reward = calculated_works_cost_for_mont
 
+        # Проверяем, что district_id принадлежит компании пользователя, если он указан
+        if district_id is not None:
+            district_check = await db.execute(
+                select(District).where(
+                    District.id == district_id,
+                    District.user_company_id == current_user.company_id
+                )
+            )
+            if not district_check.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+
         task = Task(
             contact_person_id=contact_person_id,
             company_id=company_id,
@@ -1032,7 +1001,8 @@ async def publish_task(
             photo_required=data.get("photo_required", False),
             created_by=int(current_user.id),
             gos_number=gos_number,
-            user_company_id=current_user.company_id
+            user_company_id=current_user.company_id,
+            district_id=district_id  
         )
 
         db.add(task)
@@ -1112,16 +1082,46 @@ async def publish_task(
     await db.commit()
     await db.refresh(task)
 
-    montajniks_res = await db.execute(
-        select(User.id).where(User.role == 'montajnik', User.is_active == True, User.company_id == current_user.company_id)
-    )
+
+    if task.assignment_type == AssignmentType.broadcast:
+        if task.district_id:
+            # Уведомления только монтажникам из выбранного района
+            montajniks_res = await db.execute(
+                select(User.id).where(
+                    User.role == Role.montajnik,
+                    User.is_active == True,
+                    User.company_id == current_user.company_id,
+                    User.district_id == task.district_id # <-- Фильтр по району
+                )
+            )
+        else:
+            # Уведомления всем активным монтажникам компании
+            montajniks_res = await db.execute(
+                select(User.id).where(
+                    User.role == Role.montajnik,
+                    User.is_active == True,
+                    User.company_id == current_user.company_id
+                )
+            )
+    else:
+        # Если задача назначена индивидуально, уведомление только исполнителю (уже реализовано ниже)
+        montajniks_res = await db.execute(select(User.id).where(User.id == -1)) # Пустой результат
+
     montajnik_ids = [row[0] for row in montajniks_res.fetchall()]
     
     for montajnik_id in montajnik_ids:
         background_tasks.add_task(
             notify_user, 
             montajnik_id, 
-            f"Новая задача #{task.id} опубликована"
+            f"Новая задача #{task.id} опубликована в эфир"
+        )
+
+    # Если задача была назначена индивидуально, отправляем уведомление конкретному монтажнику
+    if task.assigned_user_id:
+        background_tasks.add_task(
+            notify_user, 
+            task.assigned_user_id, 
+            f"Вам назначена задача #{task.id}"
         )
 
     return {"id": task.id}
@@ -1282,10 +1282,41 @@ async def edit_task(
             if old_assignment_type_val != AssignmentType.individual:
                 changed.append(("assignment_type", old_assignment_type_val, AssignmentType.individual))
                 assignment_type_changed = True
+    
+
+    if "assignment_type" in incoming:
+        new_assignment_type = incoming["assignment_type"]
+        if new_assignment_type == AssignmentType.individual and task.district_id is not None:
+            old_district_id = task.district_id
+            task.district_id = None
+            changed.append(("district_id", old_district_id, None))
+            district_id_changed = True  # если используется дальше
+            logger.info("Сброс district_id из-за смены типа задачи на 'individual'")
+
+
+    district_id_changed = False
+    if "district_id" in incoming:
+        new_district_id = incoming["district_id"]
+        old_district_id = task.district_id
+
+        if new_district_id is not None:
+            # Проверяем, что район принадлежит компании пользователя
+            district_check = await db.execute(
+                select(District).where(
+                    District.id == new_district_id,
+                    District.user_company_id == current_user.company_id
+                )
+            )
+            if not district_check.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+        task.district_id = new_district_id # Присваиваем район задаче
+        if old_district_id != new_district_id:
+            changed.append(("district_id", old_district_id, new_district_id))
+            district_id_changed = True
 
     # --- Обновление прямых полей ---
     for field, value in incoming.items():
-        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
+        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types", "district_id"}:
             continue
 
         old_val = getattr(task, field)
@@ -1439,6 +1470,7 @@ async def edit_task(
     old_montajnik_reward = task.montajnik_reward
     old_assigned_user_id = task.assigned_user_id
     old_assignment_type = task.assignment_type
+    old_district_id = task.district_id
 
     logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
 
@@ -1566,6 +1598,14 @@ async def edit_task(
                 "field": "assignment_type",
                 "old": old_assignment_type.value if old_assignment_type else None,
                 "new": task.assignment_type.value if task.assignment_type else None
+            })
+
+        # Проверяем изменения district_id
+        if district_id_changed:
+            all_changes.append({
+                "field": "district_id",
+                "old": old_district_id,
+                "new": task.district_id
             })
 
         # Проверяем изменения цен
@@ -2434,17 +2474,16 @@ async def task_detail(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    # Используем Task вместо TaskView
     res = await db.execute(
         select(Task)
         .options(
             selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
             selectinload(Task.works).selectinload(TaskWork.work_type),
-            selectinload(Task.history).selectinload(TaskHistory.user), # Загрузим и пользователя истории, если нужно
-            selectinload(Task.reports), #   УБРАНО .selectinload(TaskReport.user)
-            # Загружаем контактное лицо и компанию для получения company_id и contact_person_id
+            selectinload(Task.history).selectinload(TaskHistory.user),
+            selectinload(Task.reports),
             selectinload(Task.contact_person).selectinload(ContactPerson.company),
-            selectinload(Task.assigned_user)
+            selectinload(Task.assigned_user),
+            selectinload(Task.district) 
         )
         .where(Task.id == task_id)
     )
@@ -2452,13 +2491,11 @@ async def task_detail(
     if not task:
         raise HTTPException(status_code=404, detail="Задача не найдена")
 
-    # --- equipment ---
     equipment = [
         {"equipment_id": te.equipment_id, "quantity": te.quantity, "serial_number": te.serial_number}
         for te in (task.equipment_links or [])
     ] or None
 
-    # --- work_types ---
     work_types = [
         {"work_type_id": tw.work_type_id, "quantity": tw.quantity}
         for tw in (task.works or [])
@@ -2466,7 +2503,6 @@ async def task_detail(
 
     requires_tech_supp = any(tw.work_type.tech_supp_require for tw in task.works if tw.work_type)
 
-    # --- history ---
     history = [
         {
             "action": h.action.value if h.action else None,
@@ -2477,14 +2513,13 @@ async def task_detail(
         for h in (task.history or [])
     ] or None
 
-    # --- reports с фото ---
     reports = []
     for r in (task.reports or []):
         photos = []
         if r.photos_json:
             try:
                 keys = json.loads(r.photos_json)
-                photos = keys # Возвращаем список storage_key
+                photos = keys
             except Exception:
                 photos = []
         reports.append({
@@ -2495,8 +2530,6 @@ async def task_detail(
             "photos": photos or None
         })
 
-    # --- company и contact_person ---
-    # Извлекаем ID и имена из связанных объектов
     company_id = task.contact_person.company.id if task.contact_person and task.contact_person.company else None
     company_name = task.contact_person.company.name if task.contact_person and task.contact_person.company else None
     contact_person_id = task.contact_person.id if task.contact_person else None
@@ -2506,11 +2539,15 @@ async def task_detail(
     assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
     assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
 
-    # Формируем ответ, включая company_id и contact_person_id
+  
+    district_id = task.district.id if task.district else None
+    district_name = task.district.name if task.district else None
+    
+
     return {
         "id": task.id,
-        "company_id": company_id,  #   Добавлено
-        "contact_person_id": contact_person_id,  #   Добавлено
+        "company_id": company_id,
+        "contact_person_id": contact_person_id,
         "company_name": company_name,
         "contact_person_name": contact_person_name,
         "contact_person_phone": task.contact_person_phone,
@@ -2530,7 +2567,9 @@ async def task_detail(
         "work_types": work_types,
         "history": history,
         "reports": reports or None,
-        "requires_tech_supp": requires_tech_supp
+        "requires_tech_supp": requires_tech_supp,
+        "district_id": district_id, 
+        "district_name": district_name 
     }
 
 
@@ -3209,3 +3248,21 @@ async def logist_archive_task_detail(
         "reports": reports or None,
         "requires_tech_supp": requires_tech_supp
     }
+
+
+@router.get("/districts/simple", response_model=List[SimpleDistrictResponse], dependencies=[Depends(require_roles(Role.admin, Role.logist))])
+async def get_simple_districts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not current_user.company_id:
+         raise HTTPException(status_code=403, detail="Пользователь не привязан к компании")
+
+    districts_query = select(District.id, District.name).where(
+        District.user_company_id == current_user.company_id
+    ).order_by(District.name)
+
+    result = await db.execute(districts_query)
+    districts = result.all() #
+
+    return [{"id": d.id, "name": d.name} for d in districts] 

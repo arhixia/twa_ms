@@ -123,7 +123,9 @@ export async function fetchTaskFullHistory(taskId) {
   return (await api.get(`/logist/tasks/${taskId}/history`)).data;
 }
 
-
+export async function getSimpleDistricts() { 
+  return (await api.get("/logist/districts/simple")).data; 
+}
 
 export async function getCompaniesList() {
   return (await api.get("/logist/companies")).data;
@@ -408,6 +410,23 @@ export async function adminListCompletedTasks() {
 
 export async function adminCompletedTaskDetail(taskId) {
   return (await api.get(`/admin/admin_completed-tasks/${taskId}`)).data;
+}
+
+
+export async function adminGetAllDistricts() {
+  return (await api.get("/admin/districts")).data;
+}
+
+export async function adminCreateDistrict(payload) {
+  return (await api.post("/admin/districts", payload)).data;
+}
+
+export async function adminUpdateDistrict(districtId, payload) {
+  return (await api.patch(`/admin/districts/${districtId}`, payload)).data;
+}
+
+export async function adminGetDistrictById(districtId) {
+  return (await api.get(`/admin/districts/${districtId}`)).data;
 }
 
 

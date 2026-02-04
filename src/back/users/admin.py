@@ -7,7 +7,7 @@ from sqlalchemy import and_, case, desc, func, or_, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
-from back.db.models import AssignmentType, ClientCompany, ContactPerson, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
+from back.db.models import AssignmentType, ClientCompany, ContactPerson, District, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
 from back.auth.auth import get_current_user,create_user as auth_create_user, get_password_hash
 from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
 from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles, UpdateEquipmentRequest,UpdateWorkTypeRequest,UpdateCompanyRequest,UpdateContactPersonRequest, UpdateUserRequest
@@ -92,9 +92,25 @@ async def admin_create_user(
         if q.scalars().first():
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Telegram ID уже используется")
     
+    if user_in.role == Role.montajnik and user_in.district_id is not None:
+        district_result = await db.execute(
+            select(District).where(
+                District.id == user_in.district_id,
+                District.user_company_id == current_user.company_id
+            )
+        )
+        district = district_result.scalar_one_or_none()
+        if not district:
+            raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+    
     user_in_with_company = user_in.model_copy(update={"company_id": current_user.company_id})
     
     new_user = await auth_create_user(db=db, user_in=user_in_with_company)
+
+    if user_in.role == Role.montajnik and user_in.district_id is not None:
+        new_user.district_id = user_in.district_id
+        await db.commit()
+        await db.refresh(new_user)
 
     await db.refresh(new_user)
     return UserResponse.model_validate(new_user)
@@ -138,6 +154,24 @@ async def admin_update_user(
         except ValueError:
             raise HTTPException(status_code=400, detail="Неверная роль.")
         user.role = new_role
+    
+    if payload.district_id is not None:
+        if user.role == Role.montajnik:
+            if payload.district_id is not None:
+                district_result = await db.execute(
+                    select(District).where(
+                        District.id == payload.district_id,
+                        District.user_company_id == current_user.company_id
+                    )
+                )
+                district = district_result.scalar_one_or_none()
+                if not district:
+                    raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+                user.district_id = payload.district_id
+            else:
+                user.district_id = None
+        elif payload.district_id is not None:
+            pass
 
     await db.commit()
     await db.refresh(user)
@@ -150,6 +184,7 @@ async def admin_update_user(
         "role": user.role.value,
         "is_active": user.is_active,
         "login": user.login,
+        "district_id": user.district_id,  # Возвращаем район
     }
 
 @router.delete(
@@ -257,7 +292,7 @@ async def admin_update_task(
     task_id: int,
     patch: TaskPatch = Body(...),
     db: AsyncSession = Depends(get_db),
-    admin_user=Depends(require_admin),
+    current_user=Depends(get_current_user),
 ):
     logger.info(f"admin_update_task вызван для задачи ID: {task_id}")
 
@@ -364,6 +399,7 @@ async def admin_update_task(
     old_montajnik_reward = task.montajnik_reward
     old_assigned_user_id = task.assigned_user_id
     old_assignment_type = task.assignment_type
+    old_district_id = task.district_id
 
     logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
 
@@ -434,10 +470,38 @@ async def admin_update_task(
 
     incoming_with_nulls.pop("assigned_user_id", None)
 
+    if "assignment_type" in incoming:
+        new_assignment_type = incoming["assignment_type"]
+        if new_assignment_type == AssignmentType.individual and task.district_id is not None:
+            old_district_id = task.district_id
+            task.district_id = None
+            changed.append(("district_id", old_district_id, None))
+            district_id_changed = True  # если используется дальше
+            logger.info("Сброс district_id из-за смены типа задачи на 'individual'")
+
+
+    district_id_changed = False
+    if "district_id" in incoming:
+        new_district_id = incoming["district_id"]
+        old_district_id = task.district_id
+
+        if new_district_id is not None:
+            district_check = await db.execute(
+                select(District).where(
+                    District.id == new_district_id,
+                    District.user_company_id == current_user.company_id
+                )
+            )
+            if not district_check.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Район не найден или не принадлежит вашей компании")
+        task.district_id = new_district_id # Присваиваем район задаче
+        if old_district_id != new_district_id:
+            changed.append(("district_id", old_district_id, new_district_id))
+            district_id_changed = True
     
 
     for field, value in incoming.items():
-        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types"}:
+        if field in {"id", "created_at", "created_by", "is_draft", "equipment", "work_types","district_id"}:
             continue
 
         old_val = getattr(task, field)
@@ -678,6 +742,14 @@ async def admin_update_task(
                 "new": new_works_with_qty
             })
 
+                
+        if district_id_changed:
+            all_changes.append({
+                "field": "district_id",
+                "old": old_district_id,
+                "new": task.district_id
+            })
+
         # Проверяем изменения contact_person и company
         if contact_person_changed:
             old_cp_co = f"{old_contact_person_name} ({old_company_name})" if old_contact_person_name and old_company_name else "—"
@@ -730,7 +802,7 @@ async def admin_update_task(
 
         hist = TaskHistory(
             task_id=task.id,
-            user_id=getattr(admin_user, "id", None),
+            user_id=getattr(current_user, "id", None),
             action=task.status,
             comment=comment, 
             event_type=TaskHistoryEventType.updated,
@@ -1021,7 +1093,8 @@ async def admin_get_task_by_id(
             selectinload(Task.history),
             selectinload(Task.reports),
             selectinload(Task.assigned_user),
-            selectinload(Task.contact_person).selectinload(ContactPerson.company)  #   Загружаем контактное лицо и компанию
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.district)
         )
         .where(Task.id == task_id, Task.is_draft != True)
     )
@@ -1081,6 +1154,9 @@ async def admin_get_task_by_id(
     assigned_user_lastname = task.assigned_user.lastname if task.assigned_user else None
     assigned_user_full_name = f"{assigned_user_name} {assigned_user_lastname}".strip() if assigned_user_name or assigned_user_lastname else None
 
+    district_id = task.district.id if task.district else None
+    district_name = task.district.name if task.district else None
+
 
     return {
         "id": task.id,
@@ -1104,7 +1180,9 @@ async def admin_get_task_by_id(
         "work_types": work_types,
         "history": history,
         "reports": reports or None,
-        "requires_tech_supp": requires_tech_supp
+        "requires_tech_supp": requires_tech_supp,
+        "district_id": district_id, 
+        "district_name": district_name 
     }
 
 
@@ -1513,6 +1591,145 @@ async def admin_update_contact_person(
         "company_name": company_name,
     }
 
+#РАЙОНЫ
+@router.post("/districts", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
+async def create_district(
+    payload: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    name = payload.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Название района обязательно")
+    
+    existing_district = await db.execute(
+        select(District).where(
+            District.name == name,
+            District.user_company_id == current_user.company_id
+        )
+    )
+    if existing_district.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Район с таким названием уже существует")
+    
+    district = District(
+        name=name,
+        user_company_id=current_user.company_id
+    )
+    
+    db.add(district)
+    await db.commit()
+    await db.refresh(district)
+    
+    return {"id": district.id, "name": district.name}
+
+
+@router.get("/districts/{district_id}", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
+async def get_district(
+    district_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    district = await db.execute(
+        select(District)
+        .options(selectinload(District.users))
+        .where(
+            District.id == district_id,
+            District.user_company_id == current_user.company_id
+        )
+    )
+    district = district.scalar_one_or_none()
+    
+    if not district:
+        raise HTTPException(status_code=404, detail="Район не найден")
+
+    montajniks = [user for user in district.users if user.role == RoleEnum.montajnik and user.is_active]
+    
+    return {
+        "id": district.id,
+        "name": district.name,
+        "montajniks": [
+            {
+                "id": user.id,
+                "name": user.name,
+                "lastname": user.lastname,
+                "telegram_id": user.telegram_id
+            } for user in montajniks
+        ]
+    }
+
+@router.patch("/districts/{district_id}", dependencies=[Depends(require_roles(Role.admin))])
+async def update_district(
+    district_id: int,
+    payload: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    name = payload.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="Название района обязательно")
+    
+    district = await db.execute(
+        select(District).where(
+            District.id == district_id,
+            District.user_company_id == current_user.company_id
+        )
+    )
+    district = district.scalar_one_or_none()
+    
+    if not district:
+        raise HTTPException(status_code=404, detail="Район не найден")
+    
+    # Проверяем, существует ли уже район с таким названием
+    existing_district = await db.execute(
+        select(District).where(
+            District.name == name,
+            District.user_company_id == current_user.company_id,
+            District.id != district_id  # Исключаем текущий район из проверки
+        )
+    )
+    if existing_district.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Район с таким названием уже существует")
+    
+    district.name = name
+    
+    await db.commit()
+    await db.refresh(district)
+    
+    return {"id": district.id, "name": district.name}
+
+
+@router.get("/districts", dependencies=[Depends(require_roles(Role.admin))])
+async def get_all_districts(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    districts = await db.execute(
+        select(District)
+        .options(selectinload(District.users))
+        .where(District.user_company_id == current_user.company_id)
+        .order_by(District.name)
+    )
+    districts = districts.scalars().all()
+    
+    result = []
+    for district in districts:
+        montajniks = [user for user in district.users if user.role == RoleEnum.montajnik and user.is_active]
+        result.append({
+            "id": district.id,
+            "name": district.name,
+            "montajniks": [
+                {
+                    "id": user.id,
+                    "name": user.name,
+                    "lastname": user.lastname,
+                    "telegram_id": user.telegram_id,
+                } for user in montajniks
+            ]
+        })
+    
+    return result
+
+
 @router.get("/tasks/completed_admin", summary="Получить все завершенные задачи (только админ)")
 async def admin_list_completed_tasks(
     db: AsyncSession = Depends(get_db),
@@ -1525,11 +1742,10 @@ async def admin_list_completed_tasks(
     count_res = await db.execute(count_query)
     total_count = count_res.scalar() or 0
 
-    # Загружаем задачи с контактным лицом и компанией
     q = await db.execute(
         select(Task)
         .where(Task.status == TaskStatus.completed)
-        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) #   Загружаем контактное лицо и компанию
+        .options(selectinload(Task.contact_person).selectinload(ContactPerson.company)) 
     )
     tasks = q.scalars().all()
     
@@ -1538,7 +1754,6 @@ async def admin_list_completed_tasks(
         # Получаем имя контактного лица и компании
         contact_person_name = t.contact_person.name if t.contact_person else None
         company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
-        # Формируем строку "Компания - Контактное лицо" или просто одно из значений
         client_display = f"{company_name} - {contact_person_name}" if company_name and contact_person_name else (company_name or contact_person_name or "—")
         
         out.append({
