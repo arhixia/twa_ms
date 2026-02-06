@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['hon-casino-postcards-das.trycloudflare.com']
+    allowedHosts: ['balance-featured-updates-factors.trycloudflare.com']
   },
 })
 

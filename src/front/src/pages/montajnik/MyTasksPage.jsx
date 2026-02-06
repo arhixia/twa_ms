@@ -1,3 +1,4 @@
+// src/pages/MyTasksPage.jsx
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { fetchMyTasks } from "../../api"; 
@@ -56,18 +57,31 @@ export default function MyTasksPage() {
   return (
     <div className="logist-main">
       <div className="page">
-        <h1 className="page-title">Мои задачи</h1>
+        <div className="page-header">
+          <h1 className="page-title">Мои задачи</h1>
+        </div>
         
         <div className="cards">
           {tasks.length === 0 ? (
             <p>У вас пока нет назначенных задач.</p>
           ) : (
             tasks.map(task => (
-              <TaskCard
+              <div
                 key={task.id}
-                task={task}
-                onClick={handleTaskCardClick}
-              />
+                className="task-card-wrapper"
+                style={{
+                  position: "relative",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              >
+                <TaskCard
+                  task={task}
+                  onClick={handleTaskCardClick}
+                  showPrice={true} // Показываем цену для монтажников
+                />
+              </div>
             ))
           )}
         </div>

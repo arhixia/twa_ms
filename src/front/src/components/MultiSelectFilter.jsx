@@ -307,47 +307,44 @@ export default function MultiSelectFilter({
             {filteredOptions.length > 0 ? (
               filteredOptions.map(option => (
                 <div
-                  key={option.value}
-                  style={{
-                    padding: '8px 12px',
-                    backgroundColor: selectedValues.includes(option.value) ? '#bb86fc' : 'transparent',
-                    borderBottom: '1px solid #3a3a3a',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => toggleOption(option.value)}
-                >
-                  <label style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    margin: 0,
-                    cursor: 'pointer',
-                    width: '100%',
+                key={option.value}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: selectedValues.includes(option.value) ? '#bb86fc' : 'transparent',
+                  borderBottom: '1px solid #3a3a3a',
+                  fontSize: '14px',
+                }}
+              >
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  margin: 0,
+                  cursor: 'default', // или убрать вообще
+                  width: '100%',
+                  fontSize: '14px'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedValues.includes(option.value)}
+                    onChange={() => toggleOption(option.value)} // ✅ Вот здесь логика выбора
+                    style={{
+                      marginRight: '8px',
+                      cursor: 'pointer',
+                      width: '16px',
+                      height: '16px',
+                    }}
+                  />
+                  <span style={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                     fontSize: '14px'
                   }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedValues.includes(option.value)}
-                      onChange={() => {}}
-                      style={{
-                        marginRight: '8px',
-                        cursor: 'pointer',
-                        width: '16px',
-                        height: '16px',
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                    <span style={{
-                      flex: 1,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      fontSize: '14px'
-                    }}>
-                      {option.label}
-                    </span>
-                  </label>
-                </div>
+                    {option.label}
+                  </span>
+                </label>
+              </div>
               ))
             ) : (
               <div style={{ padding: '8px 12px', color: '#888', fontStyle: 'italic', textAlign: 'center' }}>

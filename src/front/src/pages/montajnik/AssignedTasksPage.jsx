@@ -109,13 +109,6 @@ export default function AssignedTasksPage() {
                   boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
                 }}
               >
-                {/* Отображение mont_reward */}
-                {task.montajnik_reward && (
-                  <div className="task-mont-reward">
-                    {task.montajnik_reward}
-                  </div>
-                )}
-                
                 <TaskCard
                   task={task}
                   onClick={handleTaskCardClick}
@@ -123,6 +116,7 @@ export default function AssignedTasksPage() {
                   onReject={() => handleReject(task.id)}
                   isAccepting={actionLoading === `accept-${task.id}`}
                   isRejecting={actionLoading === `reject-${task.id}`}
+                  showPrice={true} // Показываем цену для монтажников
                 />
               </div>
             ))
@@ -140,13 +134,13 @@ export default function AssignedTasksPage() {
               </div>
               <div className="modal-body">
                 <div className="section">
-                 <label className="dark-label" style={{
-  fontSize: '16px',
-  fontWeight: '600',
-  color: 'white'
-}}>
-  Причина отклонения:
-</label>
+                  <label className="dark-label" style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    color: 'white'
+                  }}>
+                    Причина отклонения:
+                  </label>
                   <textarea
                     value={rejectComment}
                     onChange={(e) => setRejectComment(e.target.value)}

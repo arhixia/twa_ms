@@ -2,7 +2,17 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 
-export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccept, onReject, isAccepting, isRejecting }) {
+export default function TaskCard({ 
+  task, 
+  onClick, 
+  onUnarchive, 
+  onDelete, 
+  onAccept, 
+  onReject, 
+  isAccepting, 
+  isRejecting,
+  showPrice = false // Новый проп для контроля отображения цены
+}) {
   const navigate = useNavigate();
 
   function handleClick() {
@@ -53,15 +63,13 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccep
     ));
   };
 
-  // Проверяем, является ли задача черновиком или архивной
   const isDraft = task.status === "draft";
   const isArchived = task.status === "archived";
-  
-  // Проверяем, может ли монтажник принимать/отклонять задачу
-  // Для новых задач (new) - только кнопка принять
   const canAcceptNew = task.status === 'new' && onAccept && !onReject;
-  // Для назначенных задач (assigned) - кнопки принять/отклонить
   const canAcceptRejectAssigned = task.status === 'assigned' && onAccept && onReject;
+  
+  // Показываем цену только если showPrice = true И цена существует
+  const displayPrice = showPrice && task.montajnik_reward !== undefined && task.montajnik_reward !== null;
 
   return (
     <div className="task-card" onClick={handleClick}>
@@ -171,27 +179,46 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccep
         </div>
       )}
 
+      {displayPrice && (
+        <div className="task-mont-reward" style={{
+          position: "absolute",
+          top: "50%", // По центру по вертикали
+          transform: "translateY(-50%)", // Центрируем относительно своей высоты
+          right: "8px", // Отступ от правого края карточки
+          backgroundColor: "#2563eb", // Синий фон как у градиента кнопки принять
+          color: "white",
+          padding: "4px 8px",
+          borderRadius: "8px",
+          fontSize: "20px",
+          fontWeight: "bold",
+          zIndex: 1,
+          textAlign: "center"
+        }}>
+          {task.montajnik_reward} ₽
+        </div>
+      )}
+
       {/* Кнопка принятия для новых задач (справа внизу) */}
       {canAcceptNew && (
         <button
           disabled={isAccepting}
           onClick={(e) => {
-            e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
+            e.stopPropagation();
             onAccept();
           }}
           style={{
             position: "absolute",
-            bottom: "8px", // Отступ от низа карточки
-            right: "8px",  // Отступ от правого края карточки
-            background: "linear-gradient(to right, #10b981, #2563eb)", // Зелено-синий градиент
+            bottom: "8px",
+            right: "8px",
+            background: "linear-gradient(to right, #10b981, #2563eb)",
             color: "white",
-            padding: "4px 8px", // Меньше паддинги для компактности
-            borderRadius: "8px", // Меньше скругление
-            fontSize: "12px", // Меньше шрифт
+            padding: "4px 8px",
+            borderRadius: "8px",
+            fontSize: "12px",
             fontWeight: "bold",
             cursor: isAccepting ? "not-allowed" : "pointer",
             border: "none",
-            zIndex: 1, // Убедимся, что кнопка поверх других элементов
+            zIndex: 1,
           }}
         >
           {isAccepting ? "..." : "ПРИНЯТЬ"}
@@ -203,27 +230,26 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccep
         <div
           style={{
             position: "absolute",
-            bottom: "8px", // Отступ от низа карточки
-            right: "8px",  // Отступ от правого края карточки
-            display: "flex", // Располагаем кнопки в ряд
-            gap: "4px", // Небольшой отступ между кнопками
-            zIndex: 1, // Убедимся, что кнопки поверх других элементов
+            bottom: "8px",
+            right: "8px",
+            display: "flex",
+            gap: "4px",
+            zIndex: 1,
           }}
         >
           {onReject && (
             <button
               disabled={isRejecting}
               onClick={(e) => {
-                e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
+                e.stopPropagation();
                 onReject();
               }}
               style={{
-                // --- ГРАДИЕНТ ---
-                background: "linear-gradient(to right, #ef4444, #dc2626)", // Красный градиент
+                background: "linear-gradient(to right, #ef4444, #dc2626)",
                 color: "white",
-                padding: "4px 8px", // Меньше паддинги для компактности
-                borderRadius: "8px", // Меньше скругление
-                fontSize: "12px", // Меньше шрифт
+                padding: "4px 8px",
+                borderRadius: "8px",
+                fontSize: "12px",
                 fontWeight: "bold",
                 cursor: isRejecting ? "not-allowed" : "pointer",
                 border: "none",
@@ -236,16 +262,15 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccep
             <button
               disabled={isAccepting}
               onClick={(e) => {
-                e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
+                e.stopPropagation();
                 onAccept();
               }}
               style={{
-                // --- ГРАДИЕНТ ---
-                background: "linear-gradient(to right, #10b981, #2563eb)", // Зелено-синий градиент
+                background: "linear-gradient(to right, #10b981, #2563eb)",
                 color: "white",
-                padding: "4px 8px", // Меньше паддинги для компактности
-                borderRadius: "8px", // Меньше скругление
-                fontSize: "12px", // Меньше шрифт
+                padding: "4px 8px",
+                borderRadius: "8px",
+                fontSize: "12px",
                 fontWeight: "bold",
                 cursor: isAccepting ? "not-allowed" : "pointer",
                 border: "none",
@@ -258,30 +283,32 @@ export default function TaskCard({ task, onClick, onUnarchive, onDelete, onAccep
       )}
 
       {/* Кнопка удаления (только для черновиков) */}
-      {isDraft && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
-            // Здесь нужно добавить вызов функции удаления черновика
-          }}
-          style={{
-            position: "absolute",
-            bottom: "8px", // Отступ от низа карточки
-            right: "8px",  // Отступ от правого края карточки
-            background: "linear-gradient(to right, #ef4444, #dc2626)", // Красный градиент
-            color: "white",
-            padding: "4px 8px", // Меньше паддинги для компактности
-            borderRadius: "8px", // Меньше скругление
-            fontSize: "12px", // Меньше шрифт
-            fontWeight: "bold",
-            cursor: "pointer",
-            border: "none",
-            zIndex: 2 // Убедимся, что кнопка поверх других элементов
-          }}
-        >
-          🗑 Удалить
-        </button>
-      )}
+{isDraft && (
+  <button
+    onClick={(e) => {
+      e.stopPropagation(); // Останавливаем всплытие, чтобы не сработал клик на карточку
+      if (typeof onDelete === 'function') {
+        onDelete(task.id);
+      }
+    }}
+    style={{
+      position: "absolute",
+      bottom: "8px",
+      right: "8px",
+      background: "linear-gradient(to right, #ef4444, #dc2626)",
+      color: "white",
+      padding: "4px 8px",
+      borderRadius: "8px",
+      fontSize: "12px",
+      fontWeight: "bold",
+      cursor: "pointer",
+      border: "none",
+      zIndex: 2
+    }}
+  >
+    🗑 Удалить
+  </button>
+)}
     </div>
   );
 }

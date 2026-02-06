@@ -436,7 +436,7 @@ async def get_draft(draft_id: int, db: AsyncSession = Depends(get_db), current_u
         .where(
             Task.id == draft_id,
             Task.is_draft == True,
-            Task.created_by == getattr(current_user, "id", None)
+            Task.user_company_id == current_user.company_id,
         )
     )
     task = res.scalars().first()
@@ -751,15 +751,21 @@ async def publish_task(
         if field_name == "work_types":
             if not value or (hasattr(value, '__len__') and len(value) == 0):
                 missing_fields.append(field_label)
+        elif field_name == "comment":
+            if value is None or (isinstance(value, str) and value.strip() == ""):
+                missing_fields.append(field_label)
         else:
             if value is None:
                 missing_fields.append(field_label)
     
-    assignment_type = data.get("assignment_type") or (getattr(task, "assignment_type", None) if draft_id else None)
+    assignment_type = data.get("assignment_type")
+    if assignment_type is None and draft_id:
+        assignment_type = getattr(existing_task, "assignment_type", None)
+    
     if assignment_type == AssignmentType.broadcast:
         district_id = data.get("district_id")
         if draft_id and district_id is None:
-            district_id = getattr(task, "district_id", None)
+            district_id = getattr(existing_task, "district_id", None)
         if district_id is None:
             missing_fields.append("Регион")
 
@@ -799,14 +805,14 @@ async def publish_task(
 
         current_wt_res = await db.execute(
             select(TaskWork)
-            .options(selectinload(TaskWork.work_type)) # <--- ЗАГРУЖАЕМ work_type
+            .options(selectinload(TaskWork.work_type))
             .where(TaskWork.task_id == task.id)
         )
         current_work_items = current_wt_res.scalars().all()
 
         current_eq_res = await db.execute(
             select(TaskEquipment)
-            .options(selectinload(TaskEquipment.equipment)) # <--- ЗАГРУЖАЕМ equipment
+            .options(selectinload(TaskEquipment.equipment))
             .where(TaskEquipment.task_id == task.id)
         )
         current_equipment_items = current_eq_res.scalars().all()
@@ -814,7 +820,7 @@ async def publish_task(
         # --- Пересчёт Work Types ---
         work_types_ids_for_calc = []
         for tw in current_work_items:
-            work_types_ids_for_calc.extend([tw.work_type_id] * tw.quantity) # Воссоздаём плоский список
+            work_types_ids_for_calc.extend([tw.work_type_id] * tw.quantity)
 
         work_type_counts = Counter(work_types_ids_for_calc)
         work_types_ids_unique = list(work_type_counts.keys())
@@ -859,9 +865,9 @@ async def publish_task(
         task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
         task.montajnik_reward = calculated_works_cost_for_mont
 
-        task.is_draft = False # Меняем статус на опубликованную задачу
+        task.is_draft = False
 
-        # --- СОЗДАНИЕ СНИМКОВ ОБОРУДОВАНИЯ И ВИДОВ РАБОТ ДЛЯ ИСТОРИИ (на основе current_work_items и current_equipment_items) ---
+        # --- СОЗДАНИЕ СНИМКОВ ОБОРУДОВАНИЯ И ВИДОВ РАБОТ ДЛЯ ИСТОРИИ ---
         equipment_snapshot_for_history = [
             {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
             for te in current_equipment_items
@@ -893,7 +899,6 @@ async def publish_task(
             photo_required=task.photo_required,
             assignment_type=task.assignment_type.value if task.assignment_type else None,
             gos_number = task.gos_number,
-            # --- НОВЫЕ ПОЛЯ ---
             equipment_snapshot=equipment_snapshot_for_history,
             work_types_snapshot=work_types_snapshot_for_history,
         ))
@@ -902,7 +907,7 @@ async def publish_task(
         # --- Прямая публикация (без черновика) ---
         contact_person_id = data.get("contact_person_id")
         gos_number = data.get("gos_number")
-        district_id = data.get("district_id")  # Получаем district_id из payload
+        district_id = data.get("district_id")
 
         company_id = None
         contact_person_phone = None
@@ -912,9 +917,9 @@ async def publish_task(
                 .join(ClientCompany)  
                 .where(
                     ContactPerson.id == contact_person_id, 
-                    ClientCompany.user_company_id == current_user.company_id  # Проверяем через ClientCompany
+                    ClientCompany.user_company_id == current_user.company_id
                 )
-)
+            )
             contact_person = cp_res.scalars().first()
             if not contact_person:
                 raise HTTPException(status_code=400, detail=f"Контактное лицо id={contact_person_id} не найдено или не принадлежит вашей компании")
@@ -965,11 +970,9 @@ async def publish_task(
                 qty = equipment_quantities[eq.id]
                 calculated_equipment_cost += (eq.price or Decimal('0')) * qty
 
-        # --- ИТОГОВЫЕ ЦЕНЫ ПО НОВОЙ ЛОГИКЕ ---
         final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
         final_montajnik_reward = calculated_works_cost_for_mont
 
-        # Проверяем, что district_id принадлежит компании пользователя, если он указан
         if district_id is not None:
             district_check = await db.execute(
                 select(District).where(
@@ -992,12 +995,9 @@ async def publish_task(
             assignment_type=_parse_assignment_type(data.get("assignment_type")),
             assigned_user_id=_normalize_assigned_user_id(data.get("assigned_user_id")),
             logist_contact_id=getattr(current_user, "telegram_id", None),
-
-            #   Устанавливаем рассчитанные цены по НОВОЙ логике
             client_price=final_client_price,
             montajnik_reward=final_montajnik_reward,
-
-            is_draft=False, # Новая задача, не черновик
+            is_draft=False,
             photo_required=data.get("photo_required", False),
             created_by=int(current_user.id),
             gos_number=gos_number,
@@ -1006,10 +1006,9 @@ async def publish_task(
         )
 
         db.add(task)
-        await db.flush() # flush, чтобы получить task.id
+        await db.flush()
 
-        # --- SAVE EQUIPMENT для новой задачи ---
-        equipment_snapshot_for_history = [] # <--- Собираем снимок
+        equipment_snapshot_for_history = []
         for eq_item in equipment_data_raw:
             equipment_id = eq_item.get("equipment_id")
             serial_number = eq_item.get("serial_number")
@@ -1020,7 +1019,6 @@ async def publish_task(
             if not equipment_obj:
                 raise HTTPException(status_code=400, detail=f"Оборудование id={equipment_id} не найдено или не принадлежит вашей компании")
 
-            # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
             equipment_snapshot_for_history.append({
                 "name": equipment_obj.name,
                 "serial_number": serial_number,
@@ -1034,15 +1032,13 @@ async def publish_task(
                 quantity=quantity,
             ))
 
-        # --- SAVE WORK TYPES для новой задачи ---
-        work_types_snapshot_for_history = [] # <--- Собираем снимок
+        work_types_snapshot_for_history = []
         for wt_id, count in work_type_counts.items():
             wt_res = await db.execute(select(WorkType).where(WorkType.id == wt_id, WorkType.user_company_id == current_user.company_id))
             wt = wt_res.scalars().first()
             if not wt:
                 raise HTTPException(status_code=400, detail=f"Тип работы id={wt_id} не найден или не принадлежит вашей компании")
 
-            # --- СОХРАНЯЕМ ДАННЫЕ В СНИМОК ---
             work_types_snapshot_for_history.append({
                 "name": wt.name,
                 "quantity": count
@@ -1054,7 +1050,6 @@ async def publish_task(
                 quantity=count,
             ))
 
-        # Добавляем запись в историю для новой задачи
         db.add(TaskHistory(
             task_id=task.id,
             user_id=current_user.id,
@@ -1082,20 +1077,17 @@ async def publish_task(
     await db.commit()
     await db.refresh(task)
 
-
     if task.assignment_type == AssignmentType.broadcast:
         if task.district_id:
-            # Уведомления только монтажникам из выбранного района
             montajniks_res = await db.execute(
                 select(User.id).where(
                     User.role == Role.montajnik,
                     User.is_active == True,
                     User.company_id == current_user.company_id,
-                    User.district_id == task.district_id # <-- Фильтр по району
+                    User.district_id == task.district_id
                 )
             )
         else:
-            # Уведомления всем активным монтажникам компании
             montajniks_res = await db.execute(
                 select(User.id).where(
                     User.role == Role.montajnik,
@@ -1104,8 +1096,7 @@ async def publish_task(
                 )
             )
     else:
-        # Если задача назначена индивидуально, уведомление только исполнителю (уже реализовано ниже)
-        montajniks_res = await db.execute(select(User.id).where(User.id == -1)) # Пустой результат
+        montajniks_res = await db.execute(select(User.id).where(User.id == -1))
 
     montajnik_ids = [row[0] for row in montajniks_res.fetchall()]
     
@@ -1116,7 +1107,6 @@ async def publish_task(
             f"Новая задача #{task.id} опубликована в эфир"
         )
 
-    # Если задача была назначена индивидуально, отправляем уведомление конкретному монтажнику
     if task.assigned_user_id:
         background_tasks.add_task(
             notify_user, 
@@ -1983,7 +1973,6 @@ async def logist_active(db: AsyncSession = Depends(get_db), current_user=Depends
     count_query = select(func.count(Task.id)).where(
         Task.status.not_in([TaskStatus.completed, TaskStatus.archived]),
         Task.is_draft == False,
-        Task.created_by == current_user.id,
         Task.user_company_id == current_user.company_id  
     )
     count_res = await db.execute(count_query)
@@ -2038,7 +2027,7 @@ async def get_all_dafts(db: AsyncSession = Depends(get_db), current_user=Depends
     q = select(Task).where(
         Task.is_draft == True,
         Task.status != TaskStatus.completed,
-        Task.created_by == getattr(current_user, "id", None),
+        Task.user_company_id == current_user.company_id,
         Task.user_company_id == current_user.company_id  
     ).options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
@@ -2275,7 +2264,7 @@ async def logist_filter_completed_tasks(
     current_user=Depends(get_current_user)
 ):
     query = select(Task).where(
-        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id,
         Task.status == TaskStatus.completed
     )
 
@@ -2752,20 +2741,13 @@ async def logist_update_contact_person(
 
 @router.get("/me")
 async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """
-    Личный кабинет логиста:
-    - имя, фамилия, роль
-    - история выполненных задач (где логист был создателем или участвовал в истории)
-    - статистика: задачи в черновиках, задачи в архиве
-    """
     _ensure_logist_or_403(current_user)
 
-    # Загружаем задачи и *предварительно* загружаем связанные объекты company и contact_person
     q = select(Task).options(
-        selectinload(Task.company), #   Загружаем компанию
-        selectinload(Task.contact_person) #   Загружаем контактное лицо
+        selectinload(Task.company), 
+        selectinload(Task.contact_person) 
     ).where(
-        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id,
         Task.status == TaskStatus.completed
     ).order_by(desc(Task.id))  
     res = await db.execute(q)
@@ -2773,15 +2755,14 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
 
     # Подсчитываем задачи в черновиках
     draft_query = select(func.count(Task.id)).where(
-        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id,
         Task.is_draft == True
     )
     draft_res = await db.execute(draft_query)
     draft_count = draft_res.scalar() or 0
 
-    # Подсчитываем задачи в архиве
     archived_query = select(func.count(Task.id)).where(
-        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id,
         Task.status == TaskStatus.archived
     )
     archived_res = await db.execute(archived_query)
@@ -2835,8 +2816,8 @@ async def logist_completed_task_detail(
         )
         .where(
             Task.id == task_id,
-            Task.created_by == current_user.id, #   Убедимся, что задача создана текущим логистом
-            Task.status == TaskStatus.completed      #   И что она завершена
+            Task.user_company_id == current_user.company_id,
+            Task.status == TaskStatus.completed
         )
     )
     task = res.scalars().first()
@@ -3168,7 +3149,7 @@ async def logist_archive_task_detail(
         )
         .where(
             Task.id == task_id,
-            Task.created_by == current_user.id, 
+            Task.user_company_id == current_user.company_id, 
             Task.status == TaskStatus.archived      
         )
     )

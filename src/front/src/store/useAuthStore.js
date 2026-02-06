@@ -15,7 +15,7 @@ const useAuthStore = create((set) => ({
   
   
 
-  // ✅ корректная установка с синхронизацией в localStorage
+  
   setAuth: (token, role, fullname) => {
     localStorage.setItem("token", token);
     localStorage.setItem("role", role);
@@ -23,7 +23,7 @@ const useAuthStore = create((set) => ({
     set({ token, role, fullname });
   },
 
-  // ✅ очистка при logout
+ 
   logout: () => {
     localStorage.removeItem("token");
     localStorage.removeItem("role");
@@ -41,7 +41,7 @@ const useAuthStore = create((set) => ({
        });
   },
 
-  // ✅ восстановление данных при старте
+  
   restoreAuth: () => {
     const token = localStorage.getItem("token");
     const role = localStorage.getItem("role");

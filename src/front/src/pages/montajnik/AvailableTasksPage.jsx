@@ -90,18 +90,30 @@ export default function AvailableTasksPage() {
         <div className="page-header">
           <h1 className="page-title">Доступные задачи</h1>
         </div>
+
         <div className="cards">
           {tasks.length === 0 ? (
             <p>Нет доступных задач.</p>
           ) : (
             tasks.map(task => (
-              <TaskCard
+              <div
                 key={task.id}
-                task={task}
-                onClick={handleTaskCardClick}
-                onAccept={() => handleAcceptTask(task.id)}
-                isAccepting={actionLoading === task.id}
-              />
+                className="task-card-wrapper"
+                style={{
+                  position: "relative",
+                  borderRadius: "12px",
+                  overflow: "hidden",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                }}
+              >
+                <TaskCard
+                  task={task}
+                  onClick={handleTaskCardClick}
+                  onAccept={() => handleAcceptTask(task.id)}
+                  isAccepting={actionLoading === task.id}
+                  showPrice={true} 
+                />
+              </div>
             ))
           )}
         </div>
