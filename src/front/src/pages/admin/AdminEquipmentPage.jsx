@@ -409,28 +409,52 @@ export default function AdminEquipmentPage() {
             {isExpanded && (
               <div style={{ paddingLeft: '10px' }}>
                 {equipmentInCat.map(eq => (
-                  <div
-                    key={eq.id}
-                    className="profile-card"
-                    style={{
-                      padding: "8px",
-                      borderBottom: "1px solid #2a2a2a",
-                      backgroundColor: "#161b22",
-                      cursor: "pointer",
-                      borderRadius: "4px",
-                      marginTop: '2px',
-                      transition: "background-color 0.2s ease",
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openEditEquipmentModal(eq);
-                    }}
-                  >
-                    <p style={{ margin: "0", fontSize: "0.9em" }}>
-                      {eq.name}
-                    </p>
-                  </div>
-                ))}
+  <div
+    key={eq.id}
+    className="profile-card"
+    style={{
+      padding: "8px",
+      borderBottom: "1px solid #2a2a2a",
+      backgroundColor: "#161b22",
+      cursor: "pointer",
+      borderRadius: "4px",
+      marginTop: '2px',
+      transition: "background-color 0.2s ease",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: "6px"
+    }}
+    onClick={(e) => {
+      e.stopPropagation();
+      openEditEquipmentModal(eq);
+    }}
+  >
+    <span
+      style={{
+        fontSize: "0.9em",
+        fontWeight: "500",
+        flex: "1 1 auto",
+        minWidth: 0,
+        wordBreak: "break-word",
+        overflowWrap: "anywhere"
+      }}
+    >
+      {eq.name}
+    </span>
+    <span
+      style={{
+        fontSize: "0.90em",
+        color: "#c7ced9",
+        whiteSpace: "nowrap",
+        flexShrink: 0
+      }}
+    >
+      {parseFloat(eq.price).toFixed(2)} ₽
+    </span>
+  </div>
+))}
               </div>
             )}
           </React.Fragment>
