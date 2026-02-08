@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['films-courtesy-permitted-bristol.trycloudflare.com']
+    allowedHosts: ['upgrade-stories-system-than.trycloudflare.com']
   },
 })
 
