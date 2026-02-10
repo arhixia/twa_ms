@@ -26,6 +26,7 @@ from back.db.models import (
     User,
     Role,
     WorkType,
+    ManagerStatus
 )
 from back.utils.notify import notify_user
 from back.users.users_schemas import ReportReviewIn, TaskHistoryItem, require_roles,Role
@@ -155,7 +156,7 @@ async def tech_review_report(
     background_tasks: BackgroundTasks,
     task_id: int,
     report_id: int,
-    payload: Dict[str, Any] = Body(...), # <--- Временное решение: принимаем dict, но проверяем только approval
+    payload: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -172,8 +173,8 @@ async def tech_review_report(
 
     approval = payload.get("approval")
 
-    #   УБИРАЕМ "rejected" из допустимых значений
-    if approval != "approved": # <--- Позволяем только "approved"
+    # УБИРАЕМ "rejected" из допустимых значений
+    if approval != "approved":
         raise HTTPException(status_code=400, detail="Тех.спец может только принять отчёт. approval must be 'approved'")
 
     # load report
@@ -187,29 +188,32 @@ async def tech_review_report(
         select(Task)
         .where(Task.id == task_id)
         .options(
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), #   Загружаем компанию
-            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), #   Загружаем оборудование
-            selectinload(Task.works).selectinload(TaskWork.work_type) #   Загружаем виды работ
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type)
         )
     )
     task = t_res.scalars().first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-
     old_approval = report.approval_tech
-    #   УБИРАЕМ возможность установить rejected
-    report.approval_tech = ReportApproval.approved # <--- Всегда approved, если пришло "approved"
+    # Флаг для отслеживания перехода в completed
+    task_completed = False
+    
+    # УБИРАЕМ возможность установить rejected
+    report.approval_tech = ReportApproval.approved
     report.reviewed_at_tech_supp = datetime.now(timezone.utc)
 
     try:
         # if both approved -> finalize task
         if report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
+            task.manager_status = ManagerStatus.invoice_not_issued
             task.completed_at = datetime.now(timezone.utc)
+            task_completed = True  # Устанавливаем флаг
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (завершение задачи) ---
-            # Так как связи уже загружены через options в t_res, мы можем их использовать
             equipment_snapshot_for_history = [
                 {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
                 for te in task.equipment_links
@@ -224,44 +228,38 @@ async def tech_review_report(
             hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
-                action=TaskStatus.completed, # action - новый статус
-                event_type=TaskHistoryEventType.report_status_changed, #   Новый тип
-                #   Комментарий для истории, когда оба одобрены
+                action=TaskStatus.completed,
+                event_type=TaskHistoryEventType.report_status_changed,
                 comment=f"Задача проверена тех.специалистом.",
-                # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,
                 contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
-                gos_number = task.gos_number,
+                gos_number=task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
-                status=task.status.value if task.status else None, # status - новый статус
+                status=task.status.value if task.status else None,
                 assigned_user_id=task.assigned_user_id,
                 client_price=str(task.client_price) if task.client_price is not None else None,
                 montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
                 photo_required=task.photo_required,
                 assignment_type=task.assignment_type.value if task.assignment_type else None,
-                # --- Поля для структурированной истории (опционально для этого события) ---
-                field_name="status", # Поле, которое изменилось
-                old_value=task.status.value if task.status else None, # Старое значение статуса перед завершением
-                new_value=TaskStatus.completed.value, # Новое значение
+                field_name="status",
+                old_value=task.status.value if task.status else None,
+                new_value=TaskStatus.completed.value,
                 related_entity_id=report.id,
                 related_entity_type="report",
-                # --- НОВЫЕ ПОЛЯ: Снимки ---
                 equipment_snapshot=equipment_snapshot_for_history,
                 work_types_snapshot=work_types_snapshot_for_history,
             )
             db.add(hist)
         else:
-            # if tech approved, but logist hasn't reviewed yet -> keep task in inspection state; add history entry for tech approval
-            action = TaskStatus.inspection # Статус задачи не изменился, но отчёт проверялся
-            #   Комментарий для истории, когда только тех.спец одобрил
+            # if tech approved, but logist hasn't reviewed yet -> keep task in inspection state
+            action = TaskStatus.inspection
             hist_comment = f"Задача проверена тех.специалистом"
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта тех.специалистом) ---
-            # Так как связи уже загружены через options в t_res, мы можем их использовать
             equipment_snapshot_for_history = [
                 {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
                 for te in task.equipment_links
@@ -272,35 +270,31 @@ async def tech_review_report(
                 for tw in task.works
             ]
 
-            # Создаём запись в истории с *всеми* полями задачи и снимками
             hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
-                action=action, # action - текущий статус задачи
-                event_type=TaskHistoryEventType.report_status_changed, #   Новый тип
+                action=action,
+                event_type=TaskHistoryEventType.report_status_changed,
                 comment=hist_comment,
-                # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,
                 contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
-                gos_number = task.gos_number,
+                gos_number=task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
-                status=task.status.value if task.status else None, # status - текущий статус задачи
+                status=task.status.value if task.status else None,
                 assigned_user_id=task.assigned_user_id,
                 client_price=str(task.client_price) if task.client_price is not None else None,
                 montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
                 photo_required=task.photo_required,
                 assignment_type=task.assignment_type.value if task.assignment_type else None,
-                # --- Поля для структурированной истории ---
-                field_name="report_approval_tech", # Поле, связанное с отчётом
-                old_value=old_approval.value if old_approval else None, # Старое значение статуса отчёта тех.специалиста
-                new_value=report.approval_tech.value, # Новое значение статуса отчёта тех.специалиста
+                field_name="report_approval_tech",
+                old_value=old_approval.value if old_approval else None,
+                new_value=report.approval_tech.value,
                 related_entity_id=report.id,
                 related_entity_type="report",
-                # --- НОВЫЕ ПОЛЯ: Снимки ---
                 equipment_snapshot=equipment_snapshot_for_history,
                 work_types_snapshot=work_types_snapshot_for_history,
             )
@@ -316,14 +310,11 @@ async def tech_review_report(
             logger.exception("rollback failed")
         raise HTTPException(status_code=500, detail="Failed to review report")
 
-
     if task.assigned_user_id:
-        # Если оба одобрены - уведомляем монтажника о завершении
         if (report.approval_tech == ReportApproval.approved and 
             report.approval_logist == ReportApproval.approved):
             montajnik_msg = f"Работы по задаче {task_id} проверены и выполнены"
         else:
-            # Только тех.спец одобрил - уведомляем о тех.проверке
             montajnik_msg = f"Отчет по задаче {task_id} одобрен тех.специалистом"
         
         background_tasks.add_task(
@@ -332,6 +323,24 @@ async def tech_review_report(
             montajnik_msg,
             task_id
         )
+
+    if task_completed:
+        managers_q = await db.execute(
+            select(User).where(
+                User.role == Role.manager,
+                User.is_active == True,
+                User.company_id == current_user.company_id
+            )
+        )
+        managers = managers_q.scalars().all()
+        
+        for manager in managers:
+            background_tasks.add_task(
+                notify_user,
+                manager.id,
+                f"Работы по задаче #{task_id} завершены. Требуется проверка менеджера.",
+                task_id
+            )
 
     return {"detail": "Reviewed", "approval": "approved"}
 

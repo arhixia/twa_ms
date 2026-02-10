@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   fetchAdminProfile,
+  getAdminMontajnikStatistics,
 } from "../../api";
 import "../../styles/LogistPage.css";
 
@@ -11,9 +12,28 @@ export default function AdminProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Состояние для сворачивания/разворачивания
+  const [isExpanded, setIsExpanded] = useState(true);
+
+  // Состояния для периода
+  const [selectedStartYear, setSelectedStartYear] = useState(new Date().getFullYear());
+  const [selectedStartMonth, setSelectedStartMonth] = useState(1); // Январь
+  const [selectedEndYear, setSelectedEndYear] = useState(new Date().getFullYear());
+  const [selectedEndMonth, setSelectedEndMonth] = useState(new Date().getMonth() + 1); // Текущий месяц
+  
+  const [statistics, setStatistics] = useState(null);
+  const [statisticsLoading, setStatisticsLoading] = useState(false);
+
   useEffect(() => {
     loadProfile();
   }, []);
+
+  // Загружаем статистику при изменении дат
+  useEffect(() => {
+    if (isExpanded) {
+      loadStatistics();
+    }
+  }, [selectedStartYear, selectedStartMonth, selectedEndYear, selectedEndMonth, isExpanded]);
 
   async function loadProfile() {
     setLoading(true);
@@ -27,6 +47,66 @@ export default function AdminProfilePage() {
     }
   }
 
+  async function loadStatistics() {
+    if (!selectedStartYear || !selectedStartMonth || !selectedEndYear || !selectedEndMonth) return;
+    
+    setStatisticsLoading(true);
+    try {
+      const data = await getAdminMontajnikStatistics(
+        selectedStartYear, 
+        selectedStartMonth, 
+        selectedEndYear, 
+        selectedEndMonth
+      );
+      setStatistics(data);
+    } catch (err) {
+      console.error("Ошибка загрузки статистики:", err);
+      setStatistics(null);
+    } finally {
+      setStatisticsLoading(false);
+    }
+  }
+
+  const handleStartYearChange = (e) => {
+    setSelectedStartYear(Number(e.target.value));
+  };
+
+  const handleStartMonthChange = (e) => {
+    setSelectedStartMonth(Number(e.target.value));
+  };
+
+  const handleEndYearChange = (e) => {
+    setSelectedEndYear(Number(e.target.value));
+  };
+
+  const handleEndMonthChange = (e) => {
+    setSelectedEndMonth(Number(e.target.value));
+  };
+
+  const toggleExpand = () => {
+    setIsExpanded(!isExpanded);
+  };
+
+  // Генерация списка лет (последние 5 лет)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+
+  // Месяцы
+  const months = [
+    { value: 1, name: 'Январь' },
+    { value: 2, name: 'Февраль' },
+    { value: 3, name: 'Март' },
+    { value: 4, name: 'Апрель' },
+    { value: 5, name: 'Май' },
+    { value: 6, name: 'Июнь' },
+    { value: 7, name: 'Июль' },
+    { value: 8, name: 'Август' },
+    { value: 9, name: 'Сентябрь' },
+    { value: 10, name: 'Октябрь' },
+    { value: 11, name: 'Ноябрь' },
+    { value: 12, name: 'Декабрь' },
+  ];
+
   if (loading) return <div className="logist-main"><div className="empty">Загрузка...</div></div>;
   if (error) return <div className="logist-main"><div className="error">{error}</div></div>;
 
@@ -34,31 +114,290 @@ export default function AdminProfilePage() {
     <div className="logist-main">
       <div className="page">
         <div className="page-header">
-          <h1 className="page-title">Личный кабинет</h1>
+          <h1 className="page-title">Статистика</h1>
         </div>
 
-        <div className="profile-overview">
-          <div className="profile-card">
-            <div className="profile-card-header">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-              <h2>Информация</h2>
-            </div>
-            <p><b>Имя:</b> {profile?.name || "—"}</p>
-            <p><b>Фамилия:</b> {profile?.lastname || "—"}</p>
-          </div>
+        <div className="section" style={{ marginTop: '24px' }}>
+          <div style={{
+            backgroundColor: '#26293a',
+            borderRadius: '12px',
+            padding: '16px',
+            border: '1px solid #444',
+            transition: 'all 0.3s ease'
+          }}>
+            <div 
+              style={{ 
+                display: 'flex', 
+                flexDirection: 'column',
+                gap: '16px',
+                marginBottom: isExpanded ? '24px' : '0',
+                transition: 'margin-bottom 0.3s ease'
+              }}
+            >
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '12px',
+                  cursor: 'pointer'
+                }}
+                onClick={toggleExpand}
+              >
+                <span style={{
+                  display: 'inline-block',
+                  transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                  transition: 'transform 0.3s ease',
+                  fontSize: '1.2em',
+                  color: '#fff',
+                  flexShrink: 0
+                }}>
+                  ▶
+                </span>
+                <h2 style={{ 
+                  color: 'white', 
+                  fontSize: 'clamp(1.2em, 4vw, 1.6em)', 
+                  fontWeight: '700',
+                  margin: 0,
+                  fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                }}>
+                  Статистика по монтажникам
+                </h2>
+              </div>
 
-          <div className="profile-card">
-            <div className="profile-card-header">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
-              </svg>
-              <h2>Статистика</h2>
+              {isExpanded && (
+                <div 
+                  style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    gap: '12px',
+                    width: '100%'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span style={{ 
+                    color: '#e0e0e0', 
+                    fontSize: 'clamp(0.95em, 3vw, 1.1em)', 
+                    fontWeight: '600',
+                    fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                  }}>
+                    Укажите период:
+                  </span>
+                  
+                  <div style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    gap: '12px',
+                    width: '100%'
+                  }}>
+                    {/* Период С */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      gap: '8px',
+                      width: '100%'
+                    }}>
+                      <label style={{ 
+                        fontSize: '0.95em',
+                        fontWeight: '600',
+                        color: '#e0e0e0',
+                        minWidth: '30px',
+                        flexShrink: 0
+                      }}>С</label>
+                      <select 
+                        className="dark-select" 
+                        value={selectedStartYear} 
+                        onChange={handleStartYearChange}
+                        style={{ 
+                          flex: '0 0 auto', 
+                          width: '100px',
+                          minWidth: '80px'
+                        }}
+                      >
+                        {years.map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                      <select 
+                        className="dark-select" 
+                        value={selectedStartMonth} 
+                        onChange={handleStartMonthChange}
+                        style={{ 
+                          flex: '0 0 auto', 
+                          width: '140px',
+                          minWidth: '120px'
+                        }}
+                      >
+                        {months.map(month => (
+                          <option key={month.value} value={month.value}>{month.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Период По */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center',
+                      gap: '8px',
+                      width: '100%'
+                    }}>
+                      <label style={{ 
+                        fontSize: '0.95em',
+                        fontWeight: '600',
+                        color: '#e0e0e0',
+                        minWidth: '30px',
+                        flexShrink: 0
+                      }}>По</label>
+                      <select 
+                        className="dark-select" 
+                        value={selectedEndYear} 
+                        onChange={handleEndYearChange}
+                        style={{ 
+                          flex: '0 0 auto', 
+                          width: '100px',
+                          minWidth: '80px'
+                        }}
+                      >
+                        {years.map(year => (
+                          <option key={year} value={year}>{year}</option>
+                        ))}
+                      </select>
+                      <select 
+                        className="dark-select" 
+                        value={selectedEndMonth} 
+                        onChange={handleEndMonthChange}
+                        style={{ 
+                          flex: '0 0 auto', 
+                          width: '140px',
+                          minWidth: '120px'
+                        }}
+                      >
+                        {months.map(month => (
+                          <option key={month.value} value={month.value}>{month.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <p><b>Всего задач:</b> {profile?.total_tasks || 0}</p>
-            <p><b>Активных задач:</b> {profile?.active_tasks || 0}</p>
+
+            <div style={{
+              maxHeight: isExpanded ? '2000px' : '0',
+              overflow: 'hidden',
+              transition: 'max-height 0.5s ease, opacity 0.3s ease',
+              opacity: isExpanded ? 1 : 0
+            }}>
+              {statisticsLoading ? (
+                <div className="empty" style={{ 
+                  padding: '40px 20px',
+                  fontSize: '1.1em'
+                }}>
+                  Загрузка статистики...
+                </div>
+              ) : statistics && statistics.statistics && statistics.statistics.length > 0 ? (
+                <div style={{ overflowX: 'auto', margin: '0 -16px', padding: '0 16px' }}>
+                  <table style={{
+                    width: '100%',
+                    minWidth: '500px',
+                    borderCollapse: 'collapse',
+                    backgroundColor: '#1a1a1a',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+                  }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#1a1a1a' }}>
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'left',
+                          color: '#fff',
+                          fontWeight: '700',
+                          fontSize: 'clamp(0.9em, 2.5vw, 1.05em)',
+                          borderBottom: '2px solid #555',
+                          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        }}>
+                          Монтажник
+                        </th>
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'right',
+                          color: '#fff',
+                          fontWeight: '700',
+                          fontSize: 'clamp(0.9em, 2.5vw, 1.05em)',
+                          borderBottom: '2px solid #555',
+                          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                        }}>
+                          Заработано
+                        </th>
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'right',
+                          color: '#fff',
+                          fontWeight: '700',
+                          fontSize: 'clamp(0.9em, 2.5vw, 1.05em)',
+                          borderBottom: '2px solid #555',
+                          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          Завершено задач
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {statistics.statistics.map((stat, index) => (
+                        <tr key={stat.montajnik_id} style={{
+                          backgroundColor: index % 2 === 0 ? '#242424' : '#2a2a2a',
+                          transition: 'background-color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#333'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = index % 2 === 0 ? '#242424' : '#2a2a2a'}
+                        >
+                          <td style={{
+                            padding: '12px 16px',
+                            color: '#f0f0f0',
+                            borderBottom: '1px solid #333',
+                            fontSize: 'clamp(0.9em, 2.5vw, 1em)',
+                            fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                          }}>
+                            {stat.montajnik_name}
+                          </td>
+                          <td style={{
+                            padding: '12px 16px',
+                            textAlign: 'right',
+                            color: '#4CAF50',
+                            fontWeight: '700',
+                            borderBottom: '1px solid #333',
+                            fontSize: 'clamp(0.9em, 2.5vw, 1.05em)',
+                            fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {stat.total_earned} ₽
+                          </td>
+                          <td style={{
+                            padding: '12px 16px',
+                            textAlign: 'right',
+                            color: '#e0e0e0',
+                            fontWeight: '600',
+                            borderBottom: '1px solid #333',
+                            fontSize: 'clamp(0.9em, 2.5vw, 1em)',
+                            fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                          }}>
+                            {stat.task_count}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty" style={{ 
+                  padding: '40px 20px',
+                  fontSize: '1.1em'
+                }}>
+                  Нет данных за выбранный период
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

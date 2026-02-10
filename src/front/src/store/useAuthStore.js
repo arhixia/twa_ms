@@ -12,6 +12,7 @@ const useAuthStore = create((set) => ({
   myTasksCount: 0,
   techActiveTasksCount: 0,
   adminTasksCount: 0,
+  managerInvoiceNotIssuedCount: 0,
   
   
 
@@ -38,6 +39,7 @@ const useAuthStore = create((set) => ({
         myTasksCount: 0,
         techActiveTasksCount: 0,
         adminTasksCount: 0,
+        managerInvoiceNotIssuedCount: 0,
        });
   },
 
@@ -57,6 +59,8 @@ const useAuthStore = create((set) => ({
   setMyTasksCount: (count) => set({ myTasksCount: count }),
   setTechActiveTasksCount: (count) => set({ techActiveTasksCount: count }),
   setAdminTasksCount: (count) => set({ adminTasksCount: count }),
+  setManagerInvoiceNotIssuedCount: (count) => set({ managerInvoiceNotIssuedCount: count }),
+
   
   
   
@@ -117,6 +121,16 @@ const useAuthStore = create((set) => ({
       set({ adminTasksCount: data.total_count || 0 });
     } catch (e) {
       console.error("Ошибка обновления количества задач админа:", e);
+    }
+  },
+
+ updateManagerInvoiceNotIssuedCount: async () => {
+    try {
+      const { managerProfile } = await import('../api');
+      const data = await managerProfile();
+      set({ managerInvoiceNotIssuedCount: data.invoice_not_issued_count || 0 });
+    } catch (e) {
+      console.error("Ошибка обновления количества невыставленных счетов:", e);
     }
   },
 

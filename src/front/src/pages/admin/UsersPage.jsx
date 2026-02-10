@@ -304,16 +304,17 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
             </div>
             <div className="task-field-value">
               <select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="dark-select"
-              >
-                <option value="admin">{roleDisplayNames.admin}</option>
-                <option value="logist">{roleDisplayNames.logist}</option>
-                <option value="montajnik">{roleDisplayNames.montajnik}</option>
-                <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
-              </select>
+                    name="role"
+                    value={formData.role}
+                    onChange={handleChange}
+                    className="dark-select"
+                  >
+                    <option value="admin">{roleDisplayNames.admin}</option>
+                    <option value="logist">{roleDisplayNames.logist}</option>
+                    <option value="montajnik">{roleDisplayNames.montajnik}</option>
+                    <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
+                    <option value="manager">{roleDisplayNames.manager}</option> 
+                  </select>
             </div>
           </div>
           
@@ -536,6 +537,7 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
                 <option value="logist">{roleDisplayNames.logist}</option>
                 <option value="montajnik">{roleDisplayNames.montajnik}</option>
                 <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
+                <option value="manager">{roleDisplayNames.manager}</option> 
               </select>
             </div>
           </div>
@@ -585,6 +587,7 @@ function UsersPage() {
     logist: 'Логист',
     montajnik: 'Монтажник',
     tech_supp: 'Тех.специалист',
+    manager: 'Менеджер'
   };
 
   // Состояния для модального окна редактирования

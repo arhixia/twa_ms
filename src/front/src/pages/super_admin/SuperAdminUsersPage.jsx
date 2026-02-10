@@ -37,16 +37,25 @@ const RoleIcon = () => (
 );
 
 const CompanyIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-  </svg>
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-people-fill" viewBox="0 0 16 16">
+  <path d="M7 14s-1 0-1-1 1-4 5-4 5 3 5 4-1 1-1 1zm4-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6m-5.784 6A2.24 2.24 0 0 1 5 13c0-1.355.68-2.75 1.936-3.72A6.3 6.3 0 0 0 5 9c-4 0-5 3-5 4s1 1 1 1zM4.5 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5"/>
+</svg>
 );
 
-// Компонент поиска и выбора компании
 function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompanyId }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredCompanies, setFilteredCompanies] = useState(availableCompanies);
   const [isOpen, setIsOpen] = useState(false);
+
+  // Инициализация: если уже выбрана компания — покажем её имя
+  useEffect(() => {
+    if (selectedCompanyId && availableCompanies.length > 0) {
+      const company = availableCompanies.find(c => c.id === selectedCompanyId);
+      if (company) {
+        setSearchTerm(company.name); // Устанавливаем один раз при монтировании или смене выбора
+      }
+    }
+  }, [selectedCompanyId, availableCompanies.length]); // ← Это допустимо ТОЛЬКО для инициализации
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -69,26 +78,23 @@ function SearchableCompanySelect({ availableCompanies, onSelect, selectedCompany
 
   const handleItemClick = (company) => {
     onSelect(company.id);
-    setSearchTerm(""); // Очищаем поле поиска после выбора
+    setSearchTerm(company.name); // Устанавливаем имя после выбора
+    setIsOpen(false);
   };
 
   const handleInputFocus = () => setIsOpen(true);
   const handleInputBlur = () => setTimeout(() => setIsOpen(false), 150);
 
-  // Найти название выбранной компании
-  const selectedCompany = availableCompanies.find(c => c.id === selectedCompanyId);
-
   return (
     <div className="searchable-select-container">
       <input
         type="text"
-        value={selectedCompany ? `${selectedCompany.name} (ID: ${selectedCompany.id})` : searchTerm}
+        value={searchTerm}
         onChange={handleInputChange}
         onFocus={handleInputFocus}
         onBlur={handleInputBlur}
         placeholder="🔍 Поиск компании (название, ID)..."
         className="searchable-select-input"
-        readOnly={!searchTerm} // Только для чтения если не в режиме поиска
       />
       {isOpen && filteredCompanies.length > 0 && (
         <ul className="searchable-select-dropdown">
@@ -284,16 +290,17 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
             </div>
             <div className="task-field-value">
               <select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="dark-select"
-              >
-                <option value="admin">{roleDisplayNames.admin}</option>
-                <option value="logist">{roleDisplayNames.logist}</option>
-                <option value="montajnik">{roleDisplayNames.montajnik}</option>
-                <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
-              </select>
+                    name="role"
+                    value={formData.role}
+                    onChange={handleChange}
+                    className="dark-select"
+                  >
+                    <option value="admin">{roleDisplayNames.admin}</option>
+                    <option value="logist">{roleDisplayNames.logist}</option>
+                    <option value="montajnik">{roleDisplayNames.montajnik}</option>
+                    <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
+                    <option value="manager">{roleDisplayNames.manager}</option> 
+                  </select>
             </div>
           </div>
           
@@ -496,16 +503,17 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
             </div>
             <div className="task-field-value">
               <select
-                name="role"
-                value={formData.role}
-                onChange={handleChange}
-                className="dark-select"
-              >
-                <option value="admin">{roleDisplayNames.admin}</option>
-                <option value="logist">{roleDisplayNames.logist}</option>
-                <option value="montajnik">{roleDisplayNames.montajnik}</option>
-                <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
-              </select>
+                    name="role"
+                    value={formData.role}
+                    onChange={handleChange}
+                    className="dark-select"
+                  >
+                    <option value="admin">{roleDisplayNames.admin}</option>
+                    <option value="logist">{roleDisplayNames.logist}</option>
+                    <option value="montajnik">{roleDisplayNames.montajnik}</option>
+                    <option value="tech_supp">{roleDisplayNames.tech_supp}</option>
+                    <option value="manager">{roleDisplayNames.manager}</option> 
+                  </select>
             </div>
           </div>
           
@@ -549,6 +557,7 @@ function SuperAdminUsersPage() {
     logist: 'Логист',
     montajnik: 'Монтажник',
     tech_supp: 'Тех.специалист',
+    manager: 'Менеджер',
     super_admin: 'Супер админ'
   };
 
@@ -692,9 +701,10 @@ function SuperAdminUsersPage() {
                 'logist': 2,
                 'tech_supp': 3,
                 'montajnik': 4,
-                'super_admin': 5
+                'manager': 5,
+                'super_admin': 6
               };
-              return (roleOrder[a.role] || 6) - (roleOrder[b.role] || 6);
+              return (roleOrder[a.role] || 7) - (roleOrder[b.role] || 7);
             });
             
             return (

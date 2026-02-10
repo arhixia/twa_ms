@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['upgrade-stories-system-than.trycloudflare.com']
+    allowedHosts: ['soonest-miracle-nearly-intro.trycloudflare.com']
   },
 })
 

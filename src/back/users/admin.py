@@ -7,7 +7,7 @@ from sqlalchemy import and_, case, desc, func, or_, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
-from back.db.models import AssignmentType, ClientCompany, ContactPerson, District, Equipment, FileType, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
+from back.db.models import AssignmentType, ClientCompany, ContactPerson, District, Equipment, FileType, ManagerStatus, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
 from back.auth.auth import get_current_user,create_user as auth_create_user, get_password_hash
 from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
 from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles, UpdateEquipmentRequest,UpdateWorkTypeRequest,UpdateCompanyRequest,UpdateContactPersonRequest, UpdateUserRequest
@@ -19,7 +19,8 @@ from sqlalchemy.orm import selectinload
 from back.users.logist import FIELD_TRANSLATIONS_RU,format_value_rus,build_changes_summary_ru
 import logging
 from typing import Any, Dict, List
-
+from datetime import date
+import calendar
 from back.utils.notify import notify_user
 from back.files.handlers import delete_object_from_s3, validate_and_process_attachment
 from back.users.logist import _attach_storage_keys_to_task, _normalize_assigned_user_id
@@ -40,7 +41,7 @@ async def admin_profile(db: AsyncSession = Depends(get_db), current_user: User =
     Личный кабинет администратора:
     - ID, имя, фамилия, роль
     """
-    _ensure_admin_or_403(current_user) # Убедимся, что пользователь - админ
+    _ensure_admin_or_403(current_user) 
 
     return {
         "id": current_user.id,
@@ -50,10 +51,89 @@ async def admin_profile(db: AsyncSession = Depends(get_db), current_user: User =
     }
 
 
+@router.get("/montajnik-statistics", summary="Статистика по монтажникам за период")
+async def admin_montajnik_statistics(
+    start_year: Optional[int] = Query(None, description="Год начала (например, 2025)"),
+    start_month: Optional[int] = Query(None, description="Месяц начала (1-12)"),
+    end_year: Optional[int] = Query(None, description="Год окончания (например, 2025)"),
+    end_month: Optional[int] = Query(None, description="Месяц окончания (1-12)"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):  
+    
+    _ensure_admin_or_403(current_user)
+    
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    
+    if start_year is None or start_month is None or end_year is None or end_month is None:
+        current_date = date.today()
+        start_year = current_date.year
+        start_month = 1  # Январь
+        end_year = current_date.year
+        end_month = current_date.month
+    
+    start_date = date(start_year, start_month, 1)
+    end_date = date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
+    
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="Начальная дата не может быть позже конечной")
+    
+    montajniks_query = select(User).where(
+        User.company_id == current_user.company_id,
+        User.role == Role.montajnik
+    )
+    
+    montajniks_result = await db.execute(montajniks_query)
+    montajniks = montajniks_result.scalars().all()
+    
+    statistics = []
+    
+    for montajnik in montajniks:
+        earnings_query = select(func.sum(Task.montajnik_reward)).where(
+            Task.assigned_user_id == montajnik.id,
+            Task.status == TaskStatus.completed,
+            Task.completed_at >= start_date,
+            Task.completed_at <= end_date
+        )
+        
+        earnings_result = await db.execute(earnings_query)
+        total_earned = earnings_result.scalar() or 0
+        
+        
+        count_query = select(func.count(Task.id)).where(
+            Task.assigned_user_id == montajnik.id,
+            Task.status == TaskStatus.completed,
+            Task.completed_at >= start_date,
+            Task.completed_at <= end_date
+        )
+        
+        count_result = await db.execute(count_query)
+        task_count = count_result.scalar() or 0
+        
+        statistics.append({
+            "montajnik_id": montajnik.id,
+            "montajnik_name": f"{montajnik.name} {montajnik.lastname or ''}".strip(),
+            "total_earned": str(total_earned),
+            "task_count": task_count
+        })
+        
+    statistics.sort(key=lambda x: (x["task_count"], float(x["total_earned"])), reverse=True)
+
+    return {
+        "period": f"{start_year}-{start_month:02d} - {end_year}-{end_month:02d}",
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "statistics": statistics
+    }
+
+
+
 async def require_admin(current_user:User=Depends(get_current_user)) -> User:
     if current_user.role != RoleEnum.admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="Недастаточно прав пользователя")
     return current_user
+
 
 
 
@@ -67,7 +147,7 @@ async def admin_list_users(
     
     q = await db.execute(
         select(User)
-        .where(User.company_id == current_user.company_id)  # Фильтруем по компании администратора
+        .where(User.company_id == current_user.company_id)  
         .order_by(User.is_active.desc(), User.role, User.id) 
     )
     users = q.scalars().all()
@@ -1025,7 +1105,16 @@ async def admin_filter_tasks(
         
         else_=99
     )
-    query = query.order_by(status_order)
+
+    manager_status_order = case(
+        (Task.manager_status == ManagerStatus.invoice_not_issued, 1),
+        (Task.manager_status == ManagerStatus.invoice_issued, 2),
+        (Task.manager_status == ManagerStatus.cash_payment, 3),
+        (Task.manager_status == ManagerStatus.warranty, 4),
+        else_=99
+    )
+
+    query = query.order_by(status_order,manager_status_order)
 
     query = query.options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
@@ -1060,6 +1149,7 @@ async def admin_filter_tasks(
             "id": t.id,
             "client_name": client_name,
             "status": t.status.value if t.status else None,
+            "manager_status": t.manager_status.value if t.manager_status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
             "location": t.location,
             "vehicle_info": t.vehicle_info,

@@ -270,10 +270,11 @@ function AdminTasksPage() {
           ) : tasks.length ? (
             tasks.map(task => (
               <TaskCard 
-                key={task.id} 
-                task={task} 
-                onClick={handleTaskCardClick}
-              />
+  key={task.id} 
+  task={task} 
+  onClick={handleTaskCardClick}
+  showManagerStatus={true}
+/>
             ))
           ) : (
             <div className="empty">По выбранным фильтрам нет задач</div>

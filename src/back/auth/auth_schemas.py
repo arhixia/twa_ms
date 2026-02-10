@@ -11,6 +11,7 @@ class Role(str, Enum):
     montajnik = "montajnik"
     tech_supp = "tech_supp"
     super_admin = "super_admin"
+    manager = "manager"
 
 
 

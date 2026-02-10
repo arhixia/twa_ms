@@ -347,9 +347,30 @@ export default function LogistProfilePage() {
                     </div>
 
                     {/* Статус (справа вверху) */}
-                    <div className="task-status-badge" style={{ backgroundColor: '#20c997' }}>
-                      Завершена
-                    </div>
+                    <>
+  {/* Менеджерский статус — СЛЕВА от основного */}
+  {task.manager_status && (
+    <div
+      className="task-status-badge"
+      style={{
+        position: 'absolute',
+        top: '12px',
+        right: '96px', // 12px (отступ основного) + 60px (ширина) + 8px (зазор) = 80px
+        backgroundColor: getManagerStatusColor(task.manager_status),
+      }}
+    >
+      {getManagerStatusLabel(task.manager_status)}
+    </div>
+  )}
+
+  {/* Основной статус — на прежнем месте */}
+  <div
+    className="task-status-badge"
+    style={{ backgroundColor: '#20c997' }}
+  >
+    Завершена
+  </div>
+</>
                   </div>
                 ))}
               </div>
@@ -361,4 +382,25 @@ export default function LogistProfilePage() {
       </div>
     </div>
   );
+}
+
+
+function getManagerStatusLabel(managerStatus) {
+  const labelMap = {
+    invoice_not_issued: 'Счет не выставлен',
+    invoice_issued: 'Счет выставлен',
+    warranty: 'Гарантия',
+    cash_payment: 'Наличка',
+  };
+  return labelMap[managerStatus] || "—";
+}
+
+function getManagerStatusColor(managerStatus) {
+  const colorMap = {
+    invoice_not_issued: '#6b7280', 
+    invoice_issued: '#39c3cf',     
+    warranty: '#422780',          
+    cash_payment: '#759f36',     
+  };
+  return colorMap[managerStatus] || '#6c757d';
 }

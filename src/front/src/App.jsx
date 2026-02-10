@@ -52,6 +52,12 @@ import CompletedTaskDetailPage from "./pages/montajnik/CompletedTaskDetailPage";
 import AssignedTasksPage from "./pages/montajnik/AssignedTasksPage";
 import AssignedTaskDetailPage from "./pages/montajnik/AssignedTaskDetailPage";
 
+import ManagerPage from "./pages/manager/ManagerPage";
+import ManagerTasksPage from "./pages/manager/ManagerTasksPage";
+import ManagerTaskDetailPage from "./pages/manager/ManagerTaskDetailPage";
+import ManagerProfilePage from "./pages/manager/ManagerProfilePage";
+
+
 export default function App() {
   const { token, role } = useAuthStore();
 
@@ -97,6 +103,15 @@ export default function App() {
           <Route path="me" element={<AdminProfilePage />} /> {/* Новый маршрут */}
           <Route path="equipment" element={<AdminEquipmentPage />} />
           <Route path="districts" element={<AdminDistrictsPage />} /> 
+        </Route>
+      )}
+
+            {role === "manager" && (
+        <Route path="/manager" element={<ManagerPage />}>
+          <Route index element={<Navigate to="tasks" />} />
+          <Route path="tasks" element={<ManagerTasksPage />} />
+          <Route path="tasks/:id" element={<ManagerTaskDetailPage />} />
+          <Route path="me" element={<ManagerProfilePage />} />
         </Route>
       )}
 

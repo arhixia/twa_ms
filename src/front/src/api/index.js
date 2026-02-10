@@ -430,6 +430,8 @@ export async function adminGetDistrictById(districtId) {
 }
 
 
+
+
 export async function adminFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
   const params = new URLSearchParams();
 
@@ -497,6 +499,17 @@ export async function fetchAdminProfile() { // <- НОВОЕ: Экспортир
   return (await api.get(`/admin/me`)).data; // <- Используем новый эндпоинт
 }
 
+export async function getAdminMontajnikStatistics(startYear, startMonth, endYear, endMonth) {
+  const params = new URLSearchParams();
+  if (startYear && startMonth && endYear && endMonth) {
+    params.append("start_year", startYear);
+    params.append("start_month", startMonth);
+    params.append("end_year", endYear);
+    params.append("end_month", endMonth);
+  }
+  
+  return (await api.get(`/admin/montajnik-statistics?${params.toString()}`)).data;
+}
 
 // ---------- TECH_SUPP ----------
 
@@ -743,4 +756,29 @@ export async function superAdminCreateCompany(payload) {
 
 export async function superAdminListAllCompanies() {
   return (await api.get("/super_admin/companies")).data;
+}
+
+// ---------- MANAGER ----------
+export async function fetchManagerTasks() {
+  return (await api.get("/manager/tasks")).data;
+}
+
+export async function fetchManagerTaskDetail(taskId) {
+  return (await api.get(`/manager/tasks/${taskId}`)).data;
+}
+
+export async function setInvoiceIssued(taskId) {
+  return (await api.post(`/manager/tasks/${taskId}/set-invoice-issued`)).data;
+}
+
+export async function setWarranty(taskId) {
+  return (await api.post(`/manager/tasks/${taskId}/set-warranty`)).data;
+}
+
+export async function setCashPayment(taskId) {
+  return (await api.post(`/manager/tasks/${taskId}/set-cash-payment`)).data;
+}
+
+export async function managerProfile() {
+  return (await api.get("/manager/profile")).data;
 }

@@ -24,6 +24,7 @@ from back.db.models import (
     BroadcastResponse,
     TaskReport,
     WorkType,
+    ManagerStatus
 )
 from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, SimpleDistrictResponse, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg, UpdateCompanyRequest, UpdateContactPersonRequest,require_roles
 from back.utils.notify import notify_broadcast_task, notify_task_assignment, notify_user
@@ -1681,7 +1682,7 @@ async def review_report(
     background_tasks: BackgroundTasks,
     task_id: int,
     report_id: int,
-    payload: ReportReviewIn = Body(...), # Используем Pydantic схему, если она есть
+    payload: ReportReviewIn = Body(...),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -1714,9 +1715,9 @@ async def review_report(
         select(Task)
         .where(Task.id == task_id)
         .options(
-            selectinload(Task.contact_person).selectinload(ContactPerson.company), #   Загружаем компанию
-            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment), #   Загружаем оборудование
-            selectinload(Task.works).selectinload(TaskWork.work_type) #   Загружаем виды работ
+            selectinload(Task.contact_person).selectinload(ContactPerson.company),
+            selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+            selectinload(Task.works).selectinload(TaskWork.work_type)
         )
     )
     task = t_res.scalars().first()
@@ -1730,6 +1731,9 @@ async def review_report(
     old_approval_logist = report.approval_logist
     old_approval_tech = report.approval_tech
 
+    # Флаг для отслеживания перехода в completed
+    task_completed = False
+
     # set approval based on role
     if getattr(current_user, "role", None) == Role.logist:
         report.approval_logist = ReportApproval.approved if approval == "approved" else ReportApproval.rejected
@@ -1739,7 +1743,7 @@ async def review_report(
     report.reviewed_at_logist = datetime.now(timezone.utc)
 
     if approval == "rejected" and getattr(current_user, "role", None) == Role.logist:
-    # Устанавливаем статус задачи как возвращенный при отклонении логистом
+        # Устанавливаем статус задачи как возвращенный при отклонении логистом
         task.status = TaskStatus.returned
         
         # Создаем запись в истории
@@ -1783,7 +1787,9 @@ async def review_report(
         # if both approved -> finalize task
         if not requires_tech_review and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
+            task.manager_status = ManagerStatus.invoice_not_issued
             task.completed_at = datetime.now(timezone.utc)
+            task_completed = True  # Устанавливаем флаг
 
             hist = TaskHistory(
                 task_id=task.id,
@@ -1821,10 +1827,11 @@ async def review_report(
             )
             db.add(hist)
 
-# --- если техпроверка требуется, и оба одобрили ---
         elif requires_tech_review and report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
+            task.manager_status = ManagerStatus.invoice_not_issued
             task.completed_at = datetime.now(timezone.utc)
+            task_completed = True  # Устанавливаем флаг
 
             hist = TaskHistory(
                 task_id=task.id,
@@ -1862,13 +1869,11 @@ async def review_report(
             )
             db.add(hist)
         else:
-            action = TaskStatus.inspection # Статус задачи не изменился, но отчёт проверялся
+            action = TaskStatus.inspection
             hist_comment = f"Отчет проверен логистом"
             if comment:
                 hist_comment += f". Комментарий: {comment}"
 
-            # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (проверка отчёта) ---
-            # Так как связи уже загружены через options в t_res, мы можем их использовать
             equipment_snapshot_for_history = [
                 {"name": te.equipment.name, "serial_number": te.serial_number, "quantity": te.quantity}
                 for te in task.equipment_links
@@ -1879,41 +1884,37 @@ async def review_report(
                 for tw in task.works
             ]
 
-            # Создаём запись в истории с *всеми* полями задачи и снимками
             hist = TaskHistory(
                 task_id=task.id,
                 user_id=getattr(current_user, "id", None),
-                action=action, # action - текущий статус задачи
-                event_type=TaskHistoryEventType.report_status_changed, #   Новый тип
+                action=action,
+                event_type=TaskHistoryEventType.report_status_changed,
                 comment=hist_comment,
-                # --- Сохраняем все основные поля задачи ---
                 company_id=task.company_id,
                 contact_person_id=task.contact_person_id,
                 contact_person_phone=task.contact_person_phone,
                 vehicle_info=task.vehicle_info,
-                gos_number = task.gos_number,
+                gos_number=task.gos_number,
                 scheduled_at=task.scheduled_at,
                 location=task.location,
                 comment_field=task.comment,
-                status=task.status.value if task.status else None, # status - текущий статус задачи
+                status=task.status.value if task.status else None,
                 assigned_user_id=task.assigned_user_id,
                 client_price=str(task.client_price) if task.client_price is not None else None,
                 montajnik_reward=str(task.montajnik_reward) if task.montajnik_reward is not None else None,
                 photo_required=task.photo_required,
                 assignment_type=task.assignment_type.value if task.assignment_type else None,
-                field_name="report_approval", # Поле, связанное с отчётом
+                field_name="report_approval",
                 old_value=f"logist:{old_approval_logist.value if old_approval_logist else 'None'}, tech:{old_approval_tech.value if old_approval_tech else 'None'}",
                 new_value=f"logist:{report.approval_logist.value}, tech:{report.approval_tech.value}",
                 related_entity_id=report.id,
                 related_entity_type="report",
-                # --- НОВЫЕ ПОЛЯ: Снимки ---
                 equipment_snapshot=equipment_snapshot_for_history,
                 work_types_snapshot=work_types_snapshot_for_history,
             )
             db.add(hist)
 
         await db.flush()
-
         await db.commit()
     except Exception as e:
         logger.exception("Failed to review report: %s", e)
@@ -1923,6 +1924,7 @@ async def review_report(
             logger.exception("rollback failed")
         raise HTTPException(status_code=500, detail="Failed to review report")
 
+    # Уведомление монтажнику
     if task.assigned_user_id:
         both_approved = (report.approval_logist == ReportApproval.approved and 
                         report.approval_tech == ReportApproval.approved)
@@ -1951,13 +1953,39 @@ async def review_report(
         and report.approval_tech == ReportApproval.waiting
         and requires_tech_review
     ):
-        tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True,User.company_id == current_user.company_id))
+        tech_q = await db.execute(
+            select(User).where(
+                User.role == Role.tech_supp, 
+                User.is_active == True,
+                User.company_id == current_user.company_id
+            )
+        )
         techs = tech_q.scalars().all()
         for tuser in techs:
             background_tasks.add_task(
                 notify_user,
                 tuser.id,
                 f"Отчёт по задаче #{task_id} ожидает вашей проверки.",
+                task_id
+            )
+
+   
+    if task_completed:
+        managers_q = await db.execute(
+            select(User).where(
+                User.role == Role.manager,
+                User.is_active == True,
+                User.company_id == current_user.company_id
+            )
+        )
+        managers = managers_q.scalars().all()
+        
+       
+        for manager in managers:
+            background_tasks.add_task(
+                notify_user,
+                manager.id,
+                f"Работы по задаче #{task_id} завершены. Требуется проверка менеджера.",
                 task_id
             )
 
@@ -2340,6 +2368,16 @@ async def logist_filter_completed_tasks(
         combined_search_condition = or_(*conditions)
         query = query.where(combined_search_condition)
 
+    manager_status_order = case(
+        (Task.manager_status == ManagerStatus.invoice_not_issued, 1),
+        (Task.manager_status == ManagerStatus.invoice_issued, 2),
+        (Task.manager_status == ManagerStatus.cash_payment, 3),
+        (Task.manager_status == ManagerStatus.warranty, 4),
+        else_=99
+    )
+
+    query = query.order_by(manager_status_order)
+
     query = query.options(
         selectinload(Task.contact_person).selectinload(ContactPerson.company),
         selectinload(Task.assigned_user),
@@ -2387,6 +2425,7 @@ async def logist_filter_completed_tasks(
             "id": t.id,
             "client": client_name,
             "status": t.status.value if t.status else None,
+            "manager_status": t.manager_status.value if t.manager_status else None,
             "scheduled_at": str(t.scheduled_at) if t.scheduled_at else None,
             "location": t.location,
             "vehicle_info": t.vehicle_info,

@@ -16,6 +16,7 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
     logist: 'linear-gradient(135deg, #fef3c7 0%, #fed7aa 50%, #fdba74 100%)',
     montajnik: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%)',
     tech_supp: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 50%, #d8b4fe 100%)',
+    manager: 'linear-gradient(135deg, #fef9c3 0%, #fef08a 50%, #fde047 100%)'
   };
 
   const handleRoleChange = (e) => {

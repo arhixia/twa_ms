@@ -11,7 +11,8 @@ export default function TaskCard({
   onReject, 
   isAccepting, 
   isRejecting,
-  showPrice = false // Новый проп для контроля отображения цены
+  showPrice = false,// Новый проп для контроля отображения цены
+  showManagerStatus = false
 }) {
   const navigate = useNavigate();
 
@@ -174,9 +175,38 @@ export default function TaskCard({
           </button>
         </div>
       ) : (
-        <div className="task-status-badge" style={{ backgroundColor: statusColor }}>
-          {statusDisplay}
-        </div>
+       <>
+    {/* Менеджерский статус — СЛЕВА от основного */}
+    {showManagerStatus && task.manager_status && (
+      <div
+        className="task-manager-status-badge"
+        style={{
+          position: 'absolute',
+          top: '12px',
+          right: 'calc(12px + 60px + 24px)', 
+          padding: '4px 8px',
+          borderRadius: '16px',
+          fontSize: '12px',
+          fontWeight: '600',
+          color: 'white',
+          textAlign: 'center',
+          minWidth: '60px',
+          backgroundColor: getManagerStatusColor(task.manager_status),
+          zIndex: 2,
+        }}
+      >
+        {getManagerStatusLabel(task.manager_status)}
+      </div>
+    )}
+
+    {/* Основной статус — ТОЧНО на прежнем месте */}
+    <div
+      className="task-status-badge"
+      style={{ backgroundColor: statusColor }}
+    >
+      {statusDisplay}
+    </div>
+  </>
       )}
 
       {displayPrice && (
@@ -346,4 +376,24 @@ function getStatusColor(status) {
     draft: '#6c757d'
   };
   return colorMap[status] || '#6c757d';
+}
+
+function getManagerStatusLabel(managerStatus) {
+  const labelMap = {
+    invoice_not_issued: 'Счет не выставлен',
+    invoice_issued: 'Счет выставлен',
+    warranty: 'Гарантия',
+    cash_payment: 'Наличка',
+  };
+  return labelMap[managerStatus] || managerStatus || "—";
+}
+
+function getManagerStatusColor(managerStatus) {
+  const colorMap = {
+    invoice_not_issued: '#6b7280', // gray-500
+    invoice_issued: '#39c3cf',     // blue-500
+    warranty: '#422780',           // violet-500
+    cash_payment: '#759f36',       // amber-500
+  };
+  return colorMap[managerStatus] || '#6c757d';
 }

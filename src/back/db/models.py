@@ -32,7 +32,14 @@ class Role(enum.Enum):
     logist = "logist"
     montajnik = "montajnik"
     tech_supp = "tech_supp"
+    manager = "manager"
     super_admin = "super_admin"
+
+class ManagerStatus(enum.Enum):
+    invoice_not_issued = "invoice_not_issued"  # Счет не выставлен
+    invoice_issued = "invoice_issued"          # Счет выставлен
+    warranty = "warranty"                      # Гарантия
+    cash_payment = "cash_payment" #наличка
 
 
 class TaskStatus(enum.Enum):
@@ -91,6 +98,7 @@ class Task(AsyncAttrs, Base):
     gos_number = Column(String, nullable=True)
     comment = Column(Text, nullable=True)
     status = Column(Enum(TaskStatus), default=TaskStatus.new, index=True)
+    manager_status = Column(Enum(ManagerStatus), nullable=True, index=True)
     assignment_type = Column(Enum(AssignmentType), nullable=True, index=True)
     assigned_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
     logist_contact_id = Column(BigInteger, nullable=True)
