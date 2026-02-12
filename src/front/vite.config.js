@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['soonest-miracle-nearly-intro.trycloudflare.com']
+    allowedHosts: ['purchase-estimation-drives-clocks.trycloudflare.com']
   },
 })
 

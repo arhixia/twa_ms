@@ -14,6 +14,7 @@ from back.db.models import (
     ContactPerson,
     Equipment,
     FileType,
+    LogistPerformance,
     Task,
     TaskAttachment,
     TaskEquipment,
@@ -211,7 +212,8 @@ async def tech_review_report(
             task.status = TaskStatus.completed
             task.manager_status = ManagerStatus.invoice_not_issued
             task.completed_at = datetime.now(timezone.utc)
-            task_completed = True  # Устанавливаем флаг
+            task.logist_performance = LogistPerformance.good
+            task_completed = True  
 
             # --- СОЗДАНИЕ СНИМКОВ ДЛЯ ИСТОРИИ (завершение задачи) ---
             equipment_snapshot_for_history = [

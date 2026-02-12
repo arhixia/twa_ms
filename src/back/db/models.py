@@ -41,6 +41,10 @@ class ManagerStatus(enum.Enum):
     warranty = "warranty"                      # Гарантия
     cash_payment = "cash_payment" #наличка
 
+class LogistPerformance(enum.Enum):
+    good = "good" 
+    bad = "bad"
+
 
 class TaskStatus(enum.Enum):
     new = "new"  # Создана
@@ -106,7 +110,7 @@ class Task(AsyncAttrs, Base):
     montajnik_reward = Column(Numeric(10,2), nullable=True)
     user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="SET NULL"), index=True, nullable=True)
     district_id = Column(Integer, ForeignKey("districts.id", ondelete="SET NULL"), index=True, nullable=True)
-    
+    logist_performance = Column(Enum(LogistPerformance), nullable=True, index=True)
 
     # owner of draft / creator of the task
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -115,7 +119,6 @@ class Task(AsyncAttrs, Base):
     is_draft = Column(Boolean, default=True, index=True)
     photo_required = Column(Boolean, default=False)
 
-    # optional optimistic locking
     version = Column(Integer, default=1, nullable=False)
 
     accepted_at = Column(DateTime(timezone=True), nullable=True)

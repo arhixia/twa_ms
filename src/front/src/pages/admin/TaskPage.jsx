@@ -4,7 +4,9 @@ import {
   getAdminCompaniesList,
   getActiveMontajniks,
   getAdminWorkTypesList,
-  getAdminEquipmentList
+  getAdminEquipmentList,
+  adminSetLogistPerformanceBad,
+  adminSetLogistPerformanceGood
 } from '../../api';
 import TaskCard from '../../components/TaskCard';
 import { useNavigate } from 'react-router-dom';
@@ -269,11 +271,32 @@ function AdminTasksPage() {
             <div className="empty">Загрузка задач...</div>
           ) : tasks.length ? (
             tasks.map(task => (
-              <TaskCard 
+             <TaskCard 
   key={task.id} 
   task={task} 
   onClick={handleTaskCardClick}
   showManagerStatus={true}
+  isAdmin={true}
+  onLike={async (taskId) => {
+    try {
+      await adminSetLogistPerformanceGood(taskId);
+      setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...t, logist_performance: 'good' } : t
+      ));
+    } catch (err) {
+      alert('Не удалось поставить оценку: ' + (err.response?.data?.detail || err.message));
+    }
+  }}
+  onDislike={async (taskId) => {
+    try {
+      await adminSetLogistPerformanceBad(taskId);
+      setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...t, logist_performance: 'bad' } : t
+      ));
+    } catch (err) {
+      alert('Не удалось поставить оценку: ' + (err.response?.data?.detail || err.message));
+    }
+  }}
 />
             ))
           ) : (

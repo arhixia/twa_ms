@@ -34,7 +34,6 @@ async def super_admin_create_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_super_admin)
 ):
-    # Проверяем, что компания существует
     result = await db.execute(
         select(UserCompany).where(UserCompany.id == user_in.company_id)
     )

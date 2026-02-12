@@ -11,6 +11,7 @@ from back.db.models import (
     District,
     Equipment,
     FileType,
+    LogistPerformance,
     ReportApproval,
     Role,
     Task,
@@ -1788,8 +1789,11 @@ async def review_report(
         if not requires_tech_review and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
             task.manager_status = ManagerStatus.invoice_not_issued
+            task.logist_performance = LogistPerformance.good
+            task.created_by = current_user.id
             task.completed_at = datetime.now(timezone.utc)
-            task_completed = True  # Устанавливаем флаг
+            task_completed = True
+            
 
             hist = TaskHistory(
                 task_id=task.id,
@@ -1830,8 +1834,11 @@ async def review_report(
         elif requires_tech_review and report.approval_tech == ReportApproval.approved and report.approval_logist == ReportApproval.approved:
             task.status = TaskStatus.completed
             task.manager_status = ManagerStatus.invoice_not_issued
+            task.logist_performance = LogistPerformance.good
             task.completed_at = datetime.now(timezone.utc)
-            task_completed = True  # Устанавливаем флаг
+            task.created_by = current_user.id
+            task_completed = True
+            
 
             hist = TaskHistory(
                 task_id=task.id,
@@ -1870,6 +1877,7 @@ async def review_report(
             db.add(hist)
         else:
             action = TaskStatus.inspection
+            task.created_by = current_user.id
             hist_comment = f"Отчет проверен логистом"
             if comment:
                 hist_comment += f". Комментарий: {comment}"
@@ -2781,7 +2789,6 @@ async def logist_update_contact_person(
 @router.get("/me")
 async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
     _ensure_logist_or_403(current_user)
-
     q = select(Task).options(
         selectinload(Task.company), 
         selectinload(Task.contact_person) 
@@ -2791,35 +2798,44 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
     ).order_by(desc(Task.id))  
     res = await db.execute(q)
     completed = res.scalars().all()
-
-    # Подсчитываем задачи в черновиках
+    
+    
+    logist_completed_tasks = [t for t in completed if t.created_by == current_user.id]
+    
+    if logist_completed_tasks:
+        good_tasks = [t for t in logist_completed_tasks if t.logist_performance == LogistPerformance.good]
+        efficiency = (len(good_tasks) / len(logist_completed_tasks)) * 100
+    else:
+        efficiency = 0
+    
+   
     draft_query = select(func.count(Task.id)).where(
         Task.user_company_id == current_user.company_id,
         Task.is_draft == True
     )
     draft_res = await db.execute(draft_query)
     draft_count = draft_res.scalar() or 0
-
+    
     archived_query = select(func.count(Task.id)).where(
         Task.user_company_id == current_user.company_id,
         Task.status == TaskStatus.archived
     )
     archived_res = await db.execute(archived_query)
     archived_count = archived_res.scalar() or 0
-
+    
     total = sum([float(t.client_price or 0) for t in completed])
-
+    
     history = []
     for t in completed: 
         history.append({
             "id": t.id,
-            "client": t.company.name if t.company else "—", # Имя компании
-            "contact_person": t.contact_person.name if t.contact_person else "—", # Имя контактного лица
+            "client": t.company.name if t.company else "—", 
+            "contact_person": t.contact_person.name if t.contact_person else "—", 
             "vehicle_info": t.vehicle_info,
             "gos_number": t.gos_number,
             "completed_at": t.completed_at.isoformat() if t.completed_at else None,
         })
-
+    
     return {
         "id": current_user.id,
         "name": current_user.name,
@@ -2829,6 +2845,8 @@ async def logist_profile(db: AsyncSession = Depends(get_db), current_user: User 
         "draft_count": draft_count,
         "archived_count": archived_count,
         "total_earned": str(round(total, 2)),
+        "efficiency": round(efficiency, 2),  
+        "logist_completed_count": len(logist_completed_tasks),  # Количество задач, созданных этим логистом
         "history": history,
     }
 

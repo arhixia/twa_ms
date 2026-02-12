@@ -156,17 +156,27 @@ export default function LogistProfilePage() {
     <p><b>Фамилия:</b> {profile.lastname || "—"}</p>
   </div>
 
-  <div className="profile-card">
-    <div className="profile-card-header">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
-      </svg>
-      <h2>Статистика</h2>
-    </div>
-    <p><b>Выполнено задач:</b> {profile.completed_count || 0}</p>
-    <p><b>В черновиках:</b> {profile.draft_count || 0}</p>
-    <p><b>В архиве:</b> {profile.archived_count || 0}</p>
+ <div className="profile-card">
+  <div className="profile-card-header">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+    </svg>
+    <h2>Статистика</h2>
   </div>
+  <p><b>Выполнено задач:</b> {profile.completed_count || 0}</p>
+  <p><b>В черновиках:</b> {profile.draft_count || 0}</p>
+  <p><b>В архиве:</b> {profile.archived_count || 0}</p>
+  
+  {/* === НОВАЯ СТРОКА: ЭФФЕКТИВНОСТЬ === */}
+  <p>
+    <b>Эффективность:</b>{' '}
+    <span style={{ color: '#a7f3d0', fontWeight: '600' }}>
+      {typeof profile.efficiency === 'number' 
+        ? `${profile.efficiency.toFixed(1)}%` 
+        : '—'}
+    </span>
+  </p>
+</div>
 </div>
 
         <div className="section">

@@ -430,6 +430,14 @@ export async function adminGetDistrictById(districtId) {
 }
 
 
+export async function adminSetLogistPerformanceGood(taskId) {
+  return (await api.patch(`/admin/tasks/${taskId}/logist-performance/good`)).data;
+}
+
+export async function adminSetLogistPerformanceBad(taskId) {
+  return (await api.patch(`/admin/tasks/${taskId}/logist-performance/bad`)).data;
+}
+
 
 
 export async function adminFilterCompletedTasks({ company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {

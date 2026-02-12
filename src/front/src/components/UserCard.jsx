@@ -139,6 +139,16 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
         >
           <strong>Telegram ID:</strong> {user.telegram_id || '—'}
         </p>
+
+       {user.role === 'logist' && (
+        <p style={{ margin: '4px 0', color: '#a7f3d0', fontSize: '0.9em', fontWeight: '600' }}>
+          <strong>Эффективность:</strong>{' '}
+          {typeof user.efficiency === 'number' 
+            ? `${user.efficiency.toFixed(1)}%` 
+            : 'нет данных'}
+        </p>
+      )}
+
         {/* Показываем компанию только если разрешено */}
         {showCompany && companyName && (
           <p

@@ -3,11 +3,11 @@ from decimal import Decimal
 import enum
 import json
 from fastapi import APIRouter, Body,Depends,HTTPException, Query,status
-from sqlalchemy import and_, case, desc, func, or_, select, update, delete
+from sqlalchemy import Float, Numeric, and_, case, desc, func, or_, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from back.db.database import get_db
-from back.db.models import AssignmentType, ClientCompany, ContactPerson, District, Equipment, FileType, ManagerStatus, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
+from back.db.models import AssignmentType, ClientCompany, ContactPerson, District, Equipment, FileType, LogistPerformance, ManagerStatus, TaskAttachment, TaskEquipment, TaskHistory, TaskHistoryEventType, TaskReport, TaskStatus, TaskWork, User,Role as RoleEnum,Task, WorkType,Role
 from back.auth.auth import get_current_user,create_user as auth_create_user, get_password_hash
 from back.auth.auth_schemas import UserCreate,UserResponse,UserBase,RoleChange
 from back.users.users_schemas import SimpleMsg, TaskEquipmentItem, TaskHistoryItem, TaskPatch, TaskUpdate, require_roles, UpdateEquipmentRequest,UpdateWorkTypeRequest,UpdateCompanyRequest,UpdateContactPersonRequest, UpdateUserRequest
@@ -48,6 +48,76 @@ async def admin_profile(db: AsyncSession = Depends(get_db), current_user: User =
         "name": current_user.name,
         "lastname": current_user.lastname,
         "role": current_user.role.value if current_user.role else None,
+    }
+
+
+@router.patch("/tasks/{task_id}/logist-performance/good", summary="Оценить работу логиста как хорошую")
+async def set_logist_performance_good(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    _ensure_admin_or_403(current_user)
+    
+    task_query = await db.execute(
+        select(Task).where(Task.id == task_id)
+    )
+    task = task_query.scalars().first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    
+    if task.status != TaskStatus.completed:
+        raise HTTPException(status_code=400, detail="Можно оценивать только завершенные задачи")
+    
+    task.logist_performance = LogistPerformance.good
+    
+    try:
+        await db.commit()
+        await db.refresh(task)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка при сохранении оценки: {str(e)}")
+    
+    return {
+        "detail": "Оценка успешно установлена",
+        "task_id": task_id,
+        "logist_performance": "good"
+    }
+
+
+@router.patch("/tasks/{task_id}/logist-performance/bad", summary="Оценить работу логиста как плохую")
+async def set_logist_performance_bad(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    _ensure_admin_or_403(current_user)
+    
+    task_query = await db.execute(
+        select(Task).where(Task.id == task_id)
+    )
+    task = task_query.scalars().first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Задача не найдена")
+    
+    if task.status != TaskStatus.completed:
+        raise HTTPException(status_code=400, detail="Можно оценивать только завершенные задачи")
+    
+    task.logist_performance = LogistPerformance.bad
+    
+    try:
+        await db.commit()
+        await db.refresh(task)
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=f"Ошибка при сохранении оценки: {str(e)}")
+    
+    return {
+        "detail": "Оценка успешно установлена",
+        "task_id": task_id,
+        "logist_performance": "bad"
     }
 
 
@@ -145,13 +215,56 @@ async def admin_list_users(
     if not current_user.company_id:
         raise HTTPException(status_code=403, detail="Admin must belong to a company")
     
-    q = await db.execute(
-        select(User)
-        .where(User.company_id == current_user.company_id)  
-        .order_by(User.is_active.desc(), User.role, User.id) 
+    efficiency_cte = (
+    select(
+        Task.created_by.label("user_id"),
+        func.round(
+            (
+                func.cast(
+                    func.sum(
+                        case(
+                            (Task.logist_performance == LogistPerformance.good, 1),
+                            else_=0
+                        )
+                    ),
+                    Numeric
+                ) * 100
+            ) / func.nullif(func.count(Task.id), 0),
+            1
+        ).label("efficiency")
     )
-    users = q.scalars().all()
-    return [UserResponse.model_validate(u) for u in users]
+    .where(
+        Task.created_by.isnot(None),
+        Task.user_company_id == current_user.company_id,
+        Task.status == TaskStatus.completed,
+    )
+    .group_by(Task.created_by)
+    .cte("efficiency_cte")
+)
+
+   
+    stmt = (
+        select(
+            User,
+            case(
+                (User.role == Role.logist, efficiency_cte.c.efficiency),
+                else_=None
+            ).label("computed_efficiency")
+        )
+        .outerjoin(efficiency_cte, User.id == efficiency_cte.c.user_id)
+        .where(User.company_id == current_user.company_id)
+        .order_by(User.is_active.desc(), User.role, User.id)
+    )
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    users_with_efficiency = []
+    for user, computed_eff in rows:
+        user.efficiency = float(computed_eff) if computed_eff is not None else None
+        users_with_efficiency.append(user)
+
+    return users_with_efficiency
 
 
 @router.post("/users",response_model=UserResponse,status_code=status.HTTP_201_CREATED,summary="Создать пользователя (только админ, в своей компании)")
@@ -1162,6 +1275,7 @@ async def admin_filter_tasks(
             "is_draft": t.is_draft,
             "photo_required": t.photo_required,
             "equipment": equipment,
+            "logist_performance": t.logist_performance
         })
 
     return out

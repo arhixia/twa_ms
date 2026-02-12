@@ -46,6 +46,7 @@ class UserResponse(UserBase):
     id: int
     login: str
     company_id: Optional[int] = None
+    efficiency: Optional[float] = Field(None, ge=0.0, le=100.0)
     
     model_config = ConfigDict(from_attributes=True)
 
