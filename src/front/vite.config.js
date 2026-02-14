@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['purchase-estimation-drives-clocks.trycloudflare.com']
+    allowedHosts: ['tales-devon-drug-beaver.trycloudflare.com']
   },
 })
 

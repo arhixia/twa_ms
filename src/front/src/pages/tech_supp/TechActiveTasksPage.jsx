@@ -22,18 +22,37 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
-export default function TechActiveTasksPage() {
-  const navigate = useNavigate();
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showFilters, setShowFilters] = useState(false); // Фильтры изначально скрыты
+// ✅ Хук для определения мобильного устройства
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
 
-  const [companies, setCompanies] = useState([]);
-  const [montajniks, setMontajniks] = useState([]);
-  const [workTypes, setWorkTypes] = useState([]);
-  const [equipments, setEquipments] = useState([]);
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
-  const [selectedFilters, setSelectedFilters] = useState({
+  return isMobile;
+}
+
+const FILTERS_STORAGE_KEY = 'techActiveTasksFilters';
+
+// Функция для загрузки фильтров из localStorage
+const loadFiltersFromStorage = () => {
+  try {
+    const saved = localStorage.getItem(FILTERS_STORAGE_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (err) {
+    console.error('Ошибка загрузки фильтров:', err);
+  }
+  return {
     status: [],
     company_id: [],
     assigned_user_id: [],
@@ -41,10 +60,49 @@ export default function TechActiveTasksPage() {
     task_id: null,
     equipment_id: [],
     search: "",
+  };
+};
+
+export default function TechActiveTasksPage() {
+  const navigate = useNavigate();
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showFilters, setShowFilters] = useState(() => {
+    try {
+      const saved = localStorage.getItem('techActiveTasksShowFilters');
+      return saved ? JSON.parse(saved) : false;
+    } catch {
+      return false;
+    }
   });
 
-  const [searchInput, setSearchInput] = useState("");
+  const [companies, setCompanies] = useState([]);
+  const [montajniks, setMontajniks] = useState([]);
+  const [workTypes, setWorkTypes] = useState([]);
+  const [equipments, setEquipments] = useState([]);
+
+  const [selectedFilters, setSelectedFilters] = useState(loadFiltersFromStorage);
+  const [searchInput, setSearchInput] = useState(() => loadFiltersFromStorage().search);
   const debouncedSearch = useDebounce(searchInput, 500);
+  const isMobile = useIsMobile();
+
+  // Сохраняем фильтры при каждом изменении
+  useEffect(() => {
+    try {
+      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(selectedFilters));
+    } catch (err) {
+      console.error('Ошибка сохранения фильтров:', err);
+    }
+  }, [selectedFilters]);
+
+  // Сохраняем состояние показа фильтров
+  useEffect(() => {
+    try {
+      localStorage.setItem('techActiveTasksShowFilters', JSON.stringify(showFilters));
+    } catch (err) {
+      console.error('Ошибка сохранения состояния фильтров:', err);
+    }
+  }, [showFilters]);
 
   useEffect(() => {
     const fetchFiltersData = async () => {
@@ -99,6 +157,22 @@ export default function TechActiveTasksPage() {
     navigate(`/tech_supp/tasks/${task.id}`);
   };
 
+  // Функция для сброса всех фильтров
+  const resetAllFilters = () => {
+    const defaultFilters = {
+      status: [],
+      company_id: [],
+      assigned_user_id: [],
+      work_type_id: [],
+      task_id: null,
+      equipment_id: [],
+      search: "",
+    };
+    setSelectedFilters(defaultFilters);
+    setSearchInput("");
+    localStorage.removeItem(FILTERS_STORAGE_KEY);
+  };
+
   const STATUS_OPTIONS = [
     { value: "new", label: "Создана" },
     { value: "accepted", label: "Принята монтажником" },
@@ -108,48 +182,82 @@ export default function TechActiveTasksPage() {
     { value: "assigned", label: "Назначена" },
     { value: "inspection", label: "На проверке" },
     { value: "returned", label: "На доработке" },
-    { value: "archived", label: "Архив" },
   ];
 
-  // Преобразование опций для MultiSelectFilter
   const companyOptions = companies.map(c => ({ value: c.id, label: c.name }));
   const montajnikOptions = montajniks.map(m => ({ value: m.id, label: m.name }));
   const workTypeOptions = workTypes.map(w => ({ value: w.id, label: w.name }));
   const equipmentOptions = equipments.map(eq => ({ value: eq.id, label: eq.name }));
+
+  // Проверяем, есть ли активные фильтры
+  const hasActiveFilters = 
+    selectedFilters.status.length > 0 || 
+    selectedFilters.company_id.length > 0 || 
+    selectedFilters.assigned_user_id.length > 0 || 
+    selectedFilters.work_type_id.length > 0 || 
+    selectedFilters.equipment_id.length > 0 || 
+    searchInput;
 
   return (
     <div className="logist-main">
       <div className="page">
         <h1 className="page-title">Активные задачи</h1>
         
-        <div
-          className="search-container"
-          style={{
-            marginBottom: '12px',
-            width: '100%',
-          }}
-        >
-          <input
-            type="text"
-            placeholder="Поиск..."
-            className="dark-select"
-            value={searchInput}
-            onChange={e => handleFilterChange("search", e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 14px',
-              borderRadius: '6px',
-              fontSize: '14px',
-              outline: 'none',
-              transition: '0.2s',
-            }}
-          />
+        <div style={{ 
+          display: 'flex', 
+          gap: isMobile ? '8px' : '12px',
+          alignItems: 'center', 
+          marginBottom: isMobile ? '8px' : '12px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <input
+              type="text"
+              placeholder="Поиск..."
+              className="dark-select"
+              value={searchInput}
+              onChange={e => handleFilterChange("search", e.target.value)}
+              style={{
+                width: '100%',
+                padding: isMobile ? '8px 12px' : '10px 14px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                outline: 'none',
+                transition: '0.2s',
+              }}
+            />
+          </div>
+          
+          {hasActiveFilters && (
+            <button
+              onClick={resetAllFilters}
+              style={{
+                padding: isMobile ? '8px 12px' : '10px 16px',
+                borderRadius: '6px',
+                border: '1px solid #444',
+                backgroundColor: '#2a2a2a',
+                color: '#e0e0e0',
+                cursor: 'pointer',
+                fontSize: isMobile ? '13px' : '14px',
+                whiteSpace: 'nowrap',
+                transition: '0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = '#3a3a3a';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = '#2a2a2a';
+              }}
+            >
+              Сбросить
+            </button>
+          )}
         </div>
 
         <div 
           className="toggle-filters"
           style={{
-            marginBottom: '16px',
+            marginBottom: isMobile ? '8px' : '16px',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
@@ -173,22 +281,37 @@ export default function TechActiveTasksPage() {
         </div>
 
         {showFilters && (
-          <div className="filters" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '16px', maxWidth: '100%' }}>
+          <div className="filters" style={{ 
+            display: 'flex', 
+            gap: isMobile ? '6px' : '12px',
+            flexWrap: 'wrap', 
+            marginBottom: isMobile ? '8px' : '16px',
+            width: '100%'
+          }}>
             {/* Статус */}
-            <div style={{ minWidth: '150px' }}>
-              <label className="dark-label">Статус</label>
+            <div style={{ 
+              minWidth: isMobile ? '100%' : '150px',
+              flex: isMobile ? '1 1 100%' : '1 1 150px',
+              maxWidth: isMobile ? '100%' : '250px'
+            }}>
+              <label className="dark-label" style={{ marginBottom: isMobile ? '2px' : '4px' }}>Статус</label>
               <MultiSelectFilter
                 options={STATUS_OPTIONS}
                 selectedValues={selectedFilters.status}
                 onChange={(values) => handleFilterChange("status", values)}
                 placeholder="Все статусы"
                 maxHeight={200}
+                width="100%"
               />
             </div>
 
             {/* Компания */}
-            <div style={{ minWidth: '150px' }}>
-              <label className="dark-label">Компания</label>
+            <div style={{ 
+              minWidth: isMobile ? '100%' : '150px',
+              flex: isMobile ? '1 1 100%' : '1 1 150px',
+              maxWidth: isMobile ? '100%' : '250px'
+            }}>
+              <label className="dark-label" style={{ marginBottom: isMobile ? '2px' : '4px' }}>Компания</label>
               <MultiSelectFilter
                 options={companyOptions}
                 selectedValues={selectedFilters.company_id}
@@ -200,8 +323,12 @@ export default function TechActiveTasksPage() {
             </div>
 
             {/* Монтажник */}
-            <div style={{ minWidth: '150px' }}>
-              <label className="dark-label">Монтажник</label>
+            <div style={{ 
+              minWidth: isMobile ? '100%' : '150px',
+              flex: isMobile ? '1 1 100%' : '1 1 150px',
+              maxWidth: isMobile ? '100%' : '250px'
+            }}>
+              <label className="dark-label" style={{ marginBottom: isMobile ? '2px' : '4px' }}>Монтажник</label>
               <MultiSelectFilter
                 options={montajnikOptions}
                 selectedValues={selectedFilters.assigned_user_id}
@@ -213,8 +340,12 @@ export default function TechActiveTasksPage() {
             </div>
 
             {/* Тип работы */}
-            <div style={{ minWidth: '150px' }}>
-              <label className="dark-label">Тип работы</label>
+            <div style={{ 
+              minWidth: isMobile ? '100%' : '150px',
+              flex: isMobile ? '1 1 100%' : '1 1 150px',
+              maxWidth: isMobile ? '100%' : '250px'
+            }}>
+              <label className="dark-label" style={{ marginBottom: isMobile ? '2px' : '4px' }}>Тип работы</label>
               <MultiSelectFilter
                 options={workTypeOptions}
                 selectedValues={selectedFilters.work_type_id}
@@ -226,8 +357,12 @@ export default function TechActiveTasksPage() {
             </div>
 
             {/* Оборудование */}
-            <div style={{ minWidth: '150px' }}>
-              <label className="dark-label">Оборудование</label>
+            <div style={{ 
+              minWidth: isMobile ? '100%' : '150px',
+              flex: isMobile ? '1 1 100%' : '1 1 150px',
+              maxWidth: isMobile ? '100%' : '250px'
+            }}>
+              <label className="dark-label" style={{ marginBottom: isMobile ? '2px' : '4px' }}>Оборудование</label>
               <MultiSelectFilter
                 options={equipmentOptions}
                 selectedValues={selectedFilters.equipment_id}
@@ -240,7 +375,7 @@ export default function TechActiveTasksPage() {
           </div>
         )}
 
-        <div className="cards">
+        <div className="cards" style={{ minHeight: '200px', width: '100%' }}>
           {loading ? (
             <div className="empty">Загрузка...</div>
           ) : tasks.length ? (
