@@ -121,8 +121,8 @@ async def set_logist_performance_bad(
     }
 
 
-@router.get("/montajnik-statistics", summary="Статистика по монтажникам за период")
-async def admin_montajnik_statistics(
+@router.get("/statistics", summary="Статистика по монтажникам и логистам за период")
+async def admin_statistics(
     start_year: Optional[int] = Query(None, description="Год начала (например, 2025)"),
     start_month: Optional[int] = Query(None, description="Месяц начала (1-12)"),
     end_year: Optional[int] = Query(None, description="Год окончания (например, 2025)"),
@@ -139,7 +139,7 @@ async def admin_montajnik_statistics(
     if start_year is None or start_month is None or end_year is None or end_month is None:
         current_date = date.today()
         start_year = current_date.year
-        start_month = 1  # Январь
+        start_month = 1  
         end_year = current_date.year
         end_month = current_date.month
     
@@ -157,7 +157,7 @@ async def admin_montajnik_statistics(
     montajniks_result = await db.execute(montajniks_query)
     montajniks = montajniks_result.scalars().all()
     
-    statistics = []
+    montajnik_statistics = []
     
     for montajnik in montajniks:
         earnings_query = select(func.sum(Task.montajnik_reward)).where(
@@ -170,7 +170,7 @@ async def admin_montajnik_statistics(
         earnings_result = await db.execute(earnings_query)
         total_earned = earnings_result.scalar() or 0
         
-        
+        # Количество задач
         count_query = select(func.count(Task.id)).where(
             Task.assigned_user_id == montajnik.id,
             Task.status == TaskStatus.completed,
@@ -181,20 +181,75 @@ async def admin_montajnik_statistics(
         count_result = await db.execute(count_query)
         task_count = count_result.scalar() or 0
         
-        statistics.append({
+        montajnik_statistics.append({
             "montajnik_id": montajnik.id,
             "montajnik_name": f"{montajnik.name} {montajnik.lastname or ''}".strip(),
             "total_earned": str(total_earned),
             "task_count": task_count
         })
-        
-    statistics.sort(key=lambda x: (x["task_count"], float(x["total_earned"])), reverse=True)
+    
+    montajnik_statistics.sort(key=lambda x: (x["task_count"], float(x["total_earned"])), reverse=True)
 
+    logists_query = select(User).where(
+        User.company_id == current_user.company_id,
+        User.role == Role.logist
+    )
+    
+    logists_result = await db.execute(logists_query)
+    logists = logists_result.scalars().all()
+    
+    logist_statistics = []
+    
+    for logist in logists:
+        # Общее количество завершенных задач за период
+        total_tasks_query = select(func.count(Task.id)).where(
+            Task.created_by == logist.id,
+            Task.user_company_id == current_user.company_id,
+            Task.status == TaskStatus.completed,
+            Task.completed_at >= start_date,
+            Task.completed_at <= end_date
+        )
+        
+        total_tasks_result = await db.execute(total_tasks_query)
+        total_tasks = total_tasks_result.scalar() or 0
+        
+        good_tasks_query = select(func.count(Task.id)).where(
+            Task.created_by == logist.id,
+            Task.user_company_id == current_user.company_id,
+            Task.status == TaskStatus.completed,
+            Task.logist_performance == LogistPerformance.good,
+            Task.completed_at >= start_date,
+            Task.completed_at <= end_date
+        )
+        
+        good_tasks_result = await db.execute(good_tasks_query)
+        good_tasks = good_tasks_result.scalar() or 0
+        
+        
+        if total_tasks > 0:
+            efficiency = round((good_tasks * 100) / total_tasks, 1)
+        else:
+            efficiency = None
+        
+        logist_statistics.append({
+            "logist_id": logist.id,
+            "logist_name": f"{logist.name} {logist.lastname or ''}".strip(),
+            "total_tasks": total_tasks,
+            "good_tasks": good_tasks,
+            "efficiency": efficiency
+        })
+    
+    logist_statistics.sort(
+        key=lambda x: (x["efficiency"] is not None, x["efficiency"] if x["efficiency"] is not None else 0), 
+        reverse=True
+    )
+    
     return {
         "period": f"{start_year}-{start_month:02d} - {end_year}-{end_month:02d}",
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
-        "statistics": statistics
+        "montajnik_statistics": montajnik_statistics,
+        "logist_statistics": logist_statistics
     }
 
 

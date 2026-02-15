@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['tales-devon-drug-beaver.trycloudflare.com']
+    allowedHosts: ['marilyn-forever-microwave-improving.trycloudflare.com']
   },
 })
 

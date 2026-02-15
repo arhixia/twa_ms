@@ -507,16 +507,16 @@ export async function fetchAdminProfile() { // <- НОВОЕ: Экспортир
   return (await api.get(`/admin/me`)).data; // <- Используем новый эндпоинт
 }
 
-export async function getAdminMontajnikStatistics(startYear, startMonth, endYear, endMonth) {
-  const params = new URLSearchParams();
-  if (startYear && startMonth && endYear && endMonth) {
-    params.append("start_year", startYear);
-    params.append("start_month", startMonth);
-    params.append("end_year", endYear);
-    params.append("end_month", endMonth);
-  }
-  
-  return (await api.get(`/admin/montajnik-statistics?${params.toString()}`)).data;
+// Добавьте/замените этот метод
+export async function getAdminStatistics(startYear, startMonth, endYear, endMonth) {
+  const params = new URLSearchParams({
+    start_year: startYear,
+    start_month: startMonth,
+    end_year: endYear,
+    end_month: endMonth,
+  });
+  const response = await api.get(`/admin/statistics?${params}`);
+  return response.data;
 }
 
 // ---------- TECH_SUPP ----------
