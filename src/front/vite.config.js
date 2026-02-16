@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['marilyn-forever-microwave-improving.trycloudflare.com']
+    allowedHosts: ['likewise-gotten-sep-adaptor.trycloudflare.com']
   },
 })
 
