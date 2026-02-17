@@ -2638,7 +2638,7 @@ async def get_work_types(db: AsyncSession = Depends(get_db), current_user=Depend
     
 
 
-@router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin,Role.tech_supp,Role.montajnik))])
+@router.get("/companies", dependencies=[Depends(require_roles(Role.logist, Role.admin,Role.tech_supp,Role.montajnik,Role.manager))])
 async def get_companies(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     if not current_user.company_id:
         raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")

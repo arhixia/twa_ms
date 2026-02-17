@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['likewise-gotten-sep-adaptor.trycloudflare.com']
+    allowedHosts: ['notre-deals-assess-condo.trycloudflare.com']
   },
 })
 

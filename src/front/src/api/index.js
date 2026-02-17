@@ -790,3 +790,33 @@ export async function setCashPayment(taskId) {
 export async function managerProfile() {
   return (await api.get("/manager/profile")).data;
 }
+
+export async function managerFilterTasks({ manager_status, company_id, assigned_user_id, work_type_id, task_id, equipment_id, search } = {}) {
+  const params = new URLSearchParams();
+
+  if (manager_status && manager_status.length > 0) params.append("manager_status", manager_status.join(","));
+  if (company_id && company_id.length > 0) params.append("company_id", company_id.join(","));
+  if (assigned_user_id && assigned_user_id.length > 0) params.append("assigned_user_id", assigned_user_id.join(","));
+  if (work_type_id && work_type_id.length > 0) params.append("work_type_id", work_type_id.join(","));
+  if (task_id) params.append("task_id", task_id);
+  if (equipment_id && equipment_id.length > 0) params.append("equipment_id", equipment_id.join(","));
+  if (search) params.append("search", search);
+
+  return (await api.get(`/manager/tasks/filter?${params.toString()}`)).data;
+}
+
+export async function getManagerCompaniesList() {
+  return (await api.get("/manager/companies")).data;
+}
+
+export async function getManagerMontajniks() {
+  return (await api.get("/manager/montajniks")).data;
+}
+
+export async function getManagerWorkTypes() {
+  return (await api.get("/manager/work-types")).data;
+}
+
+export async function getManagerEquipmentList() {
+  return (await api.get("/manager/equipment")).data;
+}

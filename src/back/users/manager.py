@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import and_, or_, select, func
 from sqlalchemy.orm import selectinload
 import json
 
 from back.db.models import (
     Task, TaskHistory, TaskStatus, ManagerStatus, ContactPerson, ClientCompany,
-    TaskEquipment, Equipment, TaskWork, User, Role
+    TaskEquipment, Equipment, TaskWork, User, Role, WorkType
 )
 from back.db.database import get_db
 from back.auth.auth import get_current_user  
@@ -90,6 +91,176 @@ async def manager_tasks(
         "total_count": total_count
     }
 
+@router.get("/tasks/filter", summary="Фильтрация задач менеджера")
+async def manager_filter_tasks(
+    manager_status: Optional[str] = Query(None, description="Статусы менеджера через запятую"),
+    company_id: Optional[str] = Query(None, description="ID компаний через запятую"),
+    assigned_user_id: Optional[str] = Query(None, description="ID монтажников через запятую"),
+    work_type_id: Optional[str] = Query(None, description="ID типов работ через запятую"),
+    task_id: Optional[int] = Query(None, description="ID задачи"),
+    equipment_id: Optional[str] = Query(None, description="ID оборудования через запятую"),
+    search: Optional[str] = Query(None, description="Умный поиск по всем полям"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+    if current_user.role != Role.manager:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+
+    query = select(Task).where(
+        Task.manager_status.is_not(None),
+        Task.user_company_id == current_user.company_id
+    ).distinct()
+
+    if manager_status:
+        ms_list = [s.strip() for s in manager_status.split(",") if s.strip()]
+        if ms_list:
+            query = query.where(Task.manager_status.in_(ms_list))
+
+    if company_id:
+        company_ids = [int(i) for i in company_id.split(",") if i.strip().isdigit()]
+        if company_ids:
+            query = query.where(Task.company_id.in_(company_ids))
+
+    if assigned_user_id:
+        user_ids = [int(i) for i in assigned_user_id.split(",") if i.strip().isdigit()]
+        if user_ids:
+            query = query.where(Task.assigned_user_id.in_(user_ids))
+
+    if task_id is not None:
+        query = query.where(Task.id == task_id)
+
+    if work_type_id:
+        wt_ids = [int(i) for i in work_type_id.split(",") if i.strip().isdigit()]
+        if wt_ids:
+            query = query.join(Task.works).where(TaskWork.work_type_id.in_(wt_ids))
+
+    if equipment_id:
+        eq_ids = [int(i) for i in equipment_id.split(",") if i.strip().isdigit()]
+        if eq_ids:
+            query = query.where(Task.equipment_links.any(TaskEquipment.equipment_id.in_(eq_ids)))
+
+    if search:
+        search_term = f"%{search}%"
+        conditions = [
+            Task.location.ilike(search_term),
+            Task.comment.ilike(search_term),
+            Task.vehicle_info.ilike(search_term),
+            Task.gos_number.ilike(search_term),
+            select(ClientCompany).where(
+                and_(ClientCompany.id == Task.company_id, ClientCompany.name.ilike(search_term))
+            ).exists(),
+            select(ContactPerson).where(
+                and_(ContactPerson.id == Task.contact_person_id, ContactPerson.name.ilike(search_term))
+            ).exists(),
+            select(TaskWork).join(TaskWork.work_type).where(
+                and_(TaskWork.task_id == Task.id, WorkType.name.ilike(search_term))
+            ).exists(),
+            select(TaskEquipment).join(TaskEquipment.equipment).where(
+                and_(TaskEquipment.task_id == Task.id, Equipment.name.ilike(search_term))
+            ).exists(),
+            select(User).where(
+                and_(User.id == Task.assigned_user_id, User.name.ilike(search_term))
+            ).exists(),
+        ]
+        if search.isdigit():
+            conditions.append(Task.id == int(search))
+        query = query.where(or_(*conditions))
+
+    query = query.order_by(Task.manager_status).options(
+        selectinload(Task.contact_person).selectinload(ContactPerson.company),
+        selectinload(Task.equipment_links).selectinload(TaskEquipment.equipment),
+    )
+
+    res = await db.execute(query)
+    tasks = res.scalars().unique().all()
+
+    out = []
+    for t in tasks:
+        company_name = t.contact_person.company.name if t.contact_person and t.contact_person.company else None
+        contact_person_name = t.contact_person.name if t.contact_person else None
+        client_name = company_name or contact_person_name or "—"
+        equipment = [
+            {
+                "equipment_id": te.equipment_id,
+                "quantity": te.quantity,
+                "serial_number": te.serial_number,
+                "equipment": {"id": te.equipment.id, "name": te.equipment.name} if te.equipment else None
+            }
+            for te in (t.equipment_links or [])
+        ]
+        out.append({
+            "id": t.id,
+            "client_name": client_name,
+            "vehicle_info": t.vehicle_info,
+            "gos_number": t.gos_number,
+            "location": t.location,
+            "scheduled_at": t.scheduled_at.isoformat() if t.scheduled_at else None,
+            "status": t.status.value if t.status else None,
+            "manager_status": t.manager_status.value if t.manager_status else None,
+            "client_price": str(t.client_price) if t.client_price is not None else None,
+            "montajnik_reward": str(t.montajnik_reward) if t.montajnik_reward is not None else None,
+            "equipment": equipment,
+        })
+
+    return {"tasks": out, "total_count": len(out)}
+
+
+@router.get("/companies")
+async def manager_get_companies(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user.role != Role.manager:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    res = await db.execute(
+        select(ClientCompany).where(ClientCompany.user_company_id == current_user.company_id)
+    )
+    companies = res.scalars().all()
+    return [{"id": c.id, "name": c.name} for c in companies]
+
+
+@router.get("/montajniks")
+async def manager_get_montajniks(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user.role != Role.manager:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    res = await db.execute(
+        select(User).where(
+            User.role == Role.montajnik,
+            User.company_id == current_user.company_id,
+            User.is_active == True
+        )
+    )
+    montajniks = res.scalars().all()
+    return [{"id": m.id, "name": m.name} for m in montajniks]
+
+
+@router.get("/work-types")
+async def manager_get_work_types(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user.role != Role.manager:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    result = await db.execute(
+        select(WorkType).where(WorkType.user_company_id == current_user.company_id)
+    )
+    work_types = result.scalars().all()
+    return [{"id": wt.id, "name": wt.name} for wt in work_types]
+
+
+@router.get("/equipment")
+async def manager_get_equipment(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    if current_user.role != Role.manager:
+        raise HTTPException(status_code=403, detail="Доступ запрещён")
+    if not current_user.company_id:
+        raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
+    result = await db.execute(
+        select(Equipment).where(Equipment.user_company_id == current_user.company_id)
+    )
+    equipment_list = result.scalars().all()
+    return [{"id": eq.id, "name": eq.name} for eq in equipment_list]
 
 
 @router.get("/tasks/{task_id}")
