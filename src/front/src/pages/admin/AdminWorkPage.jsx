@@ -498,7 +498,35 @@ export default function AdminWorkPage() {
       flexShrink: 0             
     }}
   >
-    {parseFloat(wt.client_price).toFixed(2)} ₽ / {parseFloat(wt.mont_price).toFixed(2)} ₽
+    <span style={{
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '2px 10px',
+  borderRadius: '20px',
+  border: '2px solid #f5c518',
+  color: '#e6cb69',
+  fontWeight: '600',
+  fontSize: '0.85em',
+  marginRight: '6px',
+  whiteSpace: 'nowrap'
+}}>
+  {parseFloat(wt.mont_price).toFixed(2)} ₽
+</span>
+<span style={{
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '2px 10px',
+  borderRadius: '20px',
+  border: '2px solid #3b82f6',
+  color: '#3b82f6',
+  fontWeight: '600',
+  fontSize: '0.85em',
+  whiteSpace: 'nowrap'
+}}>
+  {parseFloat(wt.client_price).toFixed(2)} ₽
+</span>
   </span>
 </div>
 ))}

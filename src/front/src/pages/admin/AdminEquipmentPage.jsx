@@ -451,7 +451,20 @@ export default function AdminEquipmentPage() {
         flexShrink: 0
       }}
     >
-      {parseFloat(eq.price).toFixed(2)} ₽
+      <span style={{
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '2px 10px',
+  borderRadius: '20px',
+  border: '2px solid #3b82f6',
+  color: '#3b82f6',
+  fontWeight: '600',
+  fontSize: '0.85em',
+  whiteSpace: 'nowrap'
+}}>
+  {parseFloat(eq.price).toFixed(2)} ₽
+</span>
     </span>
   </div>
 ))}

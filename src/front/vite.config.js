@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['notre-deals-assess-condo.trycloudflare.com']
+    allowedHosts: ['todd-discovered-conclusions-powered.trycloudflare.com']
   },
 })
 
