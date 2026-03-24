@@ -107,6 +107,7 @@ class Task(AsyncAttrs, Base):
     assigned_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
     logist_contact_id = Column(BigInteger, nullable=True)
     client_price = Column(Numeric(10,2), nullable=True)
+    logist_reward = Column(Numeric(10, 2), nullable=True)
     montajnik_reward = Column(Numeric(10,2), nullable=True)
     user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="SET NULL"), index=True, nullable=True)
     district_id = Column(Integer, ForeignKey("districts.id", ondelete="SET NULL"), index=True, nullable=True)
@@ -149,6 +150,7 @@ class WorkType(AsyncAttrs, Base):
     client_price = Column(Numeric(10, 2), nullable=False)
     category = Column(String,nullable=True)
     mont_price = Column(Numeric(10,2),nullable=False)
+    logist_price = Column(Numeric(10, 2), nullable=True)
     is_active = Column(Boolean, default=True)                  # Активен ли тип работы
     tech_supp_require = Column(Boolean,default=False)
     user_company_id = Column(Integer, ForeignKey("user_companies.id", ondelete="CASCADE"), index=True, nullable=True) 

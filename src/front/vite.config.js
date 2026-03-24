@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['todd-discovered-conclusions-powered.trycloudflare.com']
+    allowedHosts: ['authentication-princess-clocks-sandra.trycloudflare.com']
   },
 })
 

@@ -145,6 +145,16 @@ export async function fetchLogistProfile() {
   return (await api.get("/logist/me")).data;
 }
 
+export async function getLogistEarningsByPeriod(startYear, startMonth, endYear, endMonth) {
+  const params = new URLSearchParams();
+  if (startYear && startMonth && endYear && endMonth) {
+    params.append("start_year", startYear);
+    params.append("start_month", startMonth);
+    params.append("end_year", endYear);
+    params.append("end_month", endMonth);
+  }
+  return (await api.get(`/logist/earnings-by-period?${params.toString()}`)).data;
+}
 
 export async function logistCompletedTaskDetail(taskId) {
   return (await api.get(`/logist/completed-tasks/${taskId}`)).data;

@@ -212,6 +212,7 @@ class UpdateWorkTypeRequest(BaseModel):
     name: Optional[str] = None
     client_price: Optional[float] = None
     mont_price: Optional[float] = None
+    logist_price: Optional[float] = None
     category: Optional[str] = None
     tech_supp_require: Optional[bool] = None
 

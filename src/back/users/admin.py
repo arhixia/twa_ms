@@ -225,6 +225,16 @@ async def admin_statistics(
         good_tasks_result = await db.execute(good_tasks_query)
         good_tasks = good_tasks_result.scalar() or 0
         
+        earnings_query = select(func.sum(Task.logist_reward)).where(
+            Task.created_by == logist.id,
+            Task.user_company_id == current_user.company_id,
+            Task.status == TaskStatus.completed,
+            Task.completed_at >= start_date,
+            Task.completed_at <= end_date
+        )
+
+        earnings_result = await db.execute(earnings_query)
+        logist_total_earned = earnings_result.scalar() or 0
         
         if total_tasks > 0:
             efficiency = round((good_tasks * 100) / total_tasks, 1)
@@ -235,6 +245,7 @@ async def admin_statistics(
             "logist_id": logist.id,
             "logist_name": f"{logist.name} {logist.lastname or ''}".strip(),
             "total_tasks": total_tasks,
+            "total_earned": str(logist_total_earned),
             "good_tasks": good_tasks,
             "efficiency": efficiency
         })
@@ -560,13 +571,10 @@ async def admin_update_task(
 
     if task.is_draft:
         raise HTTPException(status_code=400, detail="Нельзя редактировать черновик через этот эндпоинт — используйте /drafts")
-
-    # --- ПРОВЕРКА ОБЯЗАТЕЛЬНЫХ ПОЛЕЙ ПОСЛЕ ОБНОВЛЕНИЯ (основная логика будет ниже) ---
-    # Сначала загружаем оригинальные данные из patch
+    
     original_patch_data = patch.model_dump()
 
-    # Подготовим словарь current_values, который будет хранить итоговые значения после всех изменений
-    # Инициализируем текущими значениями из задачи
+    
     current_values = {
         "contact_person_id": task.contact_person_id,
         "vehicle_info": task.vehicle_info,
@@ -634,8 +642,7 @@ async def admin_update_task(
         raise HTTPException(status_code=400, detail=f"Заполните все поля: {', '.join(missing_fields)}")
 
 
-    # --- Продолжаем основную логику обновления ---
-    # --- СОХРАНЯЕМ СТАРЫЕ ЗНАЧЕНИЯ ---
+    
     old_works_with_qty = [(tw.work_type.name, tw.quantity) for tw in task.works]
     old_equipment_with_sn_qty = [
         (te.equipment.name, te.serial_number, te.quantity) for te in task.equipment_links
@@ -645,6 +652,7 @@ async def admin_update_task(
     old_contact_person_phone = task.contact_person.phone if task.contact_person else None
     old_client_price = task.client_price
     old_montajnik_reward = task.montajnik_reward
+    old_logist_reward = task.logist_reward
     old_assigned_user_id = task.assigned_user_id
     old_assignment_type = task.assignment_type
     old_district_id = task.district_id
@@ -653,7 +661,7 @@ async def admin_update_task(
 
     incoming = original_patch_data  # Используем оригинальный словарь
 
-    # --- normalize assigned_user_id ---
+ 
     if "assigned_user_id" in incoming:
         incoming["assigned_user_id"] = _normalize_assigned_user_id(incoming["assigned_user_id"])
 
@@ -669,7 +677,6 @@ async def admin_update_task(
             incoming_with_nulls[k] = v
             
     changed = [] # <--- Список изменений
-    # --- Обработка assigned_user_id (может быть null) ---
     assigned_user_id_changed = False
     assignment_type_changed = False
     if "assigned_user_id" in incoming_with_nulls:
@@ -890,6 +897,7 @@ async def admin_update_task(
 
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
+    calculated_logist_reward = Decimal('0')
 
     equipment_res = await db.execute(
         select(TaskEquipment)
@@ -910,15 +918,19 @@ async def admin_update_task(
     for tw in task_work_list:
         work_client_unit_price = tw.work_type.client_price or Decimal('0') 
         work_mont_unit_price = tw.work_type.mont_price or Decimal('0') 
+        work_logist_price = tw.work_type.logist_price or Decimal('0')
         calculated_client_price += work_client_unit_price * tw.quantity
         calculated_montajnik_reward += work_mont_unit_price * tw.quantity
+        calculated_logist_reward += work_logist_price * tw.quantity
 
     prices_changed = False
     if task.client_price != calculated_client_price or task.montajnik_reward != calculated_montajnik_reward:
         old_client_price = task.client_price
         old_montajnik_reward = task.montajnik_reward
+        old_logist_reward = task.logist_reward
         task.client_price = calculated_client_price
         task.montajnik_reward = calculated_montajnik_reward
+        task.logist_reward = calculated_logist_reward
         prices_changed = True
         logger.info(f"Цены пересчитаны: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
 
@@ -1628,11 +1640,11 @@ async def admin_get_work_types_list(
         .order_by(WorkType.name)
     )
     work_types_list = res.scalars().all()
-    return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price), "mont_price": str(wt.mont_price),"tech_supp_require": wt.tech_supp_require, "category": wt.category} for wt in work_types_list]
+    return [{"id": wt.id, "name": wt.name, "client_price": str(wt.client_price), "mont_price": str(wt.mont_price), "logist_price": str(wt.logist_price) if wt.logist_price is not None else None,"tech_supp_require": wt.tech_supp_require, "category": wt.category} for wt in work_types_list]
 
 @router.post("/work-types", dependencies=[Depends(require_roles(Role.admin,Role.logist))])
 async def admin_add_work_type_no_schema(
-    payload: dict = Body(...),  # вместо схемы
+    payload: dict = Body(...),  
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -1648,6 +1660,7 @@ async def admin_add_work_type_no_schema(
     mont_price = payload.get("mont_price")
     tech_supp_require = payload.get("tech_supp_require", False) 
     category = payload.get("category", None) 
+    logist_price = payload.get("logist_price", None)
 
     if not name or client_price is None or mont_price is None:
         raise HTTPException(status_code=400, detail="Не все поля переданы (name, client_price, mont_price обязательны)")
@@ -1661,6 +1674,7 @@ async def admin_add_work_type_no_schema(
     try:
         client_price_decimal = Decimal(client_price)
         mont_price_decimal = Decimal(mont_price)
+        logist_price_decimal = Decimal(logist_price) if logist_price is not None else None
     except Exception:
         raise HTTPException(status_code=400, detail="Цены должны быть числами")
 
@@ -1668,6 +1682,7 @@ async def admin_add_work_type_no_schema(
         name=name,
         client_price=client_price_decimal,
         mont_price=mont_price_decimal,
+        logist_price=logist_price_decimal,
         tech_supp_require=tech_supp_require,
         category=category, 
         user_company_id=current_user.company_id  
@@ -1683,6 +1698,7 @@ async def admin_add_work_type_no_schema(
         "name": work_type.name,
         "client_price": str(work_type.client_price),
         "mont_price": str(work_type.mont_price),
+        "logist_price": str(work_type.logist_price) if work_type.logist_price is not None else None,
         "tech_supp_require": work_type.tech_supp_require,
         "category": work_type.category 
     }
@@ -1742,6 +1758,8 @@ async def admin_update_work_type(
         work_type.category = payload.category
     if payload.tech_supp_require is not None:
         work_type.tech_supp_require = payload.tech_supp_require
+    if payload.logist_price is not None:
+        work_type.logist_price = Decimal(str(payload.logist_price))
 
     await db.commit()
     await db.refresh(work_type)
@@ -1751,6 +1769,7 @@ async def admin_update_work_type(
         "name": work_type.name,
         "client_price": str(work_type.client_price),
         "mont_price": str(work_type.mont_price),
+        "logist_price": str(work_type.logist_price) if work_type.logist_price is not None else None,
         "category": work_type.category,
         "tech_supp_require": work_type.tech_supp_require,
         "is_active": work_type.is_active

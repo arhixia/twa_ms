@@ -35,7 +35,8 @@ from sqlalchemy.orm import selectinload
 import json
 import logging
 from decimal import Decimal
-
+from datetime import date 
+import calendar
 from back.utils.selectel import get_s3_client
 from back.files.handlers import validate_and_process_attachment
 
@@ -309,6 +310,7 @@ async def create_draft(
 
     calculated_works_cost_for_client = Decimal('0')
     calculated_works_cost_for_mont = Decimal('0')
+    calculated_logist_reward = Decimal('0')
     if work_types_ids_unique:
         wt_res = await db.execute(
             select(WorkType).where(
@@ -326,6 +328,7 @@ async def create_draft(
             count = work_type_counts[wt.id]
             calculated_works_cost_for_client += (wt.client_price or Decimal('0')) * count
             calculated_works_cost_for_mont += (wt.mont_price or Decimal('0')) * count
+            calculated_logist_reward += (wt.logist_price or Decimal('0')) * count 
 
     equipment_quantities = {}
     for eq_item in equipment_data_raw:
@@ -352,6 +355,7 @@ async def create_draft(
 
     final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
     final_montajnik_reward = calculated_works_cost_for_mont
+    final_logist_reward = calculated_logist_reward
 
    
     task = Task(
@@ -368,6 +372,7 @@ async def create_draft(
         logist_contact_id=getattr(current_user, "telegram_id", None),
         client_price=final_client_price,
         montajnik_reward=final_montajnik_reward,
+        logist_reward = final_logist_reward,
         is_draft=True,
         photo_required=data.get("photo_required", False),
         created_by=int(current_user.id),
@@ -634,6 +639,7 @@ async def patch_draft(
     # --- ПЕРЕСЧЁТ ЦЕН ---
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
+    calculated_logist_reward = Decimal('0')
 
     # Equipment
     eq_res = await db.execute(
@@ -653,9 +659,11 @@ async def patch_draft(
     for tw in wt_res.scalars():
         calculated_client_price += (tw.work_type.client_price or Decimal('0')) * tw.quantity
         calculated_montajnik_reward += (tw.work_type.mont_price or Decimal('0')) * tw.quantity
+        calculated_logist_reward += (tw.work_type.logist_price or Decimal('0')) * tw.quantity
 
     task.client_price = calculated_client_price
     task.montajnik_reward = calculated_montajnik_reward
+    task.logist_reward = calculated_logist_reward
 
     try:
         await db.commit()
@@ -829,6 +837,7 @@ async def publish_task(
 
         calculated_works_cost_for_client = Decimal('0')
         calculated_works_cost_for_mont = Decimal('0')
+        calculated_logist_reward = Decimal('0')
         if work_types_ids_unique:
             wt_res = await db.execute(
                 select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True, WorkType.user_company_id == current_user.company_id)
@@ -842,6 +851,7 @@ async def publish_task(
                 count = work_type_counts[wt.id]
                 calculated_works_cost_for_client += (wt.client_price or Decimal('0')) * count
                 calculated_works_cost_for_mont += (wt.mont_price or Decimal('0')) * count
+                calculated_logist_reward += (wt.logist_price or Decimal('0')) * count
 
         # --- Пересчёт Equipment ---
         equipment_quantities = {}
@@ -866,6 +876,7 @@ async def publish_task(
 
         task.client_price = calculated_works_cost_for_client + calculated_equipment_cost
         task.montajnik_reward = calculated_works_cost_for_mont
+        task.logist_reward = calculated_logist_reward
 
         task.is_draft = False
 
@@ -937,6 +948,8 @@ async def publish_task(
 
         calculated_works_cost_for_client = Decimal('0')
         calculated_works_cost_for_mont = Decimal('0')
+        calculated_logist_reward = Decimal('0')
+
         if work_types_ids_unique:
             wt_res = await db.execute(
                 select(WorkType).where(WorkType.id.in_(work_types_ids_unique), WorkType.is_active == True, WorkType.user_company_id == current_user.company_id)
@@ -950,6 +963,7 @@ async def publish_task(
                 count = work_type_counts[wt.id]
                 calculated_works_cost_for_client += (wt.client_price or Decimal('0')) * count
                 calculated_works_cost_for_mont += (wt.mont_price or Decimal('0')) * count
+                calculated_logist_reward += (wt.logist_price or Decimal('0')) * count
 
         equipment_quantities = {}
         for eq_item in equipment_data_raw:
@@ -974,6 +988,7 @@ async def publish_task(
 
         final_client_price = calculated_works_cost_for_client + calculated_equipment_cost
         final_montajnik_reward = calculated_works_cost_for_mont
+        final_logist_reward = calculated_logist_reward
 
         if district_id is not None:
             district_check = await db.execute(
@@ -999,6 +1014,7 @@ async def publish_task(
             logist_contact_id=getattr(current_user, "telegram_id", None),
             client_price=final_client_price,
             montajnik_reward=final_montajnik_reward,
+            logist_reward = final_logist_reward,
             is_draft=False,
             photo_required=data.get("photo_required", False),
             created_by=int(current_user.id),
@@ -1215,8 +1231,6 @@ async def edit_task(
         raise HTTPException(status_code=400, detail=f"Заполните все поля: {', '.join(missing_fields)}")
 
 
-    # --- Продолжаем основную логику обновления ---
-    # incoming - это только поля, которые были переданы в payload (включая None)
     incoming = original_patch_data  # Теперь используем оригинальный словарь
 
     # --- normalize assigned_user_id ---
@@ -1460,6 +1474,7 @@ async def edit_task(
     old_contact_person_phone = task.contact_person.phone if task.contact_person else None
     old_client_price = task.client_price
     old_montajnik_reward = task.montajnik_reward
+    old_logist_reward = task.logist_reward
     old_assigned_user_id = task.assigned_user_id
     old_assignment_type = task.assignment_type
     old_district_id = task.district_id
@@ -1467,10 +1482,10 @@ async def edit_task(
     logger.info(f"Старые связи для задачи {task_id}: equipment={old_equipment_with_sn_qty}, work_types={old_works_with_qty}, contact_person={old_contact_person_name}, contact_person_phone={old_contact_person_phone}, company={old_company_name}")
 
 
-    # --- Продолжаем остальную логику ---
-    # --- Пересчёт цен ---
+   
     calculated_client_price = Decimal('0')
     calculated_montajnik_reward = Decimal('0')
+    calculated_logist_reward = Decimal('0')
 
     equipment_res = await db.execute(
         select(TaskEquipment)
@@ -1491,22 +1506,26 @@ async def edit_task(
     for tw in task_work_list:
         work_client_unit_price = tw.work_type.client_price or Decimal('0') 
         work_mont_unit_price = tw.work_type.mont_price or Decimal('0') 
+        work_logist_price = tw.work_type.logist_price or Decimal('0')
         calculated_client_price += work_client_unit_price * tw.quantity
         calculated_montajnik_reward += work_mont_unit_price * tw.quantity
+        calculated_logist_reward += work_logist_price * tw.quantity
+        
 
 
     prices_changed = False
     if task.client_price != calculated_client_price or task.montajnik_reward != calculated_montajnik_reward:
         old_client_price = task.client_price
         old_montajnik_reward = task.montajnik_reward
+        old_logist_reward = task.logist_reward
         task.client_price = calculated_client_price
         task.montajnik_reward = calculated_montajnik_reward
+        task.logist_reward = calculated_logist_reward
         prices_changed = True
         logger.info(f"Цены пересчитаны: client_price={calculated_client_price}, montajnik_reward={calculated_montajnik_reward}")
 
     logger.info(f"Список 'changed' после обновления полей и связей: {changed}")
 
-    # --- ПРОВЕРКА: Были ли изменения? ---
     has_changes = bool(changed)
 
     if not has_changes and not prices_changed:
@@ -3304,3 +3323,56 @@ async def get_simple_districts(
     districts = result.all() #
 
     return [{"id": d.id, "name": d.name} for d in districts] 
+
+
+
+@router.get("/earnings-by-period", summary="Заработок логиста за период")
+async def logist_earnings_by_period(
+    start_year: Optional[int] = Query(None),
+    start_month: Optional[int] = Query(None),
+    end_year: Optional[int] = Query(None),
+    end_month: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user)
+):
+
+    if start_year is None or start_month is None or end_year is None or end_month is None:
+        current_date = date.today()
+        start_year = current_date.year
+        start_month = current_date.month
+        end_year = current_date.year
+        end_month = current_date.month
+
+    start_date = date(start_year, start_month, 1)
+    end_date = date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
+
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="Начальная дата не может быть позже конечной")
+
+    query = select(func.sum(Task.logist_reward)).where(
+        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id,
+        Task.status == TaskStatus.completed,
+        Task.completed_at >= start_date,
+        Task.completed_at <= end_date
+    )
+    result = await db.execute(query)
+    total_earned = result.scalar() or 0
+
+    count_query = select(func.count(Task.id)).where(
+        Task.created_by == current_user.id,
+        Task.user_company_id == current_user.company_id,
+        Task.status == TaskStatus.completed,
+        Task.completed_at >= start_date,
+        Task.completed_at <= end_date
+    )
+    count_result = await db.execute(count_query)
+    task_count = count_result.scalar() or 0
+
+    return {
+        "period": f"{start_year}-{start_month:02d} - {end_year}-{end_month:02d}",
+        "total_earned": str(total_earned),
+        "task_count": task_count,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat()
+    }

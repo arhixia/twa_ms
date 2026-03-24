@@ -490,6 +490,19 @@ export default function AdminProfilePage() {
                         }}>
                           Логист
                         </th>
+
+                        <th style={{
+                          padding: '12px 16px',
+                          textAlign: 'right',
+                          color: '#fff',
+                          fontWeight: '700',
+                          fontSize: isMobile ? '0.9em' : '1.05em',
+                          borderBottom: '2px solid #555',
+                          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          Заработано
+                        </th>
                         <th style={{
                           padding: '12px 16px',
                           textAlign: 'right',
@@ -545,6 +558,19 @@ export default function AdminProfilePage() {
                           }}>
                             {stat.logist_name}
                           </td>
+
+                          <td style={{
+                              padding: '12px 16px',
+                              textAlign: 'right',
+                              color: '#4CAF50',
+                              fontWeight: '700',
+                              borderBottom: '1px solid #333',
+                              fontSize: isMobile ? '0.9em' : '1.05em',
+                              fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {stat.total_earned} ₽
+                            </td>
                           <td style={{
                             padding: '12px 16px',
                             textAlign: 'right',

@@ -115,7 +115,9 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
   const [clientPrice, setClientPrice] = useState(parseFloat(workType.client_price));
   const [montPrice, setMontPrice] = useState(parseFloat(workType.mont_price));
   const [techSuppRequire, setTechSuppRequire] = useState(workType.tech_supp_require);
+  const [logistPrice, setLogistPrice] = useState(workType.logist_price ? parseFloat(workType.logist_price) : "");
   const [saving, setSaving] = useState(false);
+
 
   const handleSubmit = async () => {
     if (!name.trim() || !category.trim() || clientPrice === null || montPrice === null) {
@@ -141,6 +143,7 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
         name,
         category,
         client_price: clientPrice,
+        logist_price: logistPrice || null,
         mont_price: montPrice,
         tech_supp_require: techSuppRequire
       });
@@ -230,6 +233,23 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
               />
             </div>
           </div>
+
+          <div className="task-field">
+            <div className="task-field-label">
+              <PriceIcon />
+              Цена логиста:
+            </div>
+            <div className="task-field-value">
+              <input
+                type="number"
+                value={logistPrice}
+                onChange={(e) => setLogistPrice(parseFloat(e.target.value) || 0)}
+                placeholder="Введите цену логиста"
+                className="dark-select"
+              />
+            </div>
+          </div>
+
           
           <div className="task-field">
             <div className="task-field-label">
@@ -275,6 +295,7 @@ export default function AdminWorkPage() {
   const [newWorkTypeCategory, setNewWorkTypeCategory] = useState("");
   const [workTypeSearchTerm, setWorkTypeSearchTerm] = useState("");
   const [workTypeCategories, setWorkTypeCategories] = useState([]);
+  const [newWorkTypeLogistPrice, setNewWorkTypeLogistPrice] = useState("");
 
   // Состояния для отслеживания раскрытых/скрытых категорий
   const [expandedCategories, setExpandedCategories] = useState(new Set());
@@ -364,6 +385,7 @@ export default function AdminWorkPage() {
       name: newWorkTypeName.trim(),
       client_price: clientPriceNum,
       mont_price: montPriceNum,
+      logist_price: parseFloat(newWorkTypeLogistPrice) || null,
       tech_supp_require: newWorkTypeTechSupp,
       category: newWorkTypeCategory.trim() || null
     });
@@ -375,6 +397,7 @@ export default function AdminWorkPage() {
     setNewWorkTypeName("");
     setNewWorkTypeClientPrice("");
     setNewWorkTypeMontPrice("");
+    setNewWorkTypeLogistPrice("");
     setNewWorkTypeTechSupp(false);
     setNewWorkTypeCategory("");
     setShowAddWorkTypeModal(false);
@@ -498,6 +521,23 @@ export default function AdminWorkPage() {
       flexShrink: 0             
     }}
   >
+    {wt.logist_price && (
+  <span style={{
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '2px 10px',
+    borderRadius: '20px',
+    border: '2px solid #22c55e',
+    color: '#22c55e',
+    fontWeight: '600',
+    fontSize: '0.85em',
+    whiteSpace: 'nowrap',
+    marginRight: '6px'
+  }}>
+    {parseFloat(wt.logist_price).toFixed(2)} ₽
+  </span>
+)}
     <span style={{
   display: 'inline-flex',
   alignItems: 'center',
@@ -615,6 +655,22 @@ export default function AdminWorkPage() {
                     />
                   </div>
                 </div>
+
+                <div className="task-field">
+              <div className="task-field-label">
+                <PriceIcon />
+                Цена логиста:
+              </div>
+              <div className="task-field-value">
+                <input
+                  type="number"
+                  value={newWorkTypeLogistPrice}
+                  onChange={(e) => setNewWorkTypeLogistPrice(e.target.value)}
+                  placeholder="Введите цену логиста"
+                  className="dark-select"
+                />
+              </div>
+            </div>
                 
                 <div className="task-field">
                   <div className="task-field-label">

@@ -7,6 +7,7 @@ import {
   getWorkTypes,
   getEquipmentList,
   logistFilterCompletedTasks,
+  getLogistEarningsByPeriod,
 } from "../../api";
 import MultiSelectFilter from "../../components/MultiSelectFilter";
 import "../../styles/LogistPage.css";
@@ -91,6 +92,12 @@ export default function LogistProfilePage() {
 
   const [searchInput, setSearchInput] = useState(() => loadFiltersFromStorage().search);
   const debouncedSearch = useDebounce(searchInput, 500);
+  const [selectedStartYear, setSelectedStartYear] = useState(new Date().getFullYear());
+  const [selectedStartMonth, setSelectedStartMonth] = useState(new Date().getMonth() + 1);
+  const [selectedEndYear, setSelectedEndYear] = useState(new Date().getFullYear());
+  const [selectedEndMonth, setSelectedEndMonth] = useState(new Date().getMonth() + 1);
+  const [periodEarnings, setPeriodEarnings] = useState(null);
+  const [earningsLoading, setEarningsLoading] = useState(false);
   const isMobile = useIsMobile();
 
   // Сохраняем фильтры при каждом изменении
@@ -123,6 +130,26 @@ export default function LogistProfilePage() {
   useEffect(() => {
     loadHistoryTasks(selectedFilters);
   }, [selectedFilters]);
+
+  useEffect(() => {
+  loadPeriodEarnings();
+}, [selectedStartYear, selectedStartMonth, selectedEndYear, selectedEndMonth]);
+
+
+async function loadPeriodEarnings() {
+  setEarningsLoading(true);
+  try {
+    const data = await getLogistEarningsByPeriod(
+      selectedStartYear, selectedStartMonth, selectedEndYear, selectedEndMonth
+    );
+    setPeriodEarnings(data);
+  } catch (err) {
+    console.error("Ошибка загрузки заработка:", err);
+    setPeriodEarnings(null);
+  } finally {
+    setEarningsLoading(false);
+  }
+}
 
   async function loadProfile() {
     setLoading(true);
@@ -199,6 +226,16 @@ export default function LogistProfilePage() {
   const montajnikOptions = montajniks.map(m => ({ value: m.id, label: `${m.name} ${m.lastname}` }));
   const workTypeOptions = workTypes.map(w => ({ value: w.id, label: w.name }));
   const equipmentOptions = equipments.map(eq => ({ value: eq.id, label: eq.name }));
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+  const months = [
+    { value: 1, name: 'Январь' }, { value: 2, name: 'Февраль' },
+    { value: 3, name: 'Март' }, { value: 4, name: 'Апрель' },
+    { value: 5, name: 'Май' }, { value: 6, name: 'Июнь' },
+    { value: 7, name: 'Июль' }, { value: 8, name: 'Август' },
+    { value: 9, name: 'Сентябрь' }, { value: 10, name: 'Октябрь' },
+    { value: 11, name: 'Ноябрь' }, { value: 12, name: 'Декабрь' },
+  ];
 
   // Проверяем, есть ли активные фильтры
   const hasActiveFilters = 
@@ -251,6 +288,50 @@ export default function LogistProfilePage() {
               </span>
             </p>
           </div>
+
+          <div className="profile-card">
+  <div className="profile-card-header">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="8" y1="3" x2="8" y2="21" />
+      <path d="M8 3h6a4 4 0 0 1 0 8H8" />
+      <line x1="6" y1="14" x2="14" y2="14" />
+      <line x1="6" y1="18" x2="14" y2="18" />
+    </svg>
+    <h2>Заработок за период</h2>
+  </div>
+  <div className="period-controls">
+    <div className="period-select">
+      <label className="dark-label fixed-label">С</label>
+      <select className="dark-select" value={selectedStartYear} onChange={e => setSelectedStartYear(Number(e.target.value))}>
+        {years.map(year => <option key={year} value={year}>{year}</option>)}
+      </select>
+      <select className="dark-select" value={selectedStartMonth} onChange={e => setSelectedStartMonth(Number(e.target.value))}>
+        {months.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+      </select>
+    </div>
+    <div className="period-select">
+      <label className="dark-label fixed-label">По</label>
+      <select className="dark-select" value={selectedEndYear} onChange={e => setSelectedEndYear(Number(e.target.value))}>
+        {years.map(year => <option key={year} value={year}>{year}</option>)}
+      </select>
+      <select className="dark-select" value={selectedEndMonth} onChange={e => setSelectedEndMonth(Number(e.target.value))}>
+        {months.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+      </select>
+    </div>
+  </div>
+  {earningsLoading ? (
+    <p>Загрузка...</p>
+  ) : periodEarnings ? (
+    <div className="period-earnings">
+      <p className="period-amount">{periodEarnings.total_earned} ₽</p>
+      <p>Количество задач: {periodEarnings.task_count}</p>
+    </div>
+  ) : (
+    <p>Нет данных</p>
+  )}
+</div>
+
         </div>
 
         <div className="section">
