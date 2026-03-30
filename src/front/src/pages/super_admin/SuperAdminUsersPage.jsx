@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { superAdminListAllUsers, superAdminCreateUser, superAdminUpdateUser, superAdminListAllCompanies } from '../../api';
 import UserCard from '../../components/UserCard';
+import { showAlert,showConfirm } from "../../utils/notify";
 
 // Иконки
 const UserIcon = () => (
@@ -148,11 +149,7 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
       setCompanies(data);
     } catch (err) {
       console.error("Ошибка загрузки компаний:", err);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Ошибка загрузки компаний");
-      } else {
-        alert("Ошибка загрузки компаний");
-      }
+      showAlert("Ошибка загрузки компаний");
     } finally {
       setLoadingCompanies(false);
     }
@@ -169,11 +166,7 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.login.trim() || !formData.password.trim() || !formData.name.trim() || !formData.lastname.trim() || !formData.company_id) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните все обязательные поля");
-      } else {
-        alert("Заполните все обязательные поля");
-      }
+      showAlert("Заполните все обязательные поля");
       return;
     }
     
@@ -184,19 +177,11 @@ function CreateUserModal({ isOpen, onClose, onCreate, roleDisplayNames }) {
       onCreate(newUser);
       setFormData({ login: '', password: '', name: '', lastname: '', role: 'montajnik', company_id: '' });
       onClose();
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`✅ Пользователь ${newUser.name} ${newUser.lastname} создан.`);
-      } else {
-        alert(`✅ Пользователь ${newUser.name} ${newUser.lastname} создан.`);
-      }
+      showAlert(`Пользователь ${newUser.name} ${newUser.lastname} создан.`);
     } catch (err) {
       console.error("Ошибка создания пользователя:", err);
       const errorMsg = err.response?.data?.detail || "Ошибка при создании пользователя.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`❌ Ошибка: ${errorMsg}`);
-      } else {
-        alert(`❌ Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -357,11 +342,7 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
       setCompanies(data);
     } catch (err) {
       console.error("Ошибка загрузки компаний:", err);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Ошибка загрузки компаний");
-      } else {
-        alert("Ошибка загрузки компаний");
-      }
+      showAlert("Ошибка загрузки компаний");
     } finally {
       setLoadingCompanies(false);
     }
@@ -378,11 +359,7 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.lastname.trim() || !formData.login.trim() || !formData.company_id) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните все обязательные поля");
-      } else {
-        alert("Заполните все обязательные поля");
-      }
+      showAlert("Заполните все обязательные поля");
       return;
     }
     
@@ -396,19 +373,11 @@ function EditUserModal({ user, onClose, onSave, roleDisplayNames }) {
       const updatedUser = await superAdminUpdateUser(user.id, payload);
       onSave(updatedUser);
       onClose();
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`✅ Пользователь ${updatedUser.name} ${updatedUser.lastname} обновлён.`);
-      } else {
-        alert(`✅ Пользователь ${updatedUser.name} ${updatedUser.lastname} обновлён.`);
-      }
+      showAlert(`Пользователь ${updatedUser.name} ${updatedUser.lastname} обновлён.`);
     } catch (err) {
       console.error("Ошибка обновления пользователя:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось обновить пользователя.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`❌ Ошибка: ${errorMsg}`);
-      } else {
-        alert(`❌ Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -581,11 +550,7 @@ function SuperAdminUsersPage() {
     } catch (err) {
       console.error("Ошибка загрузки пользователей:", err);
       const errorMsg = err.response?.data?.detail || "Ошибка загрузки пользователей.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`❌ ${errorMsg}`);
-      } else {
-        alert(`❌ ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setLoading(false);
     }

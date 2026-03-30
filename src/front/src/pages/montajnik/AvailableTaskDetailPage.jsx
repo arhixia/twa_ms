@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { fetchAvailableMontTaskDetail, acceptTask, getEquipmentList, getWorkTypes } from "../../api";
 import { getMontCompaniesList, getMontContactPersonsByCompany, getMontContactPersonPhone } from "../../api";
 import "../../styles/LogistPage.css";
+import { showAlert,showConfirm } from "../../utils/notify";
 
 export default function AvailableTaskDetailPage() {
   const { id } = useParams();
@@ -85,24 +86,17 @@ export default function AvailableTaskDetailPage() {
   }
 
   const handleAcceptTask = async () => {
-    if (!window.confirm(`Вы уверены, что хотите принять задачу #${id}?`)) return;
+    const confirmed = await showConfirm(`Вы уверены, что хотите принять задачу #${id}?`);
+    if (!confirmed) return;
     try {
       setAccepting(true);
       await acceptTask(id);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Задача принята!");
-      } else {
-        alert("Задача принята!");
-      }
+      showAlert("✅ Задача принята!");
       navigate("/montajnik/tasks/mine");
     } catch (err) {
       console.error("Ошибка принятия задачи:", err);
       const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
-      } else {
-        alert(`Ошибка: ${errorMessage}`);
-      }
+      showAlert(`Ошибка: ${errorMessage}`);
     } finally {
       setAccepting(false);
     }

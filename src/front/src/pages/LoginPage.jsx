@@ -3,7 +3,30 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { loginUser } from "../api";
 import useAuthStore from "../store/useAuthStore";
+import { detectPlatform, getPlatformUserId } from "../utils/platform";
 import "../styles/LoginForm.css";
+
+const VK_GROUP_ID = import.meta.env.VITE_VK_GROUP_ID 
+
+async function requestVKMessagesPermission() {
+  if (!window.vkBridge) {
+    console.warn('vkBridge не найден')
+    return
+  }
+  if (!VK_GROUP_ID) {
+    console.warn('VITE_VK_GROUP_ID не задан в .env')
+    return
+  }
+  
+  try {
+    const result = await window.vkBridge.send('VKWebAppAllowMessagesFromGroup', {
+      group_id: parseInt(VK_GROUP_ID),
+    })
+    console.log('✅ Результат запроса:', result)
+  } catch (err) {
+    console.warn('❌ VK сообщения не разрешены:', err)
+  }
+}
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -13,25 +36,15 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
 
-  const [telegramId, setTelegramId] = useState(null);
-  const [isTgReady, setIsTgReady] = useState(false);
+  const [platformId, setPlatformId] = useState(null);
+  const [platform, setPlatform] = useState('web');
 
   useEffect(() => {
-    if (window.Telegram && window.Telegram.WebApp) {
-      const initData = window.Telegram.WebApp.initDataUnsafe;
-      console.log("Window Telegram WebApp initDataUnsafe:", initData);
-
-      if (initData && initData.user && initData.user.id) {
-        const id = initData.user.id;
-        console.log("Telegram ID from Mini App:", id);
-        setTelegramId(id);
-        setIsTgReady(true);
-      } else {
-        console.warn("Telegram ID not found in initDataUnsafe or not in Mini App context");
-      }
-    } else {
-      console.error("Telegram WebApp object is not available. Are you running inside a Telegram Mini App?");
-    }
+    getPlatformUserId().then(({ platform, id }) => {
+      console.log(`📱 Платформа: ${platform}, ID: ${id}`);
+      setPlatform(platform);
+      setPlatformId(id);
+    })
 
     if (token && role) {
       navigate(`/${role}`);
@@ -43,14 +56,12 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Передаём telegramId, даже если null — backend должен это обрабатывать
-      const data = await loginUser(login, password, telegramId);
+      const data = await loginUser(login, password, platformId, platform);
 
       if (!data.access_token) throw new Error("Нет токена в ответе");
-
-      localStorage.setItem("token", data.access_token);
-      if (data.role) localStorage.setItem("role", data.role);
-      if (data.fullname) localStorage.setItem("fullname", data.fullname);
+      if (platform === 'vk') {
+        await requestVKMessagesPermission()
+      }
 
       setAuth(data.access_token, data.role ?? "logist", data.fullname ?? "Без имени");
       navigate(`/${data.role ?? "logist"}`);
@@ -60,19 +71,17 @@ export default function LoginPage() {
     }
   }
 
+  // JSX без изменений
   return (
     <div className="login-wrapper">
       <form className="login-form" onSubmit={handleSubmit} style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>
-        {/* Заголовок приложения по центру */}
-         <div>
-            <div className="app-title" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>GeoTask</div>
-            <div className="app-subtitle" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>мини-приложение</div>
-          </div>
+        <div>
+          <div className="app-title">GeoTask</div>
+          <div className="app-subtitle">мини-приложение</div>
+        </div>
 
-        {/* Заголовок формы */}
-        <h2 className="form-title" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>Авторизация</h2>
+        <h2 className="form-title">Авторизация</h2>
 
-        {/* Поле Логин */}
         <div className="input-group">
           <input
             type="text"
@@ -80,7 +89,6 @@ export default function LoginPage() {
             value={login}
             onChange={(e) => setLogin(e.target.value)}
             required
-            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           />
           <span className="input-icon">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -90,7 +98,6 @@ export default function LoginPage() {
           </span>
         </div>
 
-        {/* Поле Пароль */}
         <div className="input-group">
           <input
             type={showPassword ? "text" : "password"}
@@ -98,14 +105,11 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           />
           <button
             type="button"
             className="toggle-password"
             onClick={() => setShowPassword(!showPassword)}
-            aria-label={showPassword ? "Скрыть пароль" : "Показать пароль"}
-            style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}
           >
             {showPassword ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -122,11 +126,9 @@ export default function LoginPage() {
           </button>
         </div>
 
-        {/* Сообщение об ошибке */}
-        {error && <div className="login-error" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>{error}</div>}
+        {error && <div className="login-error">{error}</div>}
 
-        {/* Кнопка Войти */}
-        <button type="submit" className="login-btn" style={{ fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif' }}>Войти</button>
+        <button type="submit" className="login-btn">Войти</button>
       </form>
     </div>
   );

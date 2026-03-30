@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { fetchAvailableTasks, acceptTask } from "../../api";
 import TaskCard from "../../components/TaskCard";
 import useAuthStore from "@/store/useAuthStore";
+import { showAlert,showConfirm } from "../../utils/notify";
 
 export default function AvailableTasksPage() {
   const navigate = useNavigate();
@@ -36,11 +37,7 @@ export default function AvailableTasksPage() {
     setActionLoading(taskId);
     try {
       await acceptTask(taskId);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Задача успешно принята!");
-      } else {
-        alert("Задача успешно принята!");
-      }
+      showAlert("✅ Задача принята!");
       await Promise.all([
         loadTasks(),
         updateAvailableTasksCount(),
@@ -50,11 +47,7 @@ export default function AvailableTasksPage() {
     } catch (err) {
       console.error(`Ошибка при принятии задачи ${taskId}:`, err);
       const errorMessage = err.response?.data?.detail || "Не удалось принять задачу.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
-      } else {
-        alert(`Ошибка: ${errorMessage}`);
-      }
+      showAlert(`Ошибка: ${errorMessage}`);
     } finally {
       setActionLoading(null);
     }

@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { getAssignedTasks, acceptTask, rejectTask } from "../../api";
 import TaskCard from "../../components/TaskCard";
 import useAuthStore from "@/store/useAuthStore";
+import { showAlert,showConfirm } from "../../utils/notify";
 
 export default function AssignedTasksPage() {
   const [tasks, setTasks] = useState([]);
@@ -73,11 +74,7 @@ export default function AssignedTasksPage() {
       ]);
     } catch (err) {
       console.error(err);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Ошибка при отклонении задачи");
-      } else {
-        alert("Ошибка при отклонении задачи");
-      }
+      showAlert("Ошибка при отклонении задачи");
     } finally {
       setActionLoading(null);
     }

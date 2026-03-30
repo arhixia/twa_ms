@@ -6,7 +6,7 @@ import {
   adminUpdateWorkType
 } from "../../api";
 import "../../styles/LogistPage.css";
-
+import { showAlert } from "../../utils/notify";
 
 const WorkIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -121,19 +121,11 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
 
   const handleSubmit = async () => {
     if (!name.trim() || !category.trim() || clientPrice === null || montPrice === null) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните все обязательные поля");
-      } else {
-        alert("Заполните все обязательные поля");
-      }
+      showAlert("Заполните все обязательные поля")
       return;
     }
     if (isNaN(clientPrice) || clientPrice <= 0 || isNaN(montPrice) || montPrice <= 0) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Цены должны быть положительными числами");
-      } else {
-        alert("Цены должны быть положительными числами");
-      }
+      showAlert("Цены должны быть положительными числами")
       return;
     }
 
@@ -150,11 +142,7 @@ function EditWorkTypeModal({ workType, onClose, onSave, workTypeCategories }) {
       onSave(updated);
       onClose();
     } catch (err) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(err.response?.data?.detail || "Ошибка обновления вида работы");
-      } else {
-        alert(err.response?.data?.detail || "Ошибка обновления вида работы");
-      }
+       showAlert(err.response?.data?.detail || "Ошибка обновления вида работы")
     } finally {
       setSaving(false);
     }
@@ -363,21 +351,13 @@ export default function AdminWorkPage() {
 
  const handleAddWorkType = async () => {
   if (!newWorkTypeName.trim() || !newWorkTypeClientPrice.trim() || !newWorkTypeMontPrice.trim()) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Заполните все поля (название, цена клиента, цена монтажника)");
-    } else {
-      alert("Заполните все поля (название, цена клиента, цена монтажника)");
-    }
+    showAlert("Заполните все поля (название, цена клиента, цена монтажника)")
     return;
   }
   const clientPriceNum = parseFloat(newWorkTypeClientPrice);
   const montPriceNum = parseFloat(newWorkTypeMontPrice);
   if (isNaN(clientPriceNum) || clientPriceNum <= 0 || isNaN(montPriceNum) || montPriceNum <= 0) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Цены должны быть положительными числами");
-    } else {
-      alert("Цены должны быть положительными числами");
-    }
+    showAlert("Цены должны быть положительными числами")
     return;
   }
   try {
@@ -389,11 +369,7 @@ export default function AdminWorkPage() {
       tech_supp_require: newWorkTypeTechSupp,
       category: newWorkTypeCategory.trim() || null
     });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Вид работы "${result.name}" добавлен`);
-    } else {
-      alert(`Вид работы "${result.name}" добавлен`);
-    }
+    showAlert(`Вид работы "${result.name}" добавлен`)
     setNewWorkTypeName("");
     setNewWorkTypeClientPrice("");
     setNewWorkTypeMontPrice("");
@@ -404,11 +380,7 @@ export default function AdminWorkPage() {
     loadWorkTypes();
     loadRefsForWorkTypes();
   } catch (err) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(err.response?.data?.detail || "Ошибка добавления вида работы");
-    } else {
-      alert(err.response?.data?.detail || "Ошибка добавления вида работы");
-    }
+    showAlert(err.response?.data?.detail || "Ошибка добавления вида работы")
   }
 };
 

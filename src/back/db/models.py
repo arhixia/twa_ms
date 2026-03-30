@@ -70,6 +70,7 @@ class User(AsyncAttrs, Base):
 
     id = Column(Integer, primary_key=True)
     telegram_id = Column(BigInteger, unique=False, index=True, nullable=True) #помнеь на unique 
+    vk_id = Column(BigInteger, unique=False, index=True, nullable=True)
     name = Column(String,nullable = False) #имя 
     lastname = Column(String,nullable = False) #фамилия
     role = Column(Enum(Role),nullable = False, index = True) #роль

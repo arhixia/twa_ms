@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { fetchTechHistory } from "../../api"; // используем общую функцию
 import TaskCard from "../../components/TaskCard";
 import "../../styles/LogistPage.css";
+import { showAlert,showConfirm } from "../../utils/notify";
 
 export default function TechHistoryPage() {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ export default function TechHistoryPage() {
       setItems(data || []);
     } catch (err) {
       console.error("Ошибка загрузки истории:", err);
-      alert("Не удалось загрузить историю задач");
+      showAlert("Не удалось загрузить историю задач");
       navigate("/tech_supp"); // или куда-то ещё
     } finally {
       setLoading(false);

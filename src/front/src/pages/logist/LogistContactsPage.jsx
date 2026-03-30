@@ -9,6 +9,7 @@ import {
   addCompany as logistAddCompany,
 } from "../../api";
 import "../../styles/LogistPage.css";
+import { showAlert } from "../../utils/notify";
 
 // SVG Icons
 const CompanyIcon = () => (
@@ -113,11 +114,7 @@ function EditCompanyModal({ company, onClose, onSave }) {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите название компании");
-      } else {
-        alert("Введите название компании");
-      }
+      showAlert("Введите название компании");
       return;
     }
 
@@ -128,11 +125,7 @@ function EditCompanyModal({ company, onClose, onSave }) {
       onClose();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка обновления компании";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -192,11 +185,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies, onAddNewC
 
   const handleSubmit = async () => {
     if (!name.trim() || (!companyId && !companyName.trim())) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните ФИО и выберите/создайте компанию");
-      } else {
-        alert("Заполните ФИО и выберите/создайте компанию");
-      }
+      showAlert("Заполните ФИО и выберите/создайте компанию");
       return;
     }
 
@@ -213,11 +202,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies, onAddNewC
           if (onAddNewCompany) onAddNewCompany(newCompany);
         } catch (err) {
           const errorMsg = err.response?.data?.detail || "Ошибка создания компании";
-          if (window.Telegram?.WebApp) {
-            window.Telegram.WebApp.showAlert(`Ошибка создания компании: ${errorMsg}`);
-          } else {
-            alert(`Ошибка создания компании: ${errorMsg}`);
-          }
+          showAlert(`Ошибка создания компании: ${errorMsg}`);
           return;
         }
       }
@@ -235,11 +220,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies, onAddNewC
       onClose();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка обновления контакта";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -263,11 +244,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies, onAddNewC
       if (onAddNewCompany) onAddNewCompany(newCompany);
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка создания компании";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка создания компании: ${errorMsg}`);
     }
   };
 
@@ -455,40 +432,24 @@ export default function LogistContactsPage() {
 
   const handleAddCompany = async () => {
     if (!newCompanyName.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите название компании");
-      } else {
-        alert("Введите название компании");
-      }
+      showAlert("Введите название компании");
       return;
     }
     try {
       const result = await logistAddCompany({ name: newCompanyName.trim() });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Компания "${result.name}" добавлена`);
-      } else {
-        alert(`Компания "${result.name}" добавлена`);
-      }
+      showAlert(`Компания "${result.name}" добавлена`);
       setNewCompanyName("");
       setShowAddCompanyModal(false);
       loadCompanies();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка добавления компании";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   };
 
   const handleAddContact = async () => {
     if (!newContactName.trim() || !newContactCompanyName.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните ФИО и компанию");
-      } else {
-        alert("Заполните ФИО и компанию");
-      }
+      showAlert("Заполните ФИО и компанию");
       return;
     }
 
@@ -496,11 +457,7 @@ export default function LogistContactsPage() {
     let companyId;
 
     if (!existingCompany) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Компания "${newContactCompanyName}" не найдена.`);
-      } else {
-        alert(`Компания "${newContactCompanyName}" не найдена.`);
-      }
+      showAlert(`Компания "${newContactCompanyName}" не найдена. Пожалуйста, добавьте её сначала.`);
       return;
     }
 
@@ -512,11 +469,7 @@ export default function LogistContactsPage() {
         phone: newContactPhone.trim(),
         position: newContactPosition.trim(),
       });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-      } else {
-        alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-      }
+      showAlert(`Контакт "${result.name}" добавлен`);
       setNewContactName("");
       setNewContactPhone("");
       setNewContactPosition("");
@@ -532,11 +485,7 @@ export default function LogistContactsPage() {
     } catch (err) {
       console.error("Ошибка добавления контактного лица:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   };
 

@@ -7,6 +7,8 @@ import {
   getMontContactPersonsByCompany,
 } from "../../api";
 import "../../styles/LogistPage.css";
+import { showAlert,showConfirm } from "../../utils/notify";
+
 
 export default function MontajnikTaskHistoryPage() {
   const { id } = useParams();
@@ -37,7 +39,7 @@ export default function MontajnikTaskHistoryPage() {
       setHistory(data || []);
     } catch (err) {
       console.error("Ошибка загрузки истории:", err);
-      alert("Ошибка загрузки истории");
+      showAlert("Ошибка загрузки истории");
       navigate(-1);
     } finally {
       setLoading(false);

@@ -20,7 +20,8 @@ import FileUploader from "../../components/FileUploader";
 import "../../styles/LogistPage.css";
 import ImageModal from "../../components/ImageModal";
 import LazyImage from "../../components/LazyImage";
-// --- Новый компонент: Модальное окно изменения статуса ---
+import { showAlert,showConfirm } from "../../utils/notify";
+
 function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, taskWorkTypeIds, allWorkTypes }) {
   const [selectedStatus, setSelectedStatus] = useState("");
   const [changing, setChanging] = useState(false);
@@ -33,33 +34,22 @@ function ChangeStatusModal({ taskId, currentStatus, onClose, onSubmitSuccess, ta
 
   const handleSubmit = async () => {
     if (!selectedStatus) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Пожалуйста, выберите статус.");
-      } else {
-        alert("Пожалуйста, выберите статус.");
-      }
+      showAlert("Пожалуйста, выберите статус.");
       return;
     }
-    if (!window.confirm(`Вы уверены, что хотите изменить статус на '${selectedStatus}'?`)) return;
+    const confirmed = await showConfirm(`Вы уверены, что хотите изменить статус на '${selectedStatus}'?`);
+    if (!confirmed) return;
 
     setChanging(true);
     try {
       await changeTaskStatus(taskId, selectedStatus);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Статус обновлён");
-      } else {
-        alert("Статус обновлён");
-      }
+      showAlert("✅ Статус обновлён!");
       onSubmitSuccess && onSubmitSuccess();
       onClose();
     } catch (err) {
       console.error("Ошибка изменения статуса:", err);
       const errorMessage = err.response?.data?.detail || "Ошибка при смене статуса";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMessage}`);
-      } else {
-        alert(`Ошибка: ${errorMessage}`);
-      }
+      showAlert(`Ошибка: ${errorMessage}`);
     } finally {
       setChanging(false);
     }
@@ -153,14 +143,12 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
       if (confirmed) {
         await safeClose(); // Выполняем очистку и закрытие, если подтверждено
       }
-      // Если не подтверждено (нажата "Отмена"), ничего не делаем, окно остается открытым
     } else {
-      // Если нет загруженных вложений, просто закрываем
+      
       await safeClose();
     }
   };
 
-  // ... остальные функции и рендер ...
 
   const handleAttachmentUploaded = (attachmentData) => {
     setUploadedAttachments(prev => [
@@ -195,21 +183,13 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
   const handleSubmit = async () => {
     const pendingUploads = uploadedAttachments.filter(att => att.uploading);
     if (pendingUploads.length > 0) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
-      } else {
-        alert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
-      }
+      showAlert(`⚠️ Подождите, идёт загрузка ${pendingUploads.length} вложений.`);
       return;
     }
 
     const failedUploads = uploadedAttachments.filter(att => att.error);
     if (failedUploads.length > 0) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
-      } else {
-        alert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}.`);
-      }
+      showAlert(`❌ Некоторые вложения не были загружены: ${failedUploads.length}. Пожалуйста, удалите их и попробуйте снова.`);
       console.error("Failed uploads:", failedUploads);
       return;
     }
@@ -227,11 +207,7 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
     }
 
     if (!fullComment.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Добавьте комментарий.");
-      } else {
-        alert("Добавьте комментарий.");
-      }
+      showAlert("Пожалуйста, добавьте комментарий к отчёту.");
       return;
     }
 
@@ -243,21 +219,13 @@ function CreateReportModal({ taskId, taskWorkTypes, allWorkTypes, onClose, onSub
 
       await submitReportForReview(taskId, reportId);
 
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Отчёт создан и отправлен на проверку!");
-      } else {
-        alert("Отчёт создан и отправлен на проверку!");
-      }
+      showAlert("✅ Отчёт создан и отправлен на проверку!");
       onSubmitSuccess && onSubmitSuccess();
       onClose(); // onClose вызовет useEffect cleanup - НЕТ, теперь onClose просто закрывает без очистки, потому что при успешной отправке вложения становятся частью отчета
     } catch (err) {
       console.error("Ошибка при создании/отправке отчёта:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось создать или отправить отчёт.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSubmitting(false);
     }
@@ -678,23 +646,16 @@ export default function MontajnikTaskDetailPage() {
     if (!nextAction) return null;
 
     const handleStatusChange = async () => {
-      if (!window.confirm(`Подтвердить действие: "${nextAction.label}"?`)) return;
+      const confirmed = await showConfirm(`Подтвердить действие: "${nextAction.label}"?`);
+      if (!confirmed) return;
       try {
         await changeTaskStatus(task.id, nextAction.next);
-        if (window.Telegram?.WebApp) {
-          window.Telegram.WebApp.showAlert(`Статус изменён`);
-        } else {
-          alert(`Статус изменён`);
-        }
+        showAlert("Статус изменён");
         await loadTask();
       } catch (err) {
         console.error(err);
         const errorMsg = err.response?.data?.detail || "Ошибка при смене статуса";
-        if (window.Telegram?.WebApp) {
-          window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-        } else {
-          alert(`Ошибка: ${errorMsg}`);
-        }
+        showAlert(`Ошибка: ${errorMsg}`);
       }
     };
 

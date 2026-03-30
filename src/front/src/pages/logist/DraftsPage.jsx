@@ -4,6 +4,7 @@ import { getAllDrafts, deleteDraft } from "../../api";
 import TaskCard from "../../components/TaskCard";
 import AddTaskModal from "./_AddTaskModal";
 import "../../styles/LogistPage.css";
+import { showAlert,showConfirm} from "../../utils/notify";
 
 export default function DraftsPage() {
   const [drafts, setDrafts] = useState([]);
@@ -28,13 +29,14 @@ export default function DraftsPage() {
   }
 
   async function handleDelete(id) {
-    if (!window.confirm("Удалить черновик?")) return;
+    const confirmed = await showConfirm("Удалить черновик?")
+     if (!confirmed) return
     try {
       await deleteDraft(id);
       await loadDrafts();
     } catch (e) {
       console.error(e);
-      alert("Ошибка удаления");
+      showAlert("Ошибка удаления");
     }
   }
 

@@ -16,6 +16,7 @@ import {
 } from "../../api";
 import "../../styles/LogistPage.css";
 import useAuthStore from "@/store/useAuthStore";
+import { showAlert,showConfirm} from "../../utils/notify";
 
 export default function DraftDetailPage() {
   const { id } = useParams();
@@ -141,7 +142,7 @@ export default function DraftDetailPage() {
       }
     } catch (err) {
       console.error("Ошибка загрузки черновика:", err);
-      alert("Ошибка загрузки черновика");
+      showAlert("Ошибка загрузки черновика");
     } finally {
       setLoading(false);
     }
@@ -169,7 +170,7 @@ export default function DraftDetailPage() {
       setContactPersons([]);
       setField("contact_person_id", null);
       setField("contact_person_phone", null);
-      alert("Ошибка загрузки контактных лиц");
+      showAlert("Ошибка загрузки контактных лиц");
     } finally {
       setLoadingPhone(false);
     }
@@ -209,64 +210,42 @@ export default function DraftDetailPage() {
         district_id: form.district_id,
       };
       await patchDraft(id, payload);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("💾 Изменения сохранены");
-      } else {
-        alert("💾 Изменения сохранены");
-      }
+      showAlert("💾 Изменения сохранены");
       setEdit(false);
       await loadDraft();
     } catch (e) {
       console.error(e);
       const errorMsg = e.response?.data?.detail || "Ошибка при сохранении";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(errorMsg);
-      } else {
-        alert(errorMsg);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   }
 
   async function handlePublish() {
-    if (!window.confirm("Опубликовать черновик?")) return;
+    const confirmed = await showConfirm("Опубликовать черновик?")
+    if (!confirmed) return
     try {
       await publishTask({ draft_id: draft.id ,district_id: form.district_id});
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("✅ Опубликовано");
-      } else {
-        alert("✅ Опубликовано");
-      }
+      showAlert("✅ Задача опубликована");
       useAuthStore.getState().updateActiveTasksCount();
       navigate("/logist/tasks/active");
     } catch (err) {
       console.error("Ошибка публикации:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось опубликовать.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   }
 
   async function handleDelete() {
-    if (!window.confirm("Удалить черновик?")) return;
+    const confirmed = await showConfirm("Удалить черновик?")
+    if (!confirmed) return
     try {
       await deleteDraft(id);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("🗑 Черновик удалён");
-      } else {
-        alert("🗑 Черновик удалён");
-      }
+      showAlert("🗑 Черновик удалён");
       navigate("/logist/drafts");
     } catch (err) {
       console.error("Ошибка удаления:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось удалить.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   }
 

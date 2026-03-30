@@ -9,6 +9,7 @@ import {
   adminUpdateContactPerson
 } from "../../api";
 import "../../styles/LogistPage.css";
+import { showAlert } from "../../utils/notify";
 
 // SVG Icons
 const CompanyIcon = () => (
@@ -115,11 +116,7 @@ function EditCompanyModal({ company, onClose, onSave }) {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите название компании");
-      } else {
-        alert("Введите название компании");
-      }
+      showAlert("Введите название компании");
       return;
     }
 
@@ -130,11 +127,7 @@ function EditCompanyModal({ company, onClose, onSave }) {
       onClose();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка обновления компании";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -194,11 +187,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies }) {
 
   const handleSubmit = async () => {
     if (!name.trim() || !companyId) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните ФИО и выберите компанию");
-      } else {
-        alert("Заполните ФИО и выберите компанию");
-      }
+      showAlert("Заполните ФИО и выберите компанию");
       return;
     }
 
@@ -214,11 +203,7 @@ function EditContactPersonModal({ contact, onClose, onSave, companies }) {
       onClose();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка обновления контакта";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -420,40 +405,24 @@ export default function AdminContactsPage() {
 
   const handleAddCompany = async () => {
     if (!newCompanyName.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите название компании");
-      } else {
-        alert("Введите название компании");
-      }
+      showAlert("Введите название компании");
       return;
     }
     try {
       const result = await adminAddCompany({ name: newCompanyName.trim() });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Компания "${result.name}" добавлена`);
-      } else {
-        alert(`Компания "${result.name}" добавлена`);
-      }
+      showAlert(`Компания "${result.name}" добавлена`);
       setNewCompanyName("");
       setShowAddCompanyModal(false);
       loadCompanies();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка добавления компании";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   };
 
   const handleAddContact = async () => {
     if (!newContactName.trim() || !newContactCompanyName.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните ФИО и компанию");
-      } else {
-        alert("Заполните ФИО и компанию");
-      }
+      showAlert("Заполните ФИО и компанию");
       return;
     }
 
@@ -461,11 +430,7 @@ export default function AdminContactsPage() {
     let companyId;
 
     if (!existingCompany) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Компания "${newContactCompanyName}" не найдена.`);
-      } else {
-        alert(`Компания "${newContactCompanyName}" не найдена.`);
-      }
+      showAlert(`Компания "${newContactCompanyName}" не найдена. Пожалуйста, сначала добавьте компанию.`);
       return;
     }
 
@@ -477,11 +442,7 @@ export default function AdminContactsPage() {
         phone: newContactPhone.trim(),
         position: newContactPosition.trim(),
       });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-      } else {
-        alert(`Контакт "${result.name}" добавлен (ID: ${result.id})`);
-      }
+      showAlert(`Контакт "${result.name}" добавлен`);
       setNewContactName("");
       setNewContactPhone("");
       setNewContactPosition("");
@@ -497,11 +458,7 @@ export default function AdminContactsPage() {
     } catch (err) {
       console.error("Ошибка добавления контактного лица:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось добавить контактное лицо.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   };
 

@@ -27,32 +27,47 @@ api.interceptors.response.use(
 
 // ---------- AUTH ----------
 
-export async function loginUser(login, password, telegramId = null) {
-  const params = new URLSearchParams();
-  params.append("username", login);
-  params.append("password", password);
+export async function loginUser(login, password, platformId = null, platform = 'web') {
+  const BASE = import.meta.env.VITE_API_URL;
 
-  const bodyData = {
+  if (platform === 'web' || platformId === null) {
+    const params = new URLSearchParams();
+    params.append("username", login);
+    params.append("password", password);
+
+    const response = await fetch(`${BASE}/auth/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Ошибка аутентификации" }));
+      throw new Error(err.detail || "Ошибка аутентификации");
+    }
+    return response.json();
+  }
+
+  const endpoint = platform === 'vk' ? '/auth/token_with_vk' : '/auth/token_with_tg';
+  const body = {
     username: login,
     password: password,
-    telegram_id: telegramId, //
+    ...(platform === 'vk' ? { vk_id: platformId } : { telegram_id: platformId }),
   };
 
-  const response = await fetch(`${BASE}/auth/token_with_tg`, { // Новый эндпоинт
+  const response = await fetch(`${BASE}${endpoint}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(bodyData),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: "Ошибка аутентификации" }));
-    throw new Error(errorData.detail || "Ошибка аутентификации");
+    const err = await response.json().catch(() => ({ detail: "Ошибка аутентификации" }));
+    throw new Error(err.detail || "Ошибка аутентификации");
   }
-
   return response.json();
 }
+
 
 
 export async function verifyToken(token) {

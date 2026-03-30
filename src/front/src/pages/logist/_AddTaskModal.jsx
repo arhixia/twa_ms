@@ -12,6 +12,7 @@ import {
   getSimpleDistricts, 
 } from "../../api";
 import useAuthStore from "@/store/useAuthStore";
+import { showAlert } from "../../utils/notify";
 
 // --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ ВНЕ ОСНОВНОГО ---
 
@@ -554,19 +555,11 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     if (saving) return;
     if (asPublish) {
   if (form.assignment_type === "broadcast" && !form.district_id) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Для задачи 'В эфир' обязательно укажите регион");
-    } else {
-      alert("Для задачи 'В эфир' обязательно укажите регион");
-    }
+    showAlert("Для задачи 'В эфир' обязательно укажите регион");
     return;
   }
   if (form.assignment_type === "individual" && !form.assigned_user_id) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Необходимо назначить монтажника");
-    } else {
-      alert("Необходимо назначить монтажника");
-    }
+    showAlert("Для задачи 'Персональная' обязательно назначьте монтажника");
     return;
   }
 }
@@ -588,19 +581,11 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
       let result;
       if (asPublish) {
         result = await publishTask(payload); // publishTask теперь должен обрабатывать district_id
-        if (window.Telegram?.WebApp) {
-          window.Telegram.WebApp.showAlert("✅ Опубликовано");
-        } else {
-          alert("✅ Опубликовано");
-        }
+        showAlert("✅ Задача опубликована");
         useAuthStore.getState().updateActiveTasksCount();
       } else {
         result = await createDraft(payload); // createDraft тоже может сохранять district_id, если поддерживается
-        if (window.Telegram?.WebApp) {
-          window.Telegram.WebApp.showAlert("💾 Сохранено черновиком");
-        } else {
-          alert("💾 Сохранено черновиком");
-        }
+        showAlert("💾 Сохранено черновиком");
       }
 
       let newId = null;
@@ -620,11 +605,7 @@ export default function AddTaskModal({ open, onClose, onSaved, allowSaveOnlyDraf
     } catch (e) {
       console.error("Ошибка при сохранении:", e);
       const errorMsg = e.response?.data?.detail || e.message || "Ошибка при сохранении";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(errorMsg);
-      } else {
-        alert(errorMsg);
-      }
+      showAlert(`❌ ${errorMsg}`);
     } finally {
       setSaving(false);
     }

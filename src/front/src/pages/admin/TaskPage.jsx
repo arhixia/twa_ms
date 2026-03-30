@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import MultiSelectFilter from "../../components/MultiSelectFilter";
 import "../../styles/LogistPage.css";
 import "../../styles/styles.css";
+import { showAlert, showConfirm } from '../../utils/notify'
 
 // Вспомогательная функция для дебаунса
 function useDebounce(value, delay) {
@@ -140,7 +141,7 @@ function AdminTasksPage() {
       setTasks(data || []);
     } catch (err) {
       console.error('Ошибка загрузки задач', err);
-      alert('Ошибка загрузки задач');
+      showAlert('Ошибка загрузки задач')
     }
   };
 
@@ -418,7 +419,7 @@ function AdminTasksPage() {
                       t.id === taskId ? { ...t, logist_performance: 'good' } : t
                     ));
                   } catch (err) {
-                    alert('Не удалось поставить оценку: ' + (err.response?.data?.detail || err.message));
+                    showAlert('Не удалось поставить оценку: ' + (err.response?.data?.detail || err.message))
                   }
                 }}
                 onDislike={async (taskId) => {
@@ -428,7 +429,7 @@ function AdminTasksPage() {
                       t.id === taskId ? { ...t, logist_performance: 'bad' } : t
                     ));
                   } catch (err) {
-                    alert('Не удалось поставить оценку: ' + (err.response?.data?.detail || err.message));
+                    showAlert('Не удалось поставить оценку: ' + (err.response?.data?.detail || err.message))
                   }
                 }}
               />

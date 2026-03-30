@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['authentication-princess-clocks-sandra.trycloudflare.com']
+    allowedHosts: ['translator-representation-situations-newspaper.trycloudflare.com']
   },
 })
 

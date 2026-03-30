@@ -15,7 +15,7 @@ import {
 import "../../styles/LogistPage.css";
 import ImageModal from "../../components/ImageModal";
 import LazyImage from "../../components/LazyImage";
-
+import { showAlert,showConfirm } from "../../utils/notify";
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -227,23 +227,16 @@ export default function TechTaskDetailPage() {
   }
 
   async function handleTechApprove(taskId, reportId) {
-    if (!window.confirm("Принять отчёт как тех.специалист?")) return;
+    const confirmed = await showConfirm("Вы уверены, что хотите отклонить отчёт?");
+    if (!confirmed) return;
     try {
       await reviewTechReport(taskId, reportId, { approval: "approved", comment: "" });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("✅ Отчёт принят тех.специалистом");
-      } else {
-        alert("✅ Отчёт принят тех.специалистом");
-      }
+      showAlert("Отчёт принят тех.специалистом");
       loadTask();
     } catch (err) {
       console.error("Ошибка принятия отчёта:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   }
 

@@ -20,6 +20,7 @@ import "../../styles/LogistPage.css";
 import useAuthStore from "@/store/useAuthStore";
 import ImageModal from "../../components/ImageModal";
 import LazyImage from "../../components/LazyImage";
+import { showAlert,showConfirm } from "../../utils/notify";
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -56,32 +57,19 @@ function RejectReportModal({ taskId, reportId, onClose, onSubmitSuccess }) {
 
   const handleSubmit = async () => {
     if (!comment.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите комментарий причины отклонения");
-      } else {
-        alert("Введите комментарий причины отклонения");
-      }
+      showAlert("Введите комментарий причины отклонения");
       return;
     }
     try {
       await reviewReport(taskId, reportId, { approval: "rejected", comment, photos: [] });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("❌ Отчёт отклонён");
-      } else {
-        alert("❌ Отчёт отклонён");
-      }
+      showAlert("Отчёт отклонён");
       onSubmitSuccess && onSubmitSuccess();
       onClose();
     } catch (err) {
       console.error("Ошибка отклонения отчёта:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось отклонить отчёт.";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
-      // setSubmitting(false);
     }
   };
 
@@ -550,41 +538,26 @@ export default function TaskDetailPage() {
 
 async function handleArchiveTask() {
   if (!task || task.is_draft) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Нельзя архивировать черновик через эту кнопку.");
-    } else {
-      alert("Нельзя архивировать черновик через эту кнопку.");
-    }
+    showAlert("Нельзя архивировать черновик через эту кнопку.");
     return;
   }
   // Также можно проверить, что статус не 'archived', чтобы не архивировать повторно
   if (task.status === "archived") {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Задача уже архивирована.");
-    } else {
-      alert("Задача уже архивирована.");
-    }
+    showAlert("Задача уже архивирована.");
     return;
   }
-  if (!window.confirm(`Вы уверены, что хотите архивировать задачу #${task.id}?`)) return;
+  const confirmed = await showConfirm(`Вы уверены, что хотите архивировать задачу #${task.id}?`)
+  if (!confirmed) return
   try {
     await archiveTask(task.id); // Вызываем API функцию
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("✅ Задача архивирована");
-    } else {
-      alert("✅ Задача архивирована");
-    }
+    showAlert("Задача успешно архивирована");
     useAuthStore.getState().updateActiveTasksCount();
     navigate("/logist/tasks/active");
     loadTask(); // Перезагружаем данные задачи
   } catch (err) {
     console.error("Ошибка архивации задачи:", err);
     const errorMsg = err.response?.data?.detail || "Не удалось архивировать задачу.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
-    }
+    showAlert(`Ошибка: ${errorMsg}`);
   }
 }
 
@@ -736,7 +709,7 @@ const REPORT_APPROVAL_TRANSLATIONS = {
       }
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
-      alert("Ошибка загрузки задачи");
+      showAlert("Ошибка загрузки задачи");
     } finally {
       setLoading(false);
     }
@@ -863,7 +836,7 @@ const goToPrevImage = () => {
       setContactPersons([]);
       setField("contact_person_id", null);
       setField("contact_person_phone", null);
-      alert("Ошибка загрузки контактных лиц");
+      showAlert("Ошибка загрузки контактных лиц");
     } finally {
       setLoadingPhone(false);
     }
@@ -966,20 +939,12 @@ const goToPrevImage = () => {
 async function saveEdit() {
   if (form.assignment_type === "broadcast") {
   if (!form.district_id) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Для задачи 'В эфир' обязательно укажите регион");
-    } else {
-      alert("Для задачи 'В эфир' обязательно укажите регион");
-    }
+    showAlert("Для задачи 'В эфир' обязательно укажите регион");
     return;
   }
 } else if (form.assignment_type === "individual") {
   if (!form.assigned_user_id) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Необходимо назначить монтажника");
-    } else {
-      alert("Необходимо назначить монтажника");
-    }
+    showAlert("Для индивидуальной задачи обязательно назначьте монтажника");
     return;
   }
 }
@@ -996,42 +961,27 @@ async function saveEdit() {
       district_id: form.district_id,
     };
     await editTask(id, payload);
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("✅ Изменения сохранены");
-    } else {
-      alert("✅ Изменения сохранены");
-    }
+    showAlert("✅ Изменения сохранены");
     setEdit(false);
     loadTask(); 
   } catch (err) {
   console.error(err);
   const errorMsg = err.response?.data?.detail || "Ошибка при сохранении";
-  if (window.Telegram?.WebApp) {
-    window.Telegram.WebApp.showAlert(errorMsg);
-  } else {
-    alert(errorMsg);
-  }
+  showAlert(`Ошибка: ${errorMsg}`);
   }
 }
 
 async function handleApproveReport(taskId, reportId) {
-  if (!window.confirm("Принять отчёт?")) return;
+  const confirmed = await showConfirm("Принять отчёт?")
+  if (!confirmed) return
   try {
     await reviewReport(taskId, reportId, { approval: "approved", comment: "", photos: [] });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("✅ Отчёт принят");
-    } else {
-      alert("✅ Отчёт принят");
-    }
+    showAlert("Отчет принят")
     loadTask();
   } catch (err) {
     console.error("Ошибка принятия отчёта:", err);
     const errorMsg = err.response?.data?.detail || "Не удалось принять отчёт.";
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-    } else {
-      alert(`Ошибка: ${errorMsg}`);
-    }
+    showAlert(`Ошибка: ${errorMsg}`)
   }
 }
 

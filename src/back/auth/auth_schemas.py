@@ -23,9 +23,16 @@ class LoginWithTelegramRequest(BaseModel):
     telegram_id: Optional[int]
 
 
+class LoginWithVKRequest(BaseModel): 
+    username: str
+    password: str
+    vk_id: Optional[int] = None
+
+
 
 class UserBase(BaseModel):
     telegram_id: Optional[int] = Field(None, description="Telegram user ID")
+    vk_id: Optional[int] = Field(None)
     name:       str = Field(..., description="Имя пользователя")
     lastname:   str = Field(..., description="Фамилия пользователя")
     role:       Role = Field(..., description="Роль пользователя")  

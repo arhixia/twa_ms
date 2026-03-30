@@ -17,7 +17,7 @@ import {
 import "../../styles/LogistPage.css"; // Используем общие стили
 import ImageModal from '../../components/ImageModal.jsx';
 import LazyImage from "../../components/LazyImage";
-
+import { showAlert, showConfirm } from '../../utils/notify'
 
 function useReportAttachments(reportId) {
   const [attachments, setAttachments] = useState([]);
@@ -75,7 +75,7 @@ export default function AdminTaskDetailPage() {
 
   useEffect(() => {
     if (isNaN(taskId)) {
-      alert("Неверный ID задачи");
+      showAlert("Неверный ID задачи");
       navigate("/admin/tasks"); // Перенаправляем на список, если ID некорректен
       return;
     }
@@ -774,7 +774,7 @@ export default function AdminTaskDetailPage() {
       }
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
-      alert("Ошибка загрузки задачи");
+      showAlert("Ошибка загрузки задачи");
     } finally {
       setLoading(false);
     }
@@ -804,7 +804,7 @@ export default function AdminTaskDetailPage() {
       setContactPersons([]);
       setField("contact_person_id", null);
       setField("contact_person_phone", null);
-      alert("Ошибка загрузки контактных лиц");
+      showAlert("Ошибка загрузки контактных лиц");
     } finally {
       setLoadingPhone(false);
     }
@@ -888,20 +888,12 @@ export default function AdminTaskDetailPage() {
     if (isNaN(taskId)) return;
     if (form.assignment_type === "broadcast") {
   if (!form.district_id) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Для задачи 'В эфир' обязательно укажите регион");
-    } else {
-      alert("Для задачи 'В эфир' обязательно укажите регион");
-    }
+    showAlert("Для задачи 'В эфир' обязательно укажите регион")
     return;
   }
 } else if (form.assignment_type === "individual") {
   if (!form.assigned_user_id) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Необходимо назначить монтажника");
-    } else {
-      alert("Необходимо назначить монтажника");
-    }
+    showAlert("Необходимо назначить монтажника");
     return;
   }
 }
@@ -918,66 +910,32 @@ export default function AdminTaskDetailPage() {
         district_id: form.district_id,
       };
       await adminUpdateTask(taskId, payload);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("✅ Изменения сохранены");
-      } else {
-        alert("✅ Изменения сохранены");
-      }
+      showAlert("✅ Изменения сохранены")
       setEdit(false);
       loadTask();
     } catch (err) {
   console.error(err);
   const errorMsg = err.response?.data?.detail || "Ошибка при сохранении";
-  if (window.Telegram?.WebApp) {
-    window.Telegram.WebApp.showAlert(errorMsg);
-  } else {
-    alert(errorMsg);
+  showAlert(errorMsg)
   }
-  }
-  }
+}
 
-  // --- НОВАЯ ФУНКЦИЯ ДЛЯ УДАЛЕНИЯ ЗАДАЧИ ---
-  async function handleDelete() {
-    if (isNaN(taskId)) return;
+ async function handleDelete() {
+  if (isNaN(taskId)) return;
 
-    // Показываем подтверждение в виде Telegram алерта
-    let confirmed;
-    if (window.Telegram?.WebApp) {
-      // Для Telegram WebApp используем встроенный метод подтверждения
-      window.Telegram.WebApp.showConfirm("Вы действительно хотите удалить задачу?", (result) => {
-        confirmed = result;
-        if (confirmed) {
-          performDelete();
-        }
-      });
-    } else {
-      // Резервный вариант для обычного браузера
-      confirmed = window.confirm("Вы действительно хотите удалить задачу?");
-      if (confirmed) {
-        performDelete();
-      }
-    }
+  const confirmed = await showConfirm("Вы действительно хотите удалить задачу?")
+  if (!confirmed) return
 
-    async function performDelete() {
-      try {
-        await adminDeleteTask(taskId);
-        if (window.Telegram?.WebApp) {
-          window.Telegram.WebApp.showAlert("✅ Задача удалена");
-        } else {
-          alert("✅ Задача удалена");
-        }
-        navigate("/admin/tasks"); // Перенаправляем на список задач после удаления
-      } catch (err) {
-        console.error("Ошибка при удалении:", err);
-        const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу.";
-        if (window.Telegram?.WebApp) {
-          window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-        } else {
-          alert(`Ошибка: ${errorMsg}`);
-        }
-      }
-    }
+  try {
+    await adminDeleteTask(taskId)
+    showAlert("✅ Задача удалена")
+    navigate("/admin/tasks")
+  } catch (err) {
+    console.error("Ошибка при удалении:", err)
+    const errorMsg = err.response?.data?.detail || "Не удалось удалить задачу."
+    showAlert(`Ошибка: ${errorMsg}`)
   }
+}
 
   if (loading) {
     return (

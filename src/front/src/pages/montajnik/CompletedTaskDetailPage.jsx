@@ -12,7 +12,7 @@ import {
 import "../../styles/LogistPage.css"; // Используем стили логиста как основу
 import ImageModal from "../../components/ImageModal"; // <--- Импортируем компонент
 import LazyImage from "../../components/LazyImage"; // Импортируем LazyImage
-
+import { showAlert,showConfirm } from "../../utils/notify";
 
 // --- ХУК ДЛЯ ЗАГРУЗКИ ВЛОЖЕНИЙ ОТЧЁТА ---
 function useReportAttachments(reportId) {

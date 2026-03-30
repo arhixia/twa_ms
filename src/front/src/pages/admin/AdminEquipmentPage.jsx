@@ -6,6 +6,7 @@ import {
   adminUpdateEquipment
 } from "../../api";
 import "../../styles/LogistPage.css";
+import { showAlert } from "../../utils/notify";
 
 
 const EquipmentIcon = () => (
@@ -111,19 +112,11 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
 
   const handleSubmit = async () => {
     if (!name.trim() || !category.trim() || price === null) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Заполните все обязательные поля");
-      } else {
-        alert("Заполните все обязательные поля");
-      }
+      showAlert("Заполните все обязательные поля"); 
       return;
     }
     if (isNaN(price) || price <= 0) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Цена должна быть положительным числом");
-      } else {
-        alert("Цена должна быть положительным числом");
-      }
+      showAlert("Цена должна быть положительным числом");
       return;
     }
 
@@ -138,11 +131,7 @@ function EditEquipmentModal({ equipment, onClose, onSave, categories }) {
       onClose();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка обновления оборудования";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -300,20 +289,12 @@ export default function AdminEquipmentPage() {
 
  const handleAddEquipment = async () => {
   if (!newEquipmentName.trim() || !newEquipmentCategory.trim() || !newEquipmentPrice.trim()) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Заполните все поля");
-    } else {
-      alert("Заполните все поля");
-    }
+    showAlert("Заполните все поля");
     return;
   }
   const priceNum = parseFloat(newEquipmentPrice);
   if (isNaN(priceNum) || priceNum <= 0) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert("Цена должна быть положительной");
-    } else {
-      alert("Цена должна быть положительной");
-    }
+    showAlert("Цена должна быть положительной");
     return;
   }
   try {
@@ -322,11 +303,7 @@ export default function AdminEquipmentPage() {
       category: newEquipmentCategory.trim(),
       price: priceNum,
     });
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(`Оборудование "${result.name}" добавлено`);
-    } else {
-      alert(`Оборудование "${result.name}" добавлено`);
-    }
+    showAlert(`Оборудование "${result.name}" добавлено`);
     setNewEquipmentName("");
     setNewEquipmentCategory("");
     setNewEquipmentPrice("");
@@ -334,11 +311,7 @@ export default function AdminEquipmentPage() {
     loadRefs();
     loadEquipment();
   } catch (err) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(err.response?.data?.detail || "Ошибка добавления оборудования");
-    } else {
-      alert(err.response?.data?.detail || "Ошибка добавления оборудования");
-    }
+    showAlert(err.response?.data?.detail || "Ошибка добавления оборудования");
   }
 };
 

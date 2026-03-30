@@ -8,6 +8,7 @@ import {
   adminGetDistrictById
 } from "../../api";
 import "../../styles/LogistPage.css";
+import { showAlert } from "../../utils/notify";
 
 const DistrictIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-buildings" viewBox="0 0 16 16">
@@ -22,11 +23,7 @@ function EditDistrictModal({ district, onClose, onSave }) {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите название региона");
-      } else {
-        alert("Введите название региона");
-      }
+      showAlert("Введите название региона");
       return;
     }
 
@@ -39,11 +36,7 @@ function EditDistrictModal({ district, onClose, onSave }) {
       onClose();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка обновления региона";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
     }
@@ -108,11 +101,7 @@ function ViewUsersModal({ district, onClose }) {
       setUsers(response.montajniks || []);
     } catch (err) {
       console.error("Ошибка загрузки пользователей:", err);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Ошибка загрузки пользователей");
-      } else {
-        alert("Ошибка загрузки пользователей");
-      }
+      showAlert("Ошибка загрузки пользователей");
     } finally {
       setLoading(false);
     }
@@ -253,31 +242,19 @@ export default function AdminDistrictsPage() {
 
   const handleAddDistrict = async () => {
     if (!newDistrictName.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите название региона");
-      } else {
-        alert("Введите название региона");
-      }
+      showAlert("Введите название региона");
       return;
     }
     try {
       const result = await adminCreateDistrict({
         name: newDistrictName.trim()
       });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Регион "${result.name}" добавлен`);
-      } else {
-        alert(`Регион "${result.name}" добавлен`);
-      }
+      showAlert(`Регион "${result.name}" добавлен`);
       setNewDistrictName("");
       setShowAddDistrictModal(false);
       loadDistricts();
     } catch (err) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(err.response?.data?.detail || "Ошибка добавления региона");
-      } else {
-        alert(err.response?.data?.detail || "Ошибка добавления региона");
-      }
+      showAlert(err.response?.data?.detail || "Ошибка добавления региона");
     }
   };
 

@@ -9,6 +9,7 @@ import {
   getEquipmentList,
   getWorkTypes
 } from "@/api";
+import { showAlert,showConfirm} from "../../utils/notify";
 
 export default function ManagerTaskDetailPage() {
   const { id } = useParams();
@@ -45,18 +46,14 @@ export default function ManagerTaskDetailPage() {
       setTask(data);
     } catch (err) {
       console.error("Ошибка загрузки задачи:", err);
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Не удалось загрузить задачу");
-      } else {
-        alert("Не удалось загрузить задачу");
-      }
+      showAlert("Ошибка загрузки задачи");
       navigate("/manager/tasks");
     } finally {
       setLoading(false);
     }
   }
 
-  const handleStatusChange = async (action) => {
+const handleStatusChange = async (action) => {
     let message;
     switch(action) {
       case "invoice":
@@ -72,16 +69,10 @@ export default function ManagerTaskDetailPage() {
         return;
     }
 
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showConfirm(message, async (confirmed) => {
-        if (confirmed) {
-          await updateStatus(action);
-        }
-      });
-    } else {
-      if (window.confirm(message)) {
-        await updateStatus(action);
-      }
+    const confirmed = await showConfirm(message);
+    
+    if (confirmed) {
+      await updateStatus(action);
     }
   };
 
@@ -124,20 +115,11 @@ const getManagerStatusConfig = (status) => {
       }
       
       setTask({ ...task, manager_status: result.manager_status });
-      
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("✅ Статус успешно обновлён");
-      } else {
-        alert("✅ Статус успешно обновлён");
-      }
+      showAlert("✅ Статус успешно обновлён");
     } catch (err) {
       console.error("Ошибка обновления статуса:", err);
       const errorMsg = err.response?.data?.detail || "Не удалось обновить статус";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert(`Ошибка: ${errorMsg}`);
     }
   };
 

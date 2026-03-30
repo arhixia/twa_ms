@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from back.db.config import SECRET_KEY,TOKEN as BOT_TOKEN
 from back.db.database import get_db
 from back.db.models import  User,Role
-from back.auth.auth_schemas import  LoginWithTelegramRequest,  UserCreate,UserResponse,Token,TokenVerificationResponse,LogoutResponse
+from back.auth.auth_schemas import  LoginWithTelegramRequest, LoginWithVKRequest,  UserCreate,UserResponse,Token,TokenVerificationResponse,LogoutResponse
 from typing import Optional
 from fastapi import Request
 from back.utils.redis_client import redis_client
@@ -37,11 +37,7 @@ oauth2_scheme = OAuth2PasswordBearer(
 router = APIRouter(
 )
 
-
-
 # Утилитарные функции
-
-
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
@@ -62,12 +58,11 @@ def create_access_token(
         "sub": str(user.id),
         "role": user.role.value,
         "full_name": f"{user.name} {user.lastname}",
-        "telegram_id": user.telegram_id,  # если есть
+        "telegram_id": user.telegram_id,  
+        "vk_id": user.vk_id,
         "exp": expire,
     }
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
 
 
 # Основная логика авторизации
@@ -234,6 +229,45 @@ async def login_for_access_with_telegram(
 
     access_token = create_access_token(user)
 
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "role": user.role.value,
+        "fullname": f"{user.name} {user.lastname}"
+    }
+
+
+@router.post("/token_with_vk", response_model=Token)
+async def login_for_access_with_vk(
+    login_data: LoginWithVKRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    user = await authenticate_user(db, login_data.username, login_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный логин или пароль"
+        )
+
+    if login_data.vk_id is not None:
+        # Проверяем не занят ли vk_id другим юзером
+        existing = await db.execute(
+            select(User).where(User.vk_id == login_data.vk_id)
+        )
+        existing = existing.scalars().first()
+        if existing and existing.id != user.id:
+            logger.info(
+                f"VK ID {login_data.vk_id} перепривязан "
+                f"с пользователя {existing.id} на {user.id}"
+            )
+
+        user.vk_id = login_data.vk_id
+        await db.commit()
+        await db.refresh(user)
+        logger.info(f"VK ID {login_data.vk_id} привязан к пользователю {user.id}")
+
+    access_token = create_access_token(user)
     return {
         "access_token": access_token,
         "token_type": "bearer",

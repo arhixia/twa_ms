@@ -7,6 +7,7 @@ import {
   getAdminContactPersonsByCompany,
 } from '../../api';
 import "../../styles/LogistPage.css";
+import { showAlert } from "../../utils/notify";
 
 export default function AdminTaskHistoryPage() {
   const { id } = useParams();
@@ -37,7 +38,7 @@ export default function AdminTaskHistoryPage() {
       setHistory(data || []);
     } catch (err) {
       console.error("Ошибка загрузки истории:", err);
-      alert("Ошибка загрузки истории");
+      showAlert("Ошибка загрузки истории");
       navigate(-1);
     } finally {
       setLoading(false);

@@ -5,6 +5,7 @@ import {
   superAdminCreateCompany
 } from "../../api";
 import "../../styles/LogistPage.css";
+import { showAlert } from "../../utils/notify";
 
 
 const CompanyIcon = () => (
@@ -19,31 +20,19 @@ function AddCompanyModal({ isOpen, onClose, onAdd }) {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert("Введите название компании");
-      } else {
-        alert("Введите название компании");
-      }
+      showAlert("Пожалуйста, введите название компании.");
       return;
     }
 
     setSaving(true);
     try {
       const result = await superAdminCreateCompany({ name: name.trim() });
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Компания "${result.name}" добавлена`);
-      } else {
-        alert(`Компания "${result.name}" добавлена`);
-      }
+      showAlert(`Компания "${result.name}" добавлена`);
       onAdd(result);
       onClose();
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Ошибка добавления компании";
-      if (window.Telegram?.WebApp) {
-        window.Telegram.WebApp.showAlert(`Ошибка: ${errorMsg}`);
-      } else {
-        alert(`Ошибка: ${errorMsg}`);
-      }
+      showAlert (`Ошибка: ${errorMsg}`);
     } finally {
       setSaving(false);
       setName("");
