@@ -29,7 +29,7 @@ from back.db.models import (
 )
 from back.users.users_schemas import DraftIn, DraftOut, PublishIn, ReportAttachmentIn, SimpleDistrictResponse, TaskEquipmentItem, TaskHistoryItem, TaskPatch, ReportReviewIn, SimpleMsg, UpdateCompanyRequest, UpdateContactPersonRequest,require_roles
 from back.utils.notify import notify_broadcast_task, notify_task_assignment, notify_user
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, case, delete, desc, func, or_, select
 from sqlalchemy.orm import selectinload
 import json
@@ -3335,7 +3335,6 @@ async def logist_earnings_by_period(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-
     if start_year is None or start_month is None or end_year is None or end_month is None:
         current_date = date.today()
         start_year = current_date.year
@@ -3343,10 +3342,11 @@ async def logist_earnings_by_period(
         end_year = current_date.year
         end_month = current_date.month
 
-    start_date = date(start_year, start_month, 1)
-    end_date = date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
+    start_date = datetime(start_year, start_month, 1)
+    end_day = calendar.monthrange(end_year, end_month)[1]
+    end_date_exclusive = datetime(end_year, end_month, end_day) + timedelta(days=1)
 
-    if start_date > end_date:
+    if start_date >= end_date_exclusive:
         raise HTTPException(status_code=400, detail="Начальная дата не может быть позже конечной")
 
     query = select(func.sum(Task.logist_reward)).where(
@@ -3354,7 +3354,7 @@ async def logist_earnings_by_period(
         Task.user_company_id == current_user.company_id,
         Task.status == TaskStatus.completed,
         Task.completed_at >= start_date,
-        Task.completed_at <= end_date
+        Task.completed_at < end_date_exclusive
     )
     result = await db.execute(query)
     total_earned = result.scalar() or 0
@@ -3364,15 +3364,17 @@ async def logist_earnings_by_period(
         Task.user_company_id == current_user.company_id,
         Task.status == TaskStatus.completed,
         Task.completed_at >= start_date,
-        Task.completed_at <= end_date
+        Task.completed_at < end_date_exclusive
     )
     count_result = await db.execute(count_query)
     task_count = count_result.scalar() or 0
+
+    end_date_display = date(end_year, end_month, end_day)
 
     return {
         "period": f"{start_year}-{start_month:02d} - {end_year}-{end_month:02d}",
         "total_earned": str(total_earned),
         "task_count": task_count,
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat()
+        "start_date": start_date.date().isoformat(),
+        "end_date": end_date_display.isoformat()
     }

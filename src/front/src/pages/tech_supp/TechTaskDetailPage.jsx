@@ -227,7 +227,7 @@ export default function TechTaskDetailPage() {
   }
 
   async function handleTechApprove(taskId, reportId) {
-    const confirmed = await showConfirm("Вы уверены, что хотите отклонить отчёт?");
+    const confirmed = await showConfirm("Вы уверены, что хотите принять отчёт?");
     if (!confirmed) return;
     try {
       await reviewTechReport(taskId, reportId, { approval: "approved", comment: "" });

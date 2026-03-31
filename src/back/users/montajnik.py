@@ -1,9 +1,11 @@
+import calendar
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import desc, select, and_, or_, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import logging
 from back.users.users_schemas import MontajnikReportReview, TaskHistoryItem, require_roles,Role
@@ -1404,54 +1406,47 @@ async def montajnik_earnings_by_period(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_user)
 ):
-    from datetime import date
-    import calendar
-    
-    # Если параметры не указаны, используем текущий месяц
     if start_year is None or start_month is None or end_year is None or end_month is None:
         current_date = date.today()
         start_year = current_date.year
         start_month = current_date.month
         end_year = current_date.year
         end_month = current_date.month
-    
-    # Получаем первый день начального месяца и последний день конечного месяца
-    start_date = date(start_year, start_month, 1)
-    end_date = date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
-    
-    # Проверяем, что начальная дата не позже конечной
-    if start_date > end_date:
+
+    start_date = datetime(start_year, start_month, 1)
+    end_day = calendar.monthrange(end_year, end_month)[1]
+    end_date_exclusive = datetime(end_year, end_month, end_day) + timedelta(days=1)
+
+    if start_date >= end_date_exclusive:
         raise HTTPException(status_code=400, detail="Начальная дата не может быть позже конечной")
-    
-    # Запрос для подсчета суммы наград за выполненные задачи в указанный период
+
     query = select(func.sum(Task.montajnik_reward)).where(
         Task.assigned_user_id == current_user.id,
         Task.status == TaskStatus.completed,
         Task.completed_at >= start_date,
-        Task.completed_at <= end_date
+        Task.completed_at < end_date_exclusive
     )
-    
     result = await db.execute(query)
     total_earned = result.scalar() or 0
-    
-    # Также можем вернуть количество задач за период
+
     count_query = select(func.count(Task.id)).where(
         Task.assigned_user_id == current_user.id,
         Task.status == TaskStatus.completed,
         Task.completed_at >= start_date,
-        Task.completed_at <= end_date
+        Task.completed_at < end_date_exclusive
     )
-    
     count_result = await db.execute(count_query)
     task_count = count_result.scalar() or 0
-    
+
+    end_date_display = date(end_year, end_month, end_day)
+
     return {
         "period": f"{start_year}-{start_month:02d} - {end_year}-{end_month:02d}",
         "total_earned": str(total_earned),
         "task_count": task_count,
         "period_display": f"{start_year} г., {calendar.month_name[start_month]} - {end_year} г., {calendar.month_name[end_month]}",
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat()
+        "start_date": start_date.date().isoformat(),
+        "end_date": end_date_display.isoformat()
     }
 
 

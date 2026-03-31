@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import enum
 import json
@@ -129,118 +129,106 @@ async def admin_statistics(
     end_month: Optional[int] = Query(None, description="Месяц окончания (1-12)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
-):  
-    
+):
     _ensure_admin_or_403(current_user)
-    
+
     if not current_user.company_id:
         raise HTTPException(status_code=403, detail="Пользователь должен принадлежать компании")
-    
+
     if start_year is None or start_month is None or end_year is None or end_month is None:
         current_date = date.today()
         start_year = current_date.year
-        start_month = 1  
+        start_month = 1
         end_year = current_date.year
         end_month = current_date.month
-    
-    start_date = date(start_year, start_month, 1)
-    end_date = date(end_year, end_month, calendar.monthrange(end_year, end_month)[1])
-    
-    if start_date > end_date:
+
+    start_date = datetime(start_year, start_month, 1)
+    end_day = calendar.monthrange(end_year, end_month)[1]
+    end_date_exclusive = datetime(end_year, end_month, end_day) + timedelta(days=1)
+
+    if start_date >= end_date_exclusive:
         raise HTTPException(status_code=400, detail="Начальная дата не может быть позже конечной")
-    
+
     montajniks_query = select(User).where(
         User.company_id == current_user.company_id,
         User.role == Role.montajnik
     )
-    
     montajniks_result = await db.execute(montajniks_query)
     montajniks = montajniks_result.scalars().all()
-    
+
     montajnik_statistics = []
-    
+
     for montajnik in montajniks:
         earnings_query = select(func.sum(Task.montajnik_reward)).where(
             Task.assigned_user_id == montajnik.id,
             Task.status == TaskStatus.completed,
             Task.completed_at >= start_date,
-            Task.completed_at <= end_date
+            Task.completed_at < end_date_exclusive
         )
-        
         earnings_result = await db.execute(earnings_query)
         total_earned = earnings_result.scalar() or 0
-        
-        # Количество задач
+
         count_query = select(func.count(Task.id)).where(
             Task.assigned_user_id == montajnik.id,
             Task.status == TaskStatus.completed,
             Task.completed_at >= start_date,
-            Task.completed_at <= end_date
+            Task.completed_at < end_date_exclusive
         )
-        
         count_result = await db.execute(count_query)
         task_count = count_result.scalar() or 0
-        
+
         montajnik_statistics.append({
             "montajnik_id": montajnik.id,
             "montajnik_name": f"{montajnik.name} {montajnik.lastname or ''}".strip(),
             "total_earned": str(total_earned),
             "task_count": task_count
         })
-    
+
     montajnik_statistics.sort(key=lambda x: (x["task_count"], float(x["total_earned"])), reverse=True)
 
     logists_query = select(User).where(
         User.company_id == current_user.company_id,
         User.role == Role.logist
     )
-    
     logists_result = await db.execute(logists_query)
     logists = logists_result.scalars().all()
-    
+
     logist_statistics = []
-    
+
     for logist in logists:
-        # Общее количество завершенных задач за период
         total_tasks_query = select(func.count(Task.id)).where(
             Task.created_by == logist.id,
             Task.user_company_id == current_user.company_id,
             Task.status == TaskStatus.completed,
             Task.completed_at >= start_date,
-            Task.completed_at <= end_date
+            Task.completed_at < end_date_exclusive
         )
-        
         total_tasks_result = await db.execute(total_tasks_query)
         total_tasks = total_tasks_result.scalar() or 0
-        
+
         good_tasks_query = select(func.count(Task.id)).where(
             Task.created_by == logist.id,
             Task.user_company_id == current_user.company_id,
             Task.status == TaskStatus.completed,
             Task.logist_performance == LogistPerformance.good,
             Task.completed_at >= start_date,
-            Task.completed_at <= end_date
+            Task.completed_at < end_date_exclusive
         )
-        
         good_tasks_result = await db.execute(good_tasks_query)
         good_tasks = good_tasks_result.scalar() or 0
-        
+
         earnings_query = select(func.sum(Task.logist_reward)).where(
             Task.created_by == logist.id,
             Task.user_company_id == current_user.company_id,
             Task.status == TaskStatus.completed,
             Task.completed_at >= start_date,
-            Task.completed_at <= end_date
+            Task.completed_at < end_date_exclusive
         )
-
         earnings_result = await db.execute(earnings_query)
         logist_total_earned = earnings_result.scalar() or 0
-        
-        if total_tasks > 0:
-            efficiency = round((good_tasks * 100) / total_tasks, 1)
-        else:
-            efficiency = None
-        
+
+        efficiency = round((good_tasks * 100) / total_tasks, 1) if total_tasks > 0 else None
+
         logist_statistics.append({
             "logist_id": logist.id,
             "logist_name": f"{logist.name} {logist.lastname or ''}".strip(),
@@ -249,16 +237,18 @@ async def admin_statistics(
             "good_tasks": good_tasks,
             "efficiency": efficiency
         })
-    
+
     logist_statistics.sort(
-        key=lambda x: (x["efficiency"] is not None, x["efficiency"] if x["efficiency"] is not None else 0), 
+        key=lambda x: (x["efficiency"] is not None, x["efficiency"] if x["efficiency"] is not None else 0),
         reverse=True
     )
-    
+
+    end_date_display = date(end_year, end_month, end_day)
+
     return {
         "period": f"{start_year}-{start_month:02d} - {end_year}-{end_month:02d}",
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
+        "start_date": start_date.date().isoformat(),
+        "end_date": end_date_display.isoformat(),
         "montajnik_statistics": montajnik_statistics,
         "logist_statistics": logist_statistics
     }

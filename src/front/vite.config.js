@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['translator-representation-situations-newspaper.trycloudflare.com']
+    allowedHosts: ['symposium-crystal-willow-trips.trycloudflare.com']
   },
 })
 
