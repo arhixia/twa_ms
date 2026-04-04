@@ -1,18 +1,19 @@
-import { detectPlatform } from './platform'
+// src/utils/notify.js
+import { detectPlatform, PLATFORMS, vkBridge } from './platform';
 
 /**
  * Показать алерт (простое уведомление)
  */
 export function showAlert(message) {
-  const platform = detectPlatform()
+  const platform = detectPlatform();
 
-  if (platform === 'telegram') {
+  if (platform === PLATFORMS.TELEGRAM) {
     if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(message)
-      return
+      window.Telegram.WebApp.showAlert(message);
+      return;
     }
   } 
-  alert(message)
+  alert(message);
 }
 
 /**
@@ -20,41 +21,34 @@ export function showAlert(message) {
  * Возвращает Promise<boolean>
  */
 export async function showConfirm(message) {
-  const platform = detectPlatform()
+  const platform = detectPlatform();
 
-  // 1. Telegram
-  if (platform === 'telegram' && window.Telegram?.WebApp) {
+  
+  if (platform === PLATFORMS.TELEGRAM && window.Telegram?.WebApp) {
     return new Promise((resolve) => {
       window.Telegram.WebApp.showConfirm(message, (result) => {
-        resolve(!!result)
-      })
-    })
+        resolve(!!result);
+      });
+    });
   }
 
-  // 2. VK
-  if (platform === 'vk' && window.vkBridge) {
+  if (platform === PLATFORMS.VK) {
     try {
-      const response = await window.vkBridge.send('VKWebAppShowConfirmBox', {
+      const response = await vkBridge.send('VKWebAppShowConfirmBox', {
         message: message,
         title: 'Подтверждение',
-      })
+      });
 
-      // Обрабатываем успешный ответ (может быть объектом или булевым)
       if (response && typeof response === 'object') {
-        return !!response.result
+        return !!response.result;
       }
-      return !!response
+      return !!response;
       
     } catch (error) {
-      if (error?.error_data?.error_code === 6 || error?.error_type === 'client_error') {
-        console.log('VK Native Confirm not supported, using browser confirm...')
-        return window.confirm(message)
-      }
-      console.warn('VK Confirm error:', error)
-      return false
+      console.warn('VK Confirm error:', error);
+      return window.confirm(message);
     }
   }
 
-  // 3. Веб (fallback по умолчанию)
-  return window.confirm(message)
+  return window.confirm(message);
 }

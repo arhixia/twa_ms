@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['symposium-crystal-willow-trips.trycloudflare.com']
+    allowedHosts: ['theory-ratio-actors-build.trycloudflare.com']
   },
 })
 

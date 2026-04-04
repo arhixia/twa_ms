@@ -1,12 +1,13 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./styles/styles.css";
 import useAuthStore from "./store/useAuthStore";
-import { detectPlatform } from "./utils/platform";
+import { detectPlatform, PLATFORMS } from "./utils/platform";
+import vkBridge from '@vkontakte/vk-bridge'; 
 
-function initTelegram() {
+const initTelegram = () => {
   const tg = window.Telegram?.WebApp;
   if (!tg) return;
   try {
@@ -16,30 +17,46 @@ function initTelegram() {
   } catch (err) {
     console.warn("Ошибка инициализации Telegram:", err);
   }
-}
+};
 
-async function initVK() {
+const initVK = async () => {
   try {
-    const result = await window.vkBridge.send('VKWebAppInit');
-    if (result.result) {
-    }
+    await vkBridge.send("VKWebAppInit");
+    console.log("✅ VK Bridge initialized");
   } catch (err) {
-    console.warn("Ошибка инициализации VK Bridge:", err);
+    console.warn("❌ Ошибка инициализации VK Bridge:", err);
   }
-}
+};
 
 function Root() {
   const restoreAuth = useAuthStore((s) => s.restoreAuth);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
-    const platform = detectPlatform();
-    console.log(" Платформа:", platform);
+    const initApp = async () => {
+      const platform = detectPlatform();
+      console.log("Platform detected:", platform);
 
-    if (platform === 'telegram') initTelegram();
-    if (platform === 'vk') initVK();
+      if (platform === PLATFORMS.TELEGRAM) {
+        initTelegram();
+      } else if (platform === PLATFORMS.VK) {
+        await initVK();
+      }
 
-    restoreAuth();
+      await restoreAuth();
+      setIsReady(true);
+    };
+
+    initApp();
   }, []);
+
+  if (!isReady) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'sans-serif' }}>
+        Загрузка...
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
