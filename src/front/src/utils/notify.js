@@ -1,54 +1,37 @@
 // src/utils/notify.js
-import { detectPlatform, PLATFORMS, vkBridge } from './platform';
+import { detectPlatform, PLATFORMS } from './platform';
 
-/**
- * Показать алерт (простое уведомление)
- */
+// Глобальные хендлеры — подменяются через registerModalHandlers
+let _showAlert = (msg) => window.alert(msg);
+let _showConfirm = (msg) => Promise.resolve(window.confirm(msg));
+
+export function registerModalHandlers({ showAlert, showConfirm }) {
+  _showAlert = showAlert;
+  _showConfirm = showConfirm;
+}
+
 export function showAlert(message) {
   const platform = detectPlatform();
 
-  if (platform === PLATFORMS.TELEGRAM) {
-    if (window.Telegram?.WebApp) {
-      window.Telegram.WebApp.showAlert(message);
-      return;
-    }
-  } 
-  alert(message);
-}
-
-/**
- * Показать confirm (с подтверждением)
- * Возвращает Promise<boolean>
- */
-export async function showConfirm(message) {
-  const platform = detectPlatform();
-
-  
+  // Telegram — нативный алерт
   if (platform === PLATFORMS.TELEGRAM && window.Telegram?.WebApp) {
     return new Promise((resolve) => {
-      window.Telegram.WebApp.showConfirm(message, (result) => {
-        resolve(!!result);
-      });
+      window.Telegram.WebApp.showAlert(message, resolve);
     });
   }
 
-  if (platform === PLATFORMS.VK) {
-    try {
-      const response = await vkBridge.send('VKWebAppShowConfirmBox', {
-        message: message,
-        title: 'Подтверждение',
-      });
+  return _showAlert(message);
+}
 
-      if (response && typeof response === 'object') {
-        return !!response.result;
-      }
-      return !!response;
-      
-    } catch (error) {
-      console.warn('VK Confirm error:', error);
-      return window.confirm(message);
-    }
+export async function showConfirm(message) {
+  const platform = detectPlatform();
+
+  // Telegram — нативный confirm
+  if (platform === PLATFORMS.TELEGRAM && window.Telegram?.WebApp) {
+    return new Promise((resolve) => {
+      window.Telegram.WebApp.showConfirm(message, resolve);
+    });
   }
 
-  return window.confirm(message);
+  return _showConfirm(message);
 }

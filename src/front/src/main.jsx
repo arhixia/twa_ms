@@ -5,7 +5,10 @@ import App from "./App";
 import "./styles/styles.css";
 import useAuthStore from "./store/useAuthStore";
 import { detectPlatform, PLATFORMS } from "./utils/platform";
-import vkBridge from '@vkontakte/vk-bridge'; 
+import vkBridge from '@vkontakte/vk-bridge';
+import { ModalProvider } from "./components/useModal";
+import { registerModalHandlers } from "./utils/notify";
+import { useModal } from "./components/useModal";
 
 const initTelegram = () => {
   const tg = window.Telegram?.WebApp;
@@ -28,6 +31,16 @@ const initVK = async () => {
   }
 };
 
+function AppWithModal() {
+  const { showAlert, showConfirm } = useModal();
+
+  useEffect(() => {
+    registerModalHandlers({ showAlert, showConfirm });
+  }, [showAlert, showConfirm]);
+
+  return <App />;
+}
+
 function Root() {
   const restoreAuth = useAuthStore((s) => s.restoreAuth);
   const [isReady, setIsReady] = useState(false);
@@ -36,17 +49,14 @@ function Root() {
     const initApp = async () => {
       const platform = detectPlatform();
       console.log("Platform detected:", platform);
-
       if (platform === PLATFORMS.TELEGRAM) {
         initTelegram();
       } else if (platform === PLATFORMS.VK) {
         await initVK();
       }
-
       await restoreAuth();
       setIsReady(true);
     };
-
     initApp();
   }, []);
 
@@ -60,7 +70,9 @@ function Root() {
 
   return (
     <BrowserRouter>
-      <App />
+      <ModalProvider>
+        <AppWithModal />
+      </ModalProvider>
     </BrowserRouter>
   );
 }

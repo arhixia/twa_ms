@@ -11,7 +11,7 @@ export default defineConfig({
   },
   plugins: [react()],
   server: {
-    allowedHosts: ['theory-ratio-actors-build.trycloudflare.com']
+    allowedHosts: ['indirect-projectors-highland-reprints.trycloudflare.com']
   },
 })
 
