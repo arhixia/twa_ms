@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./styles/styles.css";
 import useAuthStore from "./store/useAuthStore";
-import { detectPlatform, PLATFORMS } from "./utils/platform";
+import { detectPlatform, PLATFORMS, loadTelegramScript } from "./utils/platform";
 import vkBridge from '@vkontakte/vk-bridge';
 import { ModalProvider } from "./components/useModal";
 import { registerModalHandlers } from "./utils/notify";
@@ -47,16 +47,37 @@ function Root() {
 
   useEffect(() => {
     const initApp = async () => {
-      const platform = detectPlatform();
-      console.log("Platform detected:", platform);
+      let platform = detectPlatform();
+      console.log("Initial platform detection:", platform);
+
+      if (platform === PLATFORMS.WEB) {
+        try {
+          // Пробуем загрузить Telegram SDK
+          await loadTelegramScript();
+          // Перепроверяем платформу после загрузки скрипта
+          if (window.Telegram?.WebApp?.initData) {
+            platform = PLATFORMS.TELEGRAM;
+            console.log("Platform re-detected as Telegram after script load");
+          } else {
+            console.log("Telegram script loaded, but no initData found. Staying on WEB.");
+          }
+        } catch (e) {
+          console.warn("Could not load Telegram script, staying on WEB", e);
+        }
+      }
+
+      console.log("Final platform:", platform);
+
       if (platform === PLATFORMS.TELEGRAM) {
         initTelegram();
       } else if (platform === PLATFORMS.VK) {
         await initVK();
       }
+      
       await restoreAuth();
       setIsReady(true);
     };
+
     initApp();
   }, []);
 

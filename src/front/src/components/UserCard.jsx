@@ -130,15 +130,7 @@ function UserCard({ user, roleDisplayNames, onEditRole, onDeactivate, onActivate
         >
           <strong>Логин:</strong> {user.login}
         </p>
-        <p
-          style={{
-            margin: '4px 0',
-            color: '#c9d1d9',
-            fontSize: '0.9em'
-          }}
-        >
-          <strong>Telegram ID:</strong> {user.telegram_id || '—'}
-        </p>
+    
 
        {user.role === 'logist' && (
         <p style={{ margin: '4px 0', color: '#a7f3d0', fontSize: '0.9em', fontWeight: '600' }}>

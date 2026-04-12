@@ -7,11 +7,37 @@ export const PLATFORMS = {
   WEB: 'web',
 };
 
-export const detectPlatform = () => {
-  if (window.Telegram?.WebApp?.initData) {
-    return PLATFORMS.TELEGRAM;
-  }
+/**
+ * Динамически загружает скрипт Telegram WebApp
+ * Возвращает Promise, который резолвится, когда скрипт загружен
+ */
+export const loadTelegramScript = () => {
+  return new Promise((resolve, reject) => {
+    // Если скрипт уже загружен (например, после перезагрузки компонента)
+    if (window.Telegram?.WebApp) {
+      resolve();
+      return;
+    }
 
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-web-app.js';
+    script.async = true;
+    
+    script.onload = () => {
+      console.log('Telegram SDK loaded');
+      resolve();
+    };
+    
+    script.onerror = () => {
+      console.error('Failed to load Telegram SDK');
+      reject(new Error('Failed to load Telegram SDK'));
+    };
+
+    document.head.appendChild(script);
+  });
+};
+
+export const detectPlatform = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const isVk = urlParams.has('vk_platform') || 
                window.navigator.userAgent.includes('VKApp') || 
@@ -21,7 +47,11 @@ export const detectPlatform = () => {
     return PLATFORMS.VK;
   }
 
-  return PLATFORMS.WEB;
+  if (window.Telegram?.WebApp?.initData) {
+    return PLATFORMS.TELEGRAM;
+  }
+
+  return PLATFORMS.WEB; 
 };
 
 export const getPlatformUserId = async () => {
