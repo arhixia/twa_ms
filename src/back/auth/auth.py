@@ -67,7 +67,6 @@ def create_access_token(
 
 # Основная логика авторизации
 
-
 async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
     hashed_password = get_password_hash(user_in.password)
     db_user = User(
@@ -85,6 +84,7 @@ async def create_user(db: AsyncSession, user_in: UserCreate) -> User:
     await db.commit()
     await db.refresh(db_user)
     return db_user
+
 
 async def authenticate_user(db: AsyncSession, login: str, password: str) -> Optional[User]:
     result = await db.execute(select(User).where(User.login == login))
@@ -114,7 +114,6 @@ async def verify_token(token: str) -> int:
         raise HTTPException(status_code=401, detail="Неверный токен или истек срок действия, перезайдите в аккаунт")  
 
 
-
 async def get_current_user(
         db: AsyncSession = Depends(get_db),
         token: str = Depends(oauth2_scheme)
@@ -131,8 +130,6 @@ async def get_current_user(
     if not user.is_active:
         raise HTTPException(status_code=401, detail="Аккаунт пользователя деактивирован")
     return user
-
-
 
 #api
 
@@ -157,6 +154,7 @@ async def register_user(
         raise HTTPException(status_code=400, detail="Пользователь уже существует")
     new_user = await create_user(db, user_in)
     return UserResponse.model_validate(new_user)
+
 
 @router.post("/token", response_model=Token)
 async def login_for_access(

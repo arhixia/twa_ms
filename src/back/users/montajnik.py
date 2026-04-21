@@ -35,6 +35,7 @@ from back.db.models import (
 from back.utils.notify import notify_user
 from back.utils.selectel import get_s3_client
 from back.files.handlers import validate_and_process_attachment
+from back.messaging.producer import publish_notification
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -716,12 +717,13 @@ async def accept_task(
         raise HTTPException(status_code=500, detail="Ошибка при принятии задачи")
 
     if task.created_by:
-        background_tasks.add_task(
-            notify_user,
-            task.created_by,
-            f"Монтажник {current_user.name} {current_user.lastname} принял задачу #{task.id}",
-            task.id
-        )
+        await publish_notification(        
+                user_id=task.created_by,
+                message=f"Монтажник {current_user.name} {current_user.lastname} принял задачу #{task.id}",
+                task_id=task.id,
+            )
+
+        
     return {"detail": "accepted"}
 
 
@@ -815,12 +817,13 @@ async def reject_task(
 
     
     if task.created_by:
-        background_tasks.add_task(
-            notify_user,
-            task.created_by,
-            f"Монтажник {current_user.name} {current_user.lastname} отклонил задачу #{task.id}",
-            task.id
-        )
+        await publish_notification(        
+                user_id=task.created_by,
+                message=f"Монтажник {current_user.name} {current_user.lastname} отклонил задачу #{task.id}",
+                task_id=task.id,
+            )
+
+        
 
     return {"detail": "rejected"}
 
@@ -1191,13 +1194,21 @@ async def submit_report_for_review(
         raise HTTPException(status_code=500, detail="Ошибка при отправке отчёта на проверку")
 
     if notify_logist and task.created_by:
-        background_tasks.add_task(notify_user, task.created_by, f"По задаче #{task.id} отправлен отчёт на проверку", task.id)
+        await publish_notification(        
+                user_id=task.created_by,
+                message=f"По задаче #{task.id} отправлен отчёт на проверку",
+                task_id=task.id,
+            )
 
     if notify_tech:
         tech_q = await db.execute(select(User).where(User.role == Role.tech_supp, User.is_active == True,User.company_id == current_user.company_id))
         techs = tech_q.scalars().all()
         for tuser in techs:
-            background_tasks.add_task(notify_user, tuser.id, f"По задаче #{task.id} отправлен отчёт на проверку (требуется тех.проверка)", task.id)
+            await publish_notification(        
+                user_id=tuser.id,
+                message=f"По задаче #{task.id} отправлен отчёт на проверку (требуется тех.проверка)",
+                task_id=task.id,
+            )  
 
     return {"detail": "sent for review"}
 

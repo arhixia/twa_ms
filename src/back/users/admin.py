@@ -24,6 +24,8 @@ import calendar
 from back.utils.notify import notify_user
 from back.files.handlers import delete_object_from_s3, validate_and_process_attachment
 from back.users.logist import _attach_storage_keys_to_task, _normalize_assigned_user_id
+from back.messaging.producer import publish_notification
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -1089,10 +1091,10 @@ async def admin_update_task(
         raise HTTPException(status_code=500, detail="Failed to update task")
 
     if task.assigned_user_id:
-        background_tasks.add_task(
-            notify_user,
-            task.assigned_user_id,
-            f"Задача #{task_id} была обновлена"
+        await publish_notification(        
+            user_id=task.assigned_user_id,
+            message=f"Задача #{task_id} была обновлена",
+            task_id=task_id,
         )
 
     return {"detail": "Updated"}

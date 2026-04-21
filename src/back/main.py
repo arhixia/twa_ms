@@ -19,6 +19,8 @@ from back.db.config import TOKEN as BOT_TOKEN,WEB_APP_URL
 from back.db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from back.db.models import  User
+from back.messaging.connection import get_channel,close_connection
+from back.messaging.consumer import start_consumer
 from starlette.middleware.base import BaseHTTPMiddleware
 import asyncio
 from aiogram import Bot, Dispatcher, types
@@ -62,14 +64,24 @@ async def lifespan(app: FastAPI):
 
     aiogram_task = None
     notification_task = None
+    consumer_task = None
 
     if BOT_TOKEN:
         aiogram_task = asyncio.create_task(start_polling())
         await asyncio.sleep(0.1)
+
+
+    logger.info("Подключение к RabbitMQ...")
+    await get_channel()
     
+    consumer_task = asyncio.create_task(start_consumer())
+    await asyncio.sleep(0.1)
+
+
     logger.info("Запуск фоновой задачи уведомлений о предстоящих задачах...")
     notification_task = asyncio.create_task(periodic_notification_task())
     await asyncio.sleep(0.1)
+    
 
     try:
         yield
@@ -83,6 +95,15 @@ async def lifespan(app: FastAPI):
             except Exception:
                 logger.exception("Ошибка при остановке polling задачи") 
 
+        if consumer_task:
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                logger.info("Consumer остановлен")
+            except Exception as e:
+                logger.exception(f"Ошибка при сотановке брокера: {e}")
+
         if notification_task:
             logger.info("Отмена задачи уведомлений...")
             notification_task.cancel()
@@ -93,6 +114,7 @@ async def lifespan(app: FastAPI):
             except Exception:
                 logger.exception("Ошибка при остановке задачи уведомлений") 
 
+        await close_connection()
 
 
 app = FastAPI(

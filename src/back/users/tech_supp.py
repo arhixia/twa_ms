@@ -33,6 +33,7 @@ from back.utils.notify import notify_user
 from back.users.users_schemas import ReportReviewIn, TaskHistoryItem, require_roles,Role
 from back.utils.selectel import get_s3_client
 from back.files.handlers import validate_and_process_attachment
+from back.messaging.producer import publish_notification
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
@@ -318,13 +319,14 @@ async def tech_review_report(
             montajnik_msg = f"Работы по задаче {task_id} проверены и выполнены"
         else:
             montajnik_msg = f"Отчет по задаче {task_id} одобрен тех.специалистом"
+
+        await publish_notification(        
+                user_id=task.assigned_user_id,
+                message=f"{montajnik_msg}",
+                task_id=task_id,
+            )  
+
         
-        background_tasks.add_task(
-            notify_user,
-            task.assigned_user_id,
-            montajnik_msg,
-            task_id
-        )
 
     if task_completed:
         managers_q = await db.execute(
@@ -343,6 +345,12 @@ async def tech_review_report(
                 f"Работы по задаче #{task_id} завершены. Требуется проверка менеджера.",
                 task_id
             )
+
+            await publish_notification(        
+                user_id=manager.id,
+                message=f"Работы по задаче #{task_id} завершены. Требуется проверка менеджера.",
+                task_id=task_id,
+            )  
 
     return {"detail": "Reviewed", "approval": "approved"}
 

@@ -39,6 +39,7 @@ from datetime import date
 import calendar
 from back.utils.selectel import get_s3_client
 from back.files.handlers import validate_and_process_attachment
+from back.messaging.producer import publish_notification
 
 S3_CLIENT = get_s3_client()
 
@@ -1119,17 +1120,17 @@ async def publish_task(
     montajnik_ids = [row[0] for row in montajniks_res.fetchall()]
     
     for montajnik_id in montajnik_ids:
-        background_tasks.add_task(
-            notify_user, 
-            montajnik_id, 
-            f"Новая задача #{task.id} опубликована в эфир"
+        await publish_notification(        
+            user_id=montajnik_id,
+            message=f"Новая задача #{task.id} опубликована в эфир",
+            task_id=task.id,
         )
 
     if task.assigned_user_id:
-        background_tasks.add_task(
-            notify_user, 
-            task.assigned_user_id, 
-            f"Вам назначена задача #{task.id}"
+        await publish_notification(        
+            user_id=task.assigned_user_id,
+            message=f"Вам назначена задача #{task.id}",
+            task_id=task.id,
         )
 
     return {"id": task.id}
@@ -1687,11 +1688,13 @@ async def edit_task(
         raise HTTPException(status_code=500, detail="Failed to update task")
 
     if task.assigned_user_id:
-        background_tasks.add_task(
-            notify_user,
-            task.assigned_user_id,
-            f"Задача #{task_id} была обновлена"
+        await publish_notification(        
+            user_id=task.assigned_user_id,
+            message=f"Задача #{task_id} была обновлена",
+            task_id=task.id,
         )
+
+        
 
     return {"detail": "Updated"}
 
@@ -1968,13 +1971,14 @@ async def review_report(
             if comment:
                 montajnik_msg += f". Комментарий: {comment}"
         
-        background_tasks.add_task(
-            notify_user,
-            task.assigned_user_id,
-            montajnik_msg,
-            task_id
+
+        await publish_notification(        
+            user_id=task.assigned_user_id,
+            message=f"{montajnik_msg}",
+            task_id=task.id,
         )
 
+        
     if (
         current_user.role == Role.logist
         and report.approval_tech == ReportApproval.waiting
@@ -1989,12 +1993,11 @@ async def review_report(
         )
         techs = tech_q.scalars().all()
         for tuser in techs:
-            background_tasks.add_task(
-                notify_user,
-                tuser.id,
-                f"Отчёт по задаче #{task_id} ожидает вашей проверки.",
-                task_id
-            )
+            await publish_notification(        
+            user_id=tuser.id,
+            message=f"Отчёт по задаче #{task_id} ожидает вашей проверки.",
+            task_id=task.id,
+        )
 
    
     if task_completed:
@@ -2009,12 +2012,13 @@ async def review_report(
         
        
         for manager in managers:
-            background_tasks.add_task(
-                notify_user,
-                manager.id,
-                f"Работы по задаче #{task_id} завершены. Требуется проверка менеджера.",
-                task_id
+            await publish_notification(        
+                user_id=manager.id,
+                message=f"Работы по задаче #{task_id} завершены. Требуется проверка менеджера.",
+                task_id=task.id,
             )
+
+            
 
     return {"detail": "Reviewed", "approval": approval}
 
